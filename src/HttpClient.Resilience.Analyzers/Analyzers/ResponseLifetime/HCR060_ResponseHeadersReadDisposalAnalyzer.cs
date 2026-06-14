@@ -233,8 +233,12 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                 parenthesized.Expression,
                 variableName,
                 containingBlock),
-            ObjectCreationExpressionSyntax objectCreation => HasDirectResponseArgument(objectCreation.ArgumentList, variableName),
-            ImplicitObjectCreationExpressionSyntax implicitObjectCreation => HasDirectResponseArgument(implicitObjectCreation.ArgumentList, variableName),
+            ObjectCreationExpressionSyntax objectCreation => ObjectCreationTransfersResponseOwnership(
+                objectCreation,
+                variableName),
+            ImplicitObjectCreationExpressionSyntax implicitObjectCreation => ObjectCreationTransfersResponseOwnership(
+                implicitObjectCreation,
+                variableName),
             _ => false
         };
     }
@@ -256,17 +260,38 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
     {
         return expression switch
         {
-            ObjectCreationExpressionSyntax objectCreation => HasDirectResponseArgument(objectCreation.ArgumentList, responseVariableName),
-            ImplicitObjectCreationExpressionSyntax implicitObjectCreation => HasDirectResponseArgument(implicitObjectCreation.ArgumentList, responseVariableName),
+            ObjectCreationExpressionSyntax objectCreation => ObjectCreationTransfersResponseOwnership(
+                objectCreation,
+                responseVariableName),
+            ImplicitObjectCreationExpressionSyntax implicitObjectCreation => ObjectCreationTransfersResponseOwnership(
+                implicitObjectCreation,
+                responseVariableName),
             ParenthesizedExpressionSyntax parenthesized => InitializerCreatesResponseOwner(parenthesized.Expression, responseVariableName),
             _ => false
         };
+    }
+
+    private static bool ObjectCreationTransfersResponseOwnership(
+        BaseObjectCreationExpressionSyntax objectCreation,
+        string variableName)
+    {
+        return HasDirectResponseArgument(objectCreation.ArgumentList, variableName) ||
+            HasDirectResponseInitializer(objectCreation.Initializer, variableName);
     }
 
     private static bool HasDirectResponseArgument(ArgumentListSyntax? argumentList, string variableName)
     {
         return argumentList?.Arguments
             .Select(argument => argument.Expression)
+            .OfType<IdentifierNameSyntax>()
+            .Any(identifier => identifier.Identifier.ValueText == variableName) == true;
+    }
+
+    private static bool HasDirectResponseInitializer(InitializerExpressionSyntax? initializer, string variableName)
+    {
+        return initializer?.Expressions
+            .OfType<AssignmentExpressionSyntax>()
+            .Select(assignment => assignment.Right)
             .OfType<IdentifierNameSyntax>()
             .Any(identifier => identifier.Identifier.ValueText == variableName) == true;
     }

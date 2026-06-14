@@ -329,6 +329,34 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenResponseIsTransferredToReturnedWrapperInitializer()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<ResponseOwner> UseAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    return new ResponseOwner { Response = response };
+                }
+            }
+
+            public sealed class ResponseOwner
+            {
+                public HttpResponseMessage? Response { get; init; }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenResponseIsTransferredToReturnedWrapperLocal()
     {
         const string source = """
@@ -348,6 +376,35 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
 
             public sealed class ResponseOwner(HttpResponseMessage response)
             {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenResponseIsTransferredToReturnedWrapperInitializerLocal()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<ResponseOwner> UseAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    var owner = new ResponseOwner { Response = response };
+                    return owner;
+                }
+            }
+
+            public sealed class ResponseOwner
+            {
+                public HttpResponseMessage? Response { get; init; }
             }
             """;
 
