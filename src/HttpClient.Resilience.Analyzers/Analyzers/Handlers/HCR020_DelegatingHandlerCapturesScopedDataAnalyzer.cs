@@ -63,6 +63,7 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
             return;
         }
 
+        var reportedConstructorParameter = false;
         foreach (var parameter in GetConstructorParameters(classDeclaration))
         {
             if (parameter.Type is null || !IsRequestScopedType(parameter.Type, scopedTypes))
@@ -73,6 +74,36 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
             context.ReportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.HCR020,
                 parameter.Type.GetLocation()));
+            reportedConstructorParameter = true;
+        }
+
+        if (reportedConstructorParameter)
+        {
+            return;
+        }
+
+        foreach (var field in classDeclaration.Members.OfType<FieldDeclarationSyntax>())
+        {
+            if (!IsRequestScopedType(field.Declaration.Type, scopedTypes))
+            {
+                continue;
+            }
+
+            context.ReportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.HCR020,
+                field.Declaration.Type.GetLocation()));
+        }
+
+        foreach (var property in classDeclaration.Members.OfType<PropertyDeclarationSyntax>())
+        {
+            if (!IsRequestScopedType(property.Type, scopedTypes))
+            {
+                continue;
+            }
+
+            context.ReportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.HCR020,
+                property.Type.GetLocation()));
         }
     }
 

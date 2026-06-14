@@ -97,6 +97,93 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenDelegatingHandlerHasRequestScopedField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class UserHeaderHandler : DelegatingHandler
+            {
+                private readonly IHttpContextAccessor _accessor = null!;
+            }
+
+            public interface IHttpContextAccessor
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenDelegatingHandlerHasKnownScopedProperty()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<IUserContext, UserContext>();
+                }
+            }
+
+            public sealed class UserHeaderHandler : DelegatingHandler
+            {
+                public IUserContext UserContext { get; set; } = null!;
+            }
+
+            public interface IUserContext
+            {
+            }
+
+            public sealed class UserContext : IUserContext
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddScoped<TService, TImplementation>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsOnlyConstructorDiagnostic_WhenConstructorAndFieldCaptureSameScopedType()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class UserHeaderHandler(IHttpContextAccessor accessor) : DelegatingHandler
+            {
+                private readonly IHttpContextAccessor _accessor = accessor;
+            }
+
+            public interface IHttpContextAccessor
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenDelegatingHandlerCapturesKnownScopedService()
     {
         const string source = """
