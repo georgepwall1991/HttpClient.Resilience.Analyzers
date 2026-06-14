@@ -265,7 +265,17 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             {
                 Expression: IdentifierNameSyntax identifier,
                 Name.Identifier.ValueText: "Dispose"
-            } && identifier.Identifier.ValueText == variableName);
+            } && identifier.Identifier.ValueText == variableName) ||
+            IsOwnedByUsingStatement(containingBlock, variableName);
+    }
+
+    private static bool IsOwnedByUsingStatement(BlockSyntax containingBlock, string variableName)
+    {
+        return containingBlock
+            .DescendantNodes()
+            .OfType<UsingStatementSyntax>()
+            .Any(usingStatement => usingStatement.Expression is IdentifierNameSyntax identifier &&
+                identifier.Identifier.ValueText == variableName);
     }
 
     private static bool TransfersResponseOwnership(ExpressionSyntax expression, string variableName, BlockSyntax containingBlock)
