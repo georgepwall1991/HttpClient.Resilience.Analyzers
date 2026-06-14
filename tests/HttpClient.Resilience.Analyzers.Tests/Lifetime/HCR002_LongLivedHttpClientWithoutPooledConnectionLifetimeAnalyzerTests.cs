@@ -49,6 +49,47 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenStaticHttpClientPropertyHasDefaultHandler()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static HttpClient Client { get; } = new();
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR002, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenStaticHttpClientPropertyIsAssignedDefaultHandler()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static HttpClient Client { get; set; } = null!;
+
+                public static void Initialize()
+                {
+                    Client = new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR002, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenStaticHttpClientHasPooledConnectionLifetime()
     {
         const string source = """
@@ -58,6 +99,28 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             public sealed class GitHubClient
             {
                 private static readonly HttpClient Client = new(
+                    new SocketsHttpHandler
+                    {
+                        PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+                    });
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenStaticHttpClientPropertyHasPooledConnectionLifetime()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static HttpClient Client { get; } = new(
                     new SocketsHttpHandler
                     {
                         PooledConnectionLifetime = TimeSpan.FromMinutes(2)
@@ -102,6 +165,23 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             public sealed class GitHubClient
             {
                 private readonly HttpClient _client = new();
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHttpClientPropertyIsNotStatic()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private HttpClient Client { get; } = new();
             }
             """;
 
@@ -168,6 +248,41 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenRegisteredSingletonOwnsInstanceHttpClientProperty()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton<GitHubClient>();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+                private HttpClient Client { get; } = new();
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR002, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenRegisteredSingletonAssignsInstanceHttpClientField()
     {
         const string source = """
@@ -188,6 +303,46 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
                 public GitHubClient()
                 {
                     _client = new HttpClient();
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR002, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenRegisteredSingletonAssignsInstanceHttpClientProperty()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton<GitHubClient>();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+                private HttpClient Client { get; set; } = null!;
+
+                public GitHubClient()
+                {
+                    Client = new HttpClient();
                 }
             }
 

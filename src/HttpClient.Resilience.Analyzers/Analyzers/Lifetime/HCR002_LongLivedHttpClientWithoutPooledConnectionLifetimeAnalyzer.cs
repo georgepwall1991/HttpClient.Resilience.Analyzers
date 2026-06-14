@@ -32,6 +32,9 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             nodeContext => AnalyzeFieldDeclaration(nodeContext, singletonTypes),
             SyntaxKind.FieldDeclaration);
         context.RegisterSyntaxNodeAction(
+            nodeContext => AnalyzePropertyDeclaration(nodeContext, singletonTypes),
+            SyntaxKind.PropertyDeclaration);
+        context.RegisterSyntaxNodeAction(
             nodeContext => AnalyzeAssignment(nodeContext, singletonTypes),
             SyntaxKind.SimpleAssignmentExpression);
     }
@@ -51,7 +54,7 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
                 continue;
             }
 
-            if (!IsHttpClientFieldCreation(field.Declaration.Type, creation, context.SemanticModel, context.CancellationToken))
+            if (!IsHttpClientMemberCreation(field.Declaration.Type, creation, context.SemanticModel, context.CancellationToken))
             {
                 continue;
             }
@@ -67,6 +70,30 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         }
     }
 
+    private static void AnalyzePropertyDeclaration(SyntaxNodeAnalysisContext context, IReadOnlyCollection<string> singletonTypes)
+    {
+        var property = (PropertyDeclarationSyntax)context.Node;
+        if (!IsLongLivedProperty(property, singletonTypes, context.SemanticModel, context.CancellationToken) ||
+            property.Initializer?.Value is not BaseObjectCreationExpressionSyntax creation)
+        {
+            return;
+        }
+
+        if (!IsHttpClientMemberCreation(property.Type, creation, context.SemanticModel, context.CancellationToken))
+        {
+            return;
+        }
+
+        if (HasPooledConnectionLifetime(creation, context.SemanticModel, context.CancellationToken))
+        {
+            return;
+        }
+
+        context.ReportDiagnostic(Diagnostic.Create(
+            DiagnosticDescriptors.HCR002,
+            property.Identifier.GetLocation()));
+    }
+
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context, IReadOnlyCollection<string> singletonTypes)
     {
         var assignment = (AssignmentExpressionSyntax)context.Node;
@@ -75,7 +102,7 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             return;
         }
 
-        if (!AssignmentTargetsLongLivedHttpClientField(
+        if (!AssignmentTargetsLongLivedHttpClientMember(
                 assignment.Left,
                 creation,
                 singletonTypes,
@@ -91,27 +118,40 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             assignment.Left.GetLocation()));
     }
 
-    private static bool AssignmentTargetsLongLivedHttpClientField(
+    private static bool AssignmentTargetsLongLivedHttpClientMember(
         ExpressionSyntax target,
         BaseObjectCreationExpressionSyntax creation,
         IReadOnlyCollection<string> singletonTypes,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        if (semanticModel.GetSymbolInfo(target, cancellationToken).Symbol is IFieldSymbol field)
+        var targetSymbol = semanticModel.GetSymbolInfo(target, cancellationToken).Symbol;
+        if (targetSymbol is IFieldSymbol field)
         {
             return IsLongLivedField(field, singletonTypes) &&
                 IsHttpClientCreation(field, creation, semanticModel, cancellationToken);
         }
 
-        if (semanticModel.GetSymbolInfo(target, cancellationToken).Symbol is ILocalSymbol)
+        if (targetSymbol is IPropertySymbol property)
+        {
+            return IsLongLivedProperty(property, singletonTypes) &&
+                IsHttpClientCreation(property, creation, semanticModel, cancellationToken);
+        }
+
+        if (targetSymbol is ILocalSymbol)
         {
             return false;
         }
 
-        return TryGetVisibleAssignedField(target) is { } fieldDeclaration &&
-            IsLongLivedField(fieldDeclaration, singletonTypes, semanticModel, cancellationToken) &&
-            IsHttpClientFieldCreation(fieldDeclaration.Declaration.Type, creation, semanticModel, cancellationToken);
+        if (TryGetVisibleAssignedField(target) is { } fieldDeclaration)
+        {
+            return IsLongLivedField(fieldDeclaration, singletonTypes, semanticModel, cancellationToken) &&
+                IsHttpClientMemberCreation(fieldDeclaration.Declaration.Type, creation, semanticModel, cancellationToken);
+        }
+
+        return TryGetVisibleAssignedProperty(target) is { } propertyDeclaration &&
+            IsLongLivedProperty(propertyDeclaration, singletonTypes, semanticModel, cancellationToken) &&
+            IsHttpClientMemberCreation(propertyDeclaration.Type, creation, semanticModel, cancellationToken);
     }
 
     private static FieldDeclarationSyntax? TryGetVisibleAssignedField(ExpressionSyntax target)
@@ -133,6 +173,26 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             .OfType<FieldDeclarationSyntax>()
             .FirstOrDefault(field => field.Declaration.Variables.Any(variable =>
                 variable.Identifier.ValueText == fieldName));
+    }
+
+    private static PropertyDeclarationSyntax? TryGetVisibleAssignedProperty(ExpressionSyntax target)
+    {
+        var propertyName = target switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText,
+            _ => null
+        };
+
+        if (propertyName is null)
+        {
+            return null;
+        }
+
+        return target.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
+            .Members
+            .OfType<PropertyDeclarationSyntax>()
+            .FirstOrDefault(property => property.Identifier.ValueText == propertyName);
     }
 
     private static IReadOnlyCollection<string> GetKnownSingletonTypes(
@@ -179,6 +239,34 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         return field.IsStatic ||
             field.ContainingType.Name.EndsWith("Singleton", System.StringComparison.Ordinal) ||
             IsKnownSingletonType(field.ContainingType, singletonTypes);
+    }
+
+    private static bool IsLongLivedProperty(
+        PropertyDeclarationSyntax property,
+        IReadOnlyCollection<string> singletonTypes,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (property.Modifiers.Any(SyntaxKind.StaticKeyword))
+        {
+            return true;
+        }
+
+        if (property.FirstAncestorOrSelf<TypeDeclarationSyntax>() is not { } containingType)
+        {
+            return false;
+        }
+
+        return containingType.Identifier.ValueText.EndsWith("Singleton", System.StringComparison.Ordinal) ||
+            semanticModel.GetDeclaredSymbol(containingType, cancellationToken) is INamedTypeSymbol containingTypeSymbol &&
+            IsKnownSingletonType(containingTypeSymbol, singletonTypes);
+    }
+
+    private static bool IsLongLivedProperty(IPropertySymbol property, IReadOnlyCollection<string> singletonTypes)
+    {
+        return property.IsStatic ||
+            property.ContainingType.Name.EndsWith("Singleton", System.StringComparison.Ordinal) ||
+            IsKnownSingletonType(property.ContainingType, singletonTypes);
     }
 
     private static bool IsKnownSingletonType(INamedTypeSymbol containingType, IReadOnlyCollection<string> singletonTypes)
@@ -284,8 +372,8 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         return expression;
     }
 
-    private static bool IsHttpClientFieldCreation(
-        TypeSyntax fieldType,
+    private static bool IsHttpClientMemberCreation(
+        TypeSyntax memberType,
         BaseObjectCreationExpressionSyntax creation,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
@@ -296,13 +384,13 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             return HttpClientSymbols.IsHttpClient(createdType);
         }
 
-        var declaredType = semanticModel.GetTypeInfo(fieldType, cancellationToken).Type;
+        var declaredType = semanticModel.GetTypeInfo(memberType, cancellationToken).Type;
         if (declaredType is not null && declaredType is not IErrorTypeSymbol)
         {
             return HttpClientSymbols.IsHttpClient(declaredType);
         }
 
-        if (HttpClientSymbols.IsHttpClientName(fieldType))
+        if (HttpClientSymbols.IsHttpClientName(memberType))
         {
             return true;
         }
@@ -329,6 +417,24 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             HttpClientSymbols.IsHttpClient(createdType);
     }
 
+    private static bool IsHttpClientCreation(
+        IPropertySymbol property,
+        BaseObjectCreationExpressionSyntax creation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (!HttpClientSymbols.IsHttpClient(property.Type) &&
+            !PropertySyntaxTypeLooksLikeHttpClient(property, cancellationToken))
+        {
+            return false;
+        }
+
+        var createdType = semanticModel.GetTypeInfo(creation, cancellationToken).Type;
+        return createdType is null ||
+            createdType is IErrorTypeSymbol ||
+            HttpClientSymbols.IsHttpClient(createdType);
+    }
+
     private static bool FieldSyntaxTypeLooksLikeHttpClient(
         IFieldSymbol field,
         System.Threading.CancellationToken cancellationToken)
@@ -338,6 +444,16 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             .OfType<VariableDeclaratorSyntax>()
             .Any(variable => variable.Parent is VariableDeclarationSyntax declaration &&
                 HttpClientSymbols.IsHttpClientName(declaration.Type));
+    }
+
+    private static bool PropertySyntaxTypeLooksLikeHttpClient(
+        IPropertySymbol property,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return property.DeclaringSyntaxReferences
+            .Select(reference => reference.GetSyntax(cancellationToken))
+            .OfType<PropertyDeclarationSyntax>()
+            .Any(propertyDeclaration => HttpClientSymbols.IsHttpClientName(propertyDeclaration.Type));
     }
 
     private static bool IsSocketsHttpHandlerCreation(
