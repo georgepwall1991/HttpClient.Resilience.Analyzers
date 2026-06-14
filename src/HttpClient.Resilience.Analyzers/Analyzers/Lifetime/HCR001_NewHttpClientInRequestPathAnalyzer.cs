@@ -32,7 +32,12 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
         "TestCaseSource",
         "TestClass",
         "TestMethod",
-        "DataTestMethod"
+        "DataTestMethod",
+        "OneTimeSetUp",
+        "OneTimeTearDown",
+        "SetUp",
+        "TearDown",
+        "TestFixture"
     };
 
     private static readonly string[] MinimalApiMapMethodNames =

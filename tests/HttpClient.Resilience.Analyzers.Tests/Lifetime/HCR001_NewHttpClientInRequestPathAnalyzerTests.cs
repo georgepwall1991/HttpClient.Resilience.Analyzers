@@ -316,6 +316,56 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenHttpClientIsCreatedInNUnitTestFixture()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            [TestFixture]
+            public sealed class PaymentsService
+            {
+                public HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public sealed class TestFixtureAttribute : System.Attribute
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHttpClientIsCreatedInNUnitSetupMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                [SetUp]
+                public void Create()
+                {
+                    _ = new HttpClient();
+                }
+            }
+
+            public sealed class SetUpAttribute : System.Attribute
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenResolvedTypeIsCustomHttpClient()
     {
         const string source = """
