@@ -149,19 +149,27 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        if (HttpClientSymbols.IsHttpClient(semanticModel.GetTypeInfo(expression, cancellationToken).Type))
+        var expressionType = semanticModel.GetTypeInfo(expression, cancellationToken).Type;
+        if (expressionType is not null && expressionType is not IErrorTypeSymbol)
         {
-            return true;
+            return HttpClientSymbols.IsHttpClient(expressionType);
         }
 
-        return semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
+        var symbolType = semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
         {
-            ILocalSymbol local => HttpClientSymbols.IsHttpClient(local.Type),
-            IParameterSymbol parameter => HttpClientSymbols.IsHttpClient(parameter.Type),
-            IFieldSymbol field => HttpClientSymbols.IsHttpClient(field.Type),
-            IPropertySymbol property => HttpClientSymbols.IsHttpClient(property.Type),
-            _ => false
-        } || SyntacticReceiverLooksLikeHttpClient(expression);
+            ILocalSymbol local => local.Type,
+            IParameterSymbol parameter => parameter.Type,
+            IFieldSymbol field => field.Type,
+            IPropertySymbol property => property.Type,
+            _ => null
+        };
+
+        if (symbolType is not null && symbolType is not IErrorTypeSymbol)
+        {
+            return HttpClientSymbols.IsHttpClient(symbolType);
+        }
+
+        return SyntacticReceiverLooksLikeHttpClient(expression);
     }
 
     private static bool SyntacticReceiverLooksLikeHttpClient(ExpressionSyntax expression)
