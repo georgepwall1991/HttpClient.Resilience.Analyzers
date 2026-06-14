@@ -617,6 +617,59 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenTypedClientSendsUnsafeHttpRequestMessageWithConstantMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class MethodNames
+            {
+                public const string Post = "POST";
+            }
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<PaymentsClient>()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    var request = new HttpRequestMessage(new HttpMethod(MethodNames.Post), "/payments");
+                    return httpClient.SendAsync(request, cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR041, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenTypedClientSendsUnsafeHttpRequestMessageInitializer()
     {
         const string source = """
@@ -686,6 +739,54 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
                 public Task<HttpResponseMessage> GetAsync(CancellationToken cancellationToken)
                 {
                     var request = new HttpRequestMessage(HttpMethod.Get, "/payments");
+                    return httpClient.SendAsync(request, cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenTypedClientSendsSafeHttpRequestMessageWithConstantMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<PaymentsClient>()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> GetAsync(CancellationToken cancellationToken)
+                {
+                    const string get = "GET";
+                    var request = new HttpRequestMessage(new HttpMethod(get), "/payments");
                     return httpClient.SendAsync(request, cancellationToken);
                 }
             }
