@@ -18,6 +18,7 @@ dotnet test HttpClient.Resilience.Analyzers.slnx --configuration Release --no-bu
 dotnet pack src\HttpClient.Resilience.Analyzers.Package\HttpClient.Resilience.Analyzers.Package.csproj --configuration Release --no-build --output artifacts\packages
 $package = Get-ChildItem artifacts\packages\*.nupkg | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 ./scripts/Validate-Package.ps1 -PackagePath $package.FullName
+./scripts/Validate-PackageConsumption.ps1 -PackagePath $package.FullName
 ```
 
 ## Preview Release

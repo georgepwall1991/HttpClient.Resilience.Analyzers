@@ -113,4 +113,17 @@ foreach ($path in $requiredTopLevelDocs) {
     }
 }
 
+$requiredScripts = @(
+    'scripts\Validate-Package.ps1',
+    'scripts\Validate-PackageConsumption.ps1',
+    'scripts\Validate-Repository.ps1',
+    'scripts\Validate-SampleDiagnostics.ps1'
+)
+
+foreach ($path in $requiredScripts) {
+    if (-not (Test-Path -LiteralPath (Get-RepositoryPath $path))) {
+        throw "Missing required validation script: $path."
+    }
+}
+
 "repository validation ok: $($diagnosticIds -join ', ')"
