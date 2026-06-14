@@ -55,6 +55,60 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenTypedClientUsesThisQualifiedHttpClientField()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<PaymentsClient>()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+                private readonly HttpClient _client;
+
+                public PaymentsClient(HttpClient client)
+                {
+                    _client = client;
+                }
+
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return this._client.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR041, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenQualifiedTypedClientSendsUnsafeMethod()
     {
         const string source = """
@@ -998,6 +1052,66 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
                 public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
                 {
                     var client = factory.CreateClient("payments");
+                    return client.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR041, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenNamedClientFactoryFieldIsThisQualified()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient("payments")
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class PaymentJob
+            {
+                private readonly IHttpClientFactory _factory;
+
+                public PaymentJob(IHttpClientFactory factory)
+                {
+                    _factory = factory;
+                }
+
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    var client = this._factory.CreateClient("payments");
                     return client.PostAsync("/payments", null, cancellationToken);
                 }
             }

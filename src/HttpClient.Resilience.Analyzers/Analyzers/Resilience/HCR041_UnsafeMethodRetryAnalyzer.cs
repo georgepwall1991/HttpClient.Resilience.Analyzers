@@ -411,10 +411,15 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
 
     private static bool SyntacticReceiverLooksLikeHttpClient(ExpressionSyntax expression)
     {
-        return expression is IdentifierNameSyntax identifier &&
-            (ParameterLooksLikeHttpClient(identifier) ||
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => ParameterLooksLikeHttpClient(identifier) ||
                 LocalLooksLikeHttpClient(identifier) ||
-                FieldOrPropertyLooksLikeHttpClient(identifier));
+                FieldOrPropertyLooksLikeHttpClient(identifier),
+            MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax, Name: IdentifierNameSyntax name } =>
+                FieldOrPropertyLooksLikeHttpClient(name),
+            _ => false
+        };
     }
 
     private static bool ParameterLooksLikeHttpClient(IdentifierNameSyntax identifier)
@@ -572,10 +577,15 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
 
     private static bool SyntacticReceiverLooksLikeHttpClientFactory(ExpressionSyntax expression)
     {
-        return expression is IdentifierNameSyntax identifier &&
-            (ParameterLooksLikeHttpClientFactory(identifier) ||
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => ParameterLooksLikeHttpClientFactory(identifier) ||
                 LocalLooksLikeHttpClientFactory(identifier) ||
-                FieldOrPropertyLooksLikeHttpClientFactory(identifier));
+                FieldOrPropertyLooksLikeHttpClientFactory(identifier),
+            MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax, Name: IdentifierNameSyntax name } =>
+                FieldOrPropertyLooksLikeHttpClientFactory(name),
+            _ => false
+        };
     }
 
     private static bool ParameterLooksLikeHttpClientFactory(IdentifierNameSyntax identifier)
