@@ -60,7 +60,9 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             SyntaxKind.InvocationExpression);
     }
 
-    private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context, IEnumerable<SyntaxNode> roots)
+    private static void AnalyzeInvocation(
+        SyntaxNodeAnalysisContext context,
+        IEnumerable<SyntaxNode> roots)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
         if (!IsAddStandardResilienceHandlerInvocation(invocation) ||
@@ -405,12 +407,12 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             .ParameterList.Parameters
             .Any(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText &&
                 parameter.Type is not null &&
-                HttpClientSymbols.IsHttpClientName(parameter.Type)) == true ||
+                IsHttpClientTypeName(parameter.Type)) == true ||
             identifier.FirstAncestorOrSelf<ClassDeclarationSyntax>()?
                 .ParameterList?.Parameters
                 .Any(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText &&
                     parameter.Type is not null &&
-                    HttpClientSymbols.IsHttpClientName(parameter.Type)) == true;
+                    IsHttpClientTypeName(parameter.Type)) == true;
     }
 
     private static bool LocalLooksLikeHttpClient(IdentifierNameSyntax identifier)
@@ -420,7 +422,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             .OfType<VariableDeclaratorSyntax>()
             .Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
                 variable.Parent is VariableDeclarationSyntax declaration &&
-                HttpClientSymbols.IsHttpClientName(declaration.Type)) == true;
+                IsHttpClientTypeName(declaration.Type)) == true;
     }
 
     private static bool FieldOrPropertyLooksLikeHttpClient(IdentifierNameSyntax identifier)
@@ -429,12 +431,24 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             .Members
             .Any(member => member switch
             {
-                FieldDeclarationSyntax field => HttpClientSymbols.IsHttpClientName(field.Declaration.Type) &&
+                FieldDeclarationSyntax field => IsHttpClientTypeName(field.Declaration.Type) &&
                     field.Declaration.Variables.Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText),
-                PropertyDeclarationSyntax property => HttpClientSymbols.IsHttpClientName(property.Type) &&
+                PropertyDeclarationSyntax property => IsHttpClientTypeName(property.Type) &&
                     property.Identifier.ValueText == identifier.Identifier.ValueText,
                 _ => false
             }) == true;
+    }
+
+    private static bool IsHttpClientTypeName(TypeSyntax type)
+    {
+        return type switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "HttpClient",
+            QualifiedNameSyntax qualified => qualified.ToString() == "System.Net.Http.HttpClient" ||
+                qualified.ToString() == "global::System.Net.Http.HttpClient",
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() == "global::System.Net.Http.HttpClient",
+            _ => false
+        };
     }
 
     private static bool RequestExpressionUsesUnsafeHttpMethod(ExpressionSyntax expression, SyntaxNode context)
@@ -519,12 +533,69 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
 
     private static bool IsCreateClientInvocation(InvocationExpressionSyntax invocation, string clientName)
     {
-        return invocation.Expression is MemberAccessExpressionSyntax
-        {
-            Name.Identifier.ValueText: "CreateClient"
-        } &&
+        return invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
+        memberAccess.Name.Identifier.ValueText == "CreateClient" &&
+        SyntacticReceiverLooksLikeHttpClientFactory(memberAccess.Expression) &&
         invocation.ArgumentList.Arguments.Count > 0 &&
         TryGetStringLiteral(invocation.ArgumentList.Arguments[0].Expression) == clientName;
+    }
+
+    private static bool SyntacticReceiverLooksLikeHttpClientFactory(ExpressionSyntax expression)
+    {
+        return expression is IdentifierNameSyntax identifier &&
+            (ParameterLooksLikeHttpClientFactory(identifier) ||
+                LocalLooksLikeHttpClientFactory(identifier) ||
+                FieldOrPropertyLooksLikeHttpClientFactory(identifier));
+    }
+
+    private static bool ParameterLooksLikeHttpClientFactory(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<BaseMethodDeclarationSyntax>()?
+            .ParameterList.Parameters
+            .Any(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText &&
+                parameter.Type is not null &&
+                IsHttpClientFactoryTypeName(parameter.Type)) == true ||
+            identifier.FirstAncestorOrSelf<ClassDeclarationSyntax>()?
+                .ParameterList?.Parameters
+                .Any(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText &&
+                    parameter.Type is not null &&
+                    IsHttpClientFactoryTypeName(parameter.Type)) == true;
+    }
+
+    private static bool LocalLooksLikeHttpClientFactory(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<BlockSyntax>()?
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+                variable.Parent is VariableDeclarationSyntax declaration &&
+                IsHttpClientFactoryTypeName(declaration.Type)) == true;
+    }
+
+    private static bool FieldOrPropertyLooksLikeHttpClientFactory(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
+            .Members
+            .Any(member => member switch
+            {
+                FieldDeclarationSyntax field => IsHttpClientFactoryTypeName(field.Declaration.Type) &&
+                    field.Declaration.Variables.Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText),
+                PropertyDeclarationSyntax property => IsHttpClientFactoryTypeName(property.Type) &&
+                    property.Identifier.ValueText == identifier.Identifier.ValueText,
+                _ => false
+            }) == true;
+    }
+
+    private static bool IsHttpClientFactoryTypeName(TypeSyntax type)
+    {
+        return type switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "IHttpClientFactory",
+            QualifiedNameSyntax qualified => qualified.ToString() == "System.Net.Http.IHttpClientFactory" ||
+                qualified.ToString() == "global::System.Net.Http.IHttpClientFactory",
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() == "global::System.Net.Http.IHttpClientFactory",
+            _ => false
+        };
     }
 
     private static bool IsDirectUnsafeCall(InvocationExpressionSyntax createClientInvocation)
