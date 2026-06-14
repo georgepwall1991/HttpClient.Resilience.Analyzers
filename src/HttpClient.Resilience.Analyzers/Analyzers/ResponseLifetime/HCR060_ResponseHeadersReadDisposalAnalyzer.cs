@@ -83,7 +83,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             .DescendantNodes()
             .OfType<ReturnStatementSyntax>()
             .Any(returnStatement => returnStatement.Expression is not null &&
-                ContainsIdentifier(returnStatement.Expression, variableName));
+                TransfersResponseOwnership(returnStatement.Expression, variableName));
     }
 
     private static bool IsExplicitlyDisposed(BlockSyntax containingBlock, string variableName)
@@ -98,11 +98,23 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             } && identifier.Identifier.ValueText == variableName);
     }
 
-    private static bool ContainsIdentifier(SyntaxNode node, string variableName)
+    private static bool TransfersResponseOwnership(ExpressionSyntax expression, string variableName)
     {
-        return node
-            .DescendantNodesAndSelf()
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == variableName,
+            ParenthesizedExpressionSyntax parenthesized => TransfersResponseOwnership(parenthesized.Expression, variableName),
+            ObjectCreationExpressionSyntax objectCreation => HasDirectResponseArgument(objectCreation.ArgumentList, variableName),
+            ImplicitObjectCreationExpressionSyntax implicitObjectCreation => HasDirectResponseArgument(implicitObjectCreation.ArgumentList, variableName),
+            _ => false
+        };
+    }
+
+    private static bool HasDirectResponseArgument(ArgumentListSyntax? argumentList, string variableName)
+    {
+        return argumentList?.Arguments
+            .Select(argument => argument.Expression)
             .OfType<IdentifierNameSyntax>()
-            .Any(identifier => identifier.Identifier.ValueText == variableName);
+            .Any(identifier => identifier.Identifier.ValueText == variableName) == true;
     }
 }
