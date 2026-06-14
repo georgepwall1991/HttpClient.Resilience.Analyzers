@@ -111,6 +111,36 @@ public sealed class HCR003_CachedFactoryClientAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenQualifiedCustomFactoryClientIsAssignedToStaticField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ClientCache
+            {
+                private static HttpClient _client = null!;
+
+                public static void Initialize(Custom.IHttpClientFactory factory)
+                {
+                    _client = factory.CreateClient("github");
+                }
+            }
+
+            namespace Custom
+            {
+                public interface IHttpClientFactory
+                {
+                    HttpClient CreateClient(string name);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenLookalikeFactoryClientIsInitializedIntoStaticField()
     {
         const string source = """

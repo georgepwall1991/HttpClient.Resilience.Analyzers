@@ -107,19 +107,34 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        if (HttpClientSymbols.IsHttpClientFactory(semanticModel.GetTypeInfo(expression, cancellationToken).Type))
+        var expressionType = semanticModel.GetTypeInfo(expression, cancellationToken).Type;
+        if (expressionType is not null && expressionType is not IErrorTypeSymbol)
         {
-            return true;
+            return IsHttpClientFactoryType(expressionType);
         }
 
-        return semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
+        var symbolType = semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
         {
-            ILocalSymbol local => HttpClientSymbols.IsHttpClientFactory(local.Type),
-            IParameterSymbol parameter => HttpClientSymbols.IsHttpClientFactory(parameter.Type),
-            IFieldSymbol field => HttpClientSymbols.IsHttpClientFactory(field.Type),
-            IPropertySymbol property => HttpClientSymbols.IsHttpClientFactory(property.Type),
-            _ => false
-        } || SyntacticReceiverLooksLikeHttpClientFactory(expression);
+            ILocalSymbol local => local.Type,
+            IParameterSymbol parameter => parameter.Type,
+            IFieldSymbol field => field.Type,
+            IPropertySymbol property => property.Type,
+            _ => null
+        };
+
+        if (symbolType is not null && symbolType is not IErrorTypeSymbol)
+        {
+            return IsHttpClientFactoryType(symbolType);
+        }
+
+        return SyntacticReceiverLooksLikeHttpClientFactory(expression);
+    }
+
+    private static bool IsHttpClientFactoryType(ITypeSymbol? type)
+    {
+        return type?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) is
+            "global::System.Net.Http.IHttpClientFactory" or
+            "global::IHttpClientFactory";
     }
 
     private static bool SyntacticReceiverLooksLikeHttpClientFactory(ExpressionSyntax expression)
@@ -140,7 +155,7 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             .ParameterList.Parameters
             .Any(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText &&
                 parameter.Type is not null &&
-                HttpClientSymbols.IsHttpClientFactoryName(parameter.Type)) == true;
+                IsHttpClientFactoryTypeName(parameter.Type)) == true;
     }
 
     private static bool LocalLooksLikeHttpClientFactory(IdentifierNameSyntax identifier)
@@ -150,7 +165,7 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             .OfType<VariableDeclaratorSyntax>()
             .Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
                 variable.Parent is VariableDeclarationSyntax declaration &&
-                HttpClientSymbols.IsHttpClientFactoryName(declaration.Type)) == true;
+                IsHttpClientFactoryTypeName(declaration.Type)) == true;
     }
 
     private static bool FieldOrPropertyLooksLikeHttpClientFactory(IdentifierNameSyntax identifier)
@@ -161,12 +176,24 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             .DescendantNodes()
             .Any(node => node switch
             {
-                FieldDeclarationSyntax field => HttpClientSymbols.IsHttpClientFactoryName(field.Declaration.Type) &&
+                FieldDeclarationSyntax field => IsHttpClientFactoryTypeName(field.Declaration.Type) &&
                     field.Declaration.Variables.Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText),
-                PropertyDeclarationSyntax property => HttpClientSymbols.IsHttpClientFactoryName(property.Type) &&
+                PropertyDeclarationSyntax property => IsHttpClientFactoryTypeName(property.Type) &&
                     property.Identifier.ValueText == identifier.Identifier.ValueText,
                 _ => false
             });
+    }
+
+    private static bool IsHttpClientFactoryTypeName(TypeSyntax type)
+    {
+        return type switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "IHttpClientFactory",
+            QualifiedNameSyntax qualified => qualified.ToString() == "System.Net.Http.IHttpClientFactory" ||
+                qualified.ToString() == "global::System.Net.Http.IHttpClientFactory",
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() == "global::System.Net.Http.IHttpClientFactory",
+            _ => false
+        };
     }
 
     private static IReadOnlyCollection<string> GetKnownSingletonTypes(IEnumerable<SyntaxNode> roots)
