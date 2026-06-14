@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using System.Collections.Generic;
+using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -23,12 +25,7 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
-        if (!IsAddStandardResilienceHandlerInvocation(invocation))
-        {
-            return;
-        }
-
-        if (CountStandardResilienceHandlersInChain(invocation) <= 1)
+        if (!IsDuplicateResilienceHandlerInChain(invocation))
         {
             return;
         }
@@ -37,6 +34,13 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
         context.ReportDiagnostic(Diagnostic.Create(
             DiagnosticDescriptors.HCR040,
             memberAccess.Name.GetLocation()));
+    }
+
+    private static bool IsDuplicateResilienceHandlerInChain(InvocationExpressionSyntax invocation)
+    {
+        return (IsAddStandardResilienceHandlerInvocation(invocation) &&
+            CountStandardResilienceHandlersInChain(invocation) > 1) ||
+            IsDuplicateNamedResilienceHandlerInChain(invocation);
     }
 
     private static int CountStandardResilienceHandlersInChain(ExpressionSyntax expression)
@@ -69,5 +73,53 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
         {
             Name.Identifier.ValueText: "AddStandardResilienceHandler"
         };
+    }
+
+    private static bool IsDuplicateNamedResilienceHandlerInChain(InvocationExpressionSyntax invocation)
+    {
+        if (!TryGetAddResilienceHandlerName(invocation, out var handlerName))
+        {
+            return false;
+        }
+
+        return GetInvocationChain(invocation)
+            .Count(candidate => TryGetAddResilienceHandlerName(candidate, out var candidateName) &&
+                candidateName == handlerName) > 1;
+    }
+
+    private static IEnumerable<InvocationExpressionSyntax> GetInvocationChain(ExpressionSyntax expression)
+    {
+        var current = expression;
+
+        while (current is InvocationExpressionSyntax invocation)
+        {
+            yield return invocation;
+
+            if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+            {
+                yield break;
+            }
+
+            current = memberAccess.Expression;
+        }
+    }
+
+    private static bool TryGetAddResilienceHandlerName(InvocationExpressionSyntax invocation, out string? handlerName)
+    {
+        handlerName = null;
+
+        if (invocation.Expression is not MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "AddResilienceHandler"
+            } ||
+            invocation.ArgumentList.Arguments.Count == 0 ||
+            invocation.ArgumentList.Arguments[0].Expression is not LiteralExpressionSyntax literal ||
+            !literal.IsKind(SyntaxKind.StringLiteralExpression))
+        {
+            return false;
+        }
+
+        handlerName = literal.Token.ValueText;
+        return true;
     }
 }

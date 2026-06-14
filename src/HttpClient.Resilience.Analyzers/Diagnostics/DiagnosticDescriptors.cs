@@ -42,8 +42,8 @@ public static class DiagnosticDescriptors
 
     public static readonly DiagnosticDescriptor HCR040 = Create(
         DiagnosticIds.HCR040,
-        "Do not stack multiple standard resilience handlers",
-        "Do not stack multiple standard resilience handlers",
+        "Do not stack duplicate resilience handlers",
+        "Do not stack duplicate resilience handlers",
         DiagnosticCategories.Resilience);
 
     public static readonly DiagnosticDescriptor HCR041 = Create(

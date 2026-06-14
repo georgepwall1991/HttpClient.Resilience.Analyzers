@@ -10,7 +10,7 @@ HCR003 | HttpClient.Lifetime | Warning | Do not cache IHttpClientFactory.CreateC
 HCR004 | HttpClient.TypedClients | Warning | Do not inject typed HttpClient clients into singleton services
 HCR005 | HttpClient.TypedClients | Warning | Do not separately register a typed client already registered by AddHttpClient<T>()
 HCR020 | HttpClient.Handlers | Warning | DelegatingHandler should not capture scoped request data
-HCR040 | HttpClient.Resilience | Warning | Do not stack multiple standard resilience handlers
+HCR040 | HttpClient.Resilience | Warning | Do not stack duplicate resilience handlers
 HCR041 | HttpClient.Resilience | Warning | Unsafe HTTP methods should not be retried unless explicitly configured
 HCR060 | HttpClient.ResponseLifetime | Warning | Dispose HttpResponseMessage when using ResponseHeadersRead
 HCR080 | HttpClient.Concurrency | Info | High-concurrency HTTP fan-out should use bounded concurrency or connection limits

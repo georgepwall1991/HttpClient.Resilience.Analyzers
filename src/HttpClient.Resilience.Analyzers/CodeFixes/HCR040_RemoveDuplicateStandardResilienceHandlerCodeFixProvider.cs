@@ -42,7 +42,7 @@ public sealed class HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvid
 
         context.RegisterCodeFix(
             CodeAction.Create(
-                "Remove duplicate standard resilience handler",
+                "Remove duplicate resilience handler",
                 cancellationToken => RemoveDuplicateInvocationAsync(context.Document, invocation, memberAccess.Expression, cancellationToken),
                 nameof(HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvider)),
             diagnostic);

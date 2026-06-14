@@ -100,6 +100,99 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenSameNamedCustomResilienceHandlerIsStacked()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<GitHubClient>()
+                        .AddResilienceHandler("github", builder => { })
+                        .AddResilienceHandler("github", builder => { });
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services)
+                {
+                    return null!;
+                }
+
+                public static IHttpClientBuilder AddResilienceHandler(this IHttpClientBuilder builder, string name, System.Action<object> configure)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR040, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenDifferentNamedCustomResilienceHandlersAreUsed()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<GitHubClient>()
+                        .AddResilienceHandler("read", builder => { })
+                        .AddResilienceHandler("write", builder => { });
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services)
+                {
+                    return null!;
+                }
+
+                public static IHttpClientBuilder AddResilienceHandler(this IHttpClientBuilder builder, string name, System.Action<object> configure)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task CodeFix_RemovesDuplicateStandardResilienceHandler()
     {
         const string source = """
@@ -144,6 +237,53 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
             .ApplyFirstCodeFixAsync(source);
 
         Assert.Equal(1, CountOccurrences(fixedSource, ".AddStandardResilienceHandler()"));
+    }
+
+    [Fact]
+    public async Task CodeFix_RemovesDuplicateNamedCustomResilienceHandler()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<GitHubClient>()
+                        .AddResilienceHandler("github", builder => { })
+                        .AddResilienceHandler("github", builder => { });
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services)
+                {
+                    return null!;
+                }
+
+                public static IHttpClientBuilder AddResilienceHandler(this IHttpClientBuilder builder, string name, System.Action<object> configure)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR040_StackedResilienceHandlersAnalyzer, HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Equal(1, CountOccurrences(fixedSource, ".AddResilienceHandler(\"github\""));
     }
 
     private static int CountOccurrences(string text, string value)
