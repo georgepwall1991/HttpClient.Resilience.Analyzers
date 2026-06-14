@@ -13,7 +13,41 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
     where TAnalyzer : DiagnosticAnalyzer, new()
     where TCodeFix : CodeFixProvider, new()
 {
+    public static async Task<IReadOnlyList<string>> GetCodeFixTitlesAsync(string source)
+    {
+        return await WithCodeFixContextAsync(
+            source,
+            (_, actions) => Task.FromResult<IReadOnlyList<string>>(
+                actions.Select(action => action.Title).ToArray()))
+            .ConfigureAwait(false);
+    }
+
     public static async Task<string> ApplyFirstCodeFixAsync(string source)
+    {
+        return await WithCodeFixContextAsync(source, ApplyFirstCodeFixAsync).ConfigureAwait(false);
+    }
+
+    private static async Task<string> ApplyFirstCodeFixAsync(
+        Document document,
+        IReadOnlyList<CodeAction> actions)
+    {
+        var action = actions.Single();
+        var operations = await action.GetOperationsAsync(CancellationToken.None).ConfigureAwait(false);
+        var applyChanges = operations.OfType<ApplyChangesOperation>().Single();
+        var changedDocument = applyChanges.ChangedSolution.GetDocument(document.Id);
+
+        if (changedDocument is null)
+        {
+            throw new InvalidOperationException("Code fix did not produce a changed document.");
+        }
+
+        var fixedText = await changedDocument.GetTextAsync().ConfigureAwait(false);
+        return fixedText.ToString();
+    }
+
+    private static async Task<TResult> WithCodeFixContextAsync<TResult>(
+        string source,
+        Func<Document, IReadOnlyList<CodeAction>, Task<TResult>> action)
     {
         using var workspace = new AdhocWorkspace();
 
@@ -47,18 +81,7 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
 
         await new TCodeFix().RegisterCodeFixesAsync(context).ConfigureAwait(false);
 
-        var action = actions.Single();
-        var operations = await action.GetOperationsAsync(CancellationToken.None).ConfigureAwait(false);
-        var applyChanges = operations.OfType<ApplyChangesOperation>().Single();
-        var changedDocument = applyChanges.ChangedSolution.GetDocument(document.Id);
-
-        if (changedDocument is null)
-        {
-            throw new InvalidOperationException("Code fix did not produce a changed document.");
-        }
-
-        var fixedText = await changedDocument.GetTextAsync().ConfigureAwait(false);
-        return fixedText.ToString();
+        return await action(document, actions).ConfigureAwait(false);
     }
 
     private static IReadOnlyList<MetadataReference> GetReferenceAssemblies()

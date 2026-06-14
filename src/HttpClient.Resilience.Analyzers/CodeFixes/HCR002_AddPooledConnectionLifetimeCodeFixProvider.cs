@@ -36,7 +36,8 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
         var node = root.FindNode(diagnostic.Location.SourceSpan);
         var variable = node.FirstAncestorOrSelf<VariableDeclaratorSyntax>();
 
-        if (variable?.Initializer is null)
+        if (variable?.Initializer is null ||
+            !CanSafelyConfigureInitializer(variable.Initializer.Value))
         {
             return;
         }
@@ -47,6 +48,13 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
                 cancellationToken => ConfigurePooledConnectionLifetimeAsync(context.Document, variable, cancellationToken),
                 nameof(HCR002_AddPooledConnectionLifetimeCodeFixProvider)),
             diagnostic);
+    }
+
+    private static bool CanSafelyConfigureInitializer(ExpressionSyntax expression)
+    {
+        return expression is BaseObjectCreationExpressionSyntax creation &&
+            creation.ArgumentList?.Arguments.Count == 0 &&
+            creation.Initializer is null;
     }
 
     private static async Task<Document> ConfigurePooledConnectionLifetimeAsync(
