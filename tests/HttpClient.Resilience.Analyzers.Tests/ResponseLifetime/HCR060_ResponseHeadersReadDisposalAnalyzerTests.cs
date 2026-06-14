@@ -296,6 +296,34 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenResponseIsTransferredToReturnedWrapperLocal()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<ResponseOwner> UseAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    var owner = new ResponseOwner(response);
+                    return owner;
+                }
+            }
+
+            public sealed class ResponseOwner(HttpResponseMessage response)
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenResponseIsDisposedInFinally()
     {
         const string source = """

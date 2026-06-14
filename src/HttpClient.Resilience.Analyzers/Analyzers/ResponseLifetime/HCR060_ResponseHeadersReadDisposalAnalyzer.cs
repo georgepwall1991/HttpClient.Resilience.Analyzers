@@ -197,7 +197,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             .DescendantNodes()
             .OfType<ReturnStatementSyntax>()
             .Any(returnStatement => returnStatement.Expression is not null &&
-                TransfersResponseOwnership(returnStatement.Expression, variableName));
+                TransfersResponseOwnership(returnStatement.Expression, variableName, containingBlock));
     }
 
     private static bool IsExplicitlyDisposed(BlockSyntax containingBlock, string variableName)
@@ -212,14 +212,45 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             } && identifier.Identifier.ValueText == variableName);
     }
 
-    private static bool TransfersResponseOwnership(ExpressionSyntax expression, string variableName)
+    private static bool TransfersResponseOwnership(ExpressionSyntax expression, string variableName, BlockSyntax containingBlock)
     {
         return expression switch
         {
-            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == variableName,
-            ParenthesizedExpressionSyntax parenthesized => TransfersResponseOwnership(parenthesized.Expression, variableName),
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == variableName ||
+                LocalInitializerTransfersResponseOwnership(
+                    containingBlock,
+                    identifier.Identifier.ValueText,
+                    variableName),
+            ParenthesizedExpressionSyntax parenthesized => TransfersResponseOwnership(
+                parenthesized.Expression,
+                variableName,
+                containingBlock),
             ObjectCreationExpressionSyntax objectCreation => HasDirectResponseArgument(objectCreation.ArgumentList, variableName),
             ImplicitObjectCreationExpressionSyntax implicitObjectCreation => HasDirectResponseArgument(implicitObjectCreation.ArgumentList, variableName),
+            _ => false
+        };
+    }
+
+    private static bool LocalInitializerTransfersResponseOwnership(
+        BlockSyntax containingBlock,
+        string localName,
+        string responseVariableName)
+    {
+        return containingBlock
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Any(variable => variable.Identifier.ValueText == localName &&
+                variable.Initializer?.Value is { } initializer &&
+                InitializerCreatesResponseOwner(initializer, responseVariableName));
+    }
+
+    private static bool InitializerCreatesResponseOwner(ExpressionSyntax expression, string responseVariableName)
+    {
+        return expression switch
+        {
+            ObjectCreationExpressionSyntax objectCreation => HasDirectResponseArgument(objectCreation.ArgumentList, responseVariableName),
+            ImplicitObjectCreationExpressionSyntax implicitObjectCreation => HasDirectResponseArgument(implicitObjectCreation.ArgumentList, responseVariableName),
+            ParenthesizedExpressionSyntax parenthesized => InitializerCreatesResponseOwner(parenthesized.Expression, responseVariableName),
             _ => false
         };
     }
