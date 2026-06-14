@@ -174,6 +174,39 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenResolvedTypeIsCustomHttpClient()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(Custom.HttpClient client, CancellationToken cancellationToken)
+                {
+                    var result = await client.GetAsync("/events", HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                }
+            }
+
+            namespace Custom
+            {
+                public sealed class HttpClient
+                {
+                    public Task<string> GetAsync(string path, HttpCompletionOption completionOption, CancellationToken cancellationToken)
+                    {
+                        return Task.FromResult(path);
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenLocalStoresResponseTask()
     {
         const string source = """
