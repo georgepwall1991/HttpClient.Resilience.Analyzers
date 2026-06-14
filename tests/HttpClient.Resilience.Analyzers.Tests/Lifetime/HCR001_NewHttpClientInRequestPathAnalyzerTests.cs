@@ -166,4 +166,31 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
         Assert.Contains("return httpClientFactory.CreateClient();", fixedSource);
         Assert.DoesNotContain("new HttpClient()", fixedSource);
     }
+
+    [Fact]
+    public async Task CodeFix_UsesExistingPrimaryConstructorFactoryParameter()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService(IHttpClientFactory httpClientFactory)
+            {
+                public HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("return httpClientFactory.CreateClient();", fixedSource);
+        Assert.DoesNotContain("new HttpClient()", fixedSource);
+    }
 }

@@ -60,15 +60,23 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
     {
         if (node.FirstAncestorOrSelf<MethodDeclarationSyntax>() is { } method)
         {
-            return FindFactoryParameterName(method.ParameterList.Parameters);
+            if (FindFactoryParameterName(method.ParameterList.Parameters) is { } factoryName)
+            {
+                return factoryName;
+            }
         }
 
         if (node.FirstAncestorOrSelf<LocalFunctionStatementSyntax>() is { } localFunction)
         {
-            return FindFactoryParameterName(localFunction.ParameterList.Parameters);
+            if (FindFactoryParameterName(localFunction.ParameterList.Parameters) is { } factoryName)
+            {
+                return factoryName;
+            }
         }
 
-        return null;
+        return node.FirstAncestorOrSelf<ClassDeclarationSyntax>()?.ParameterList is { } parameterList
+            ? FindFactoryParameterName(parameterList.Parameters)
+            : null;
     }
 
     private static string? FindFactoryParameterName(SeparatedSyntaxList<ParameterSyntax> parameters)
