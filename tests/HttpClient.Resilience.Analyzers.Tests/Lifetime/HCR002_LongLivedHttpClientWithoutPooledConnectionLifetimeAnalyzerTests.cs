@@ -161,6 +161,50 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenQualifiedSingletonRegistrationTargetsDifferentSameNamedType()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton<Jobs.GitHubClient>();
+                }
+            }
+
+            namespace Other
+            {
+                public sealed class GitHubClient
+                {
+                    private readonly HttpClient _client = new();
+                }
+            }
+
+            namespace Jobs
+            {
+                public sealed class GitHubClient
+                {
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenRegisteredSingletonOwnsConfiguredInstanceHttpClientField()
     {
         const string source = """

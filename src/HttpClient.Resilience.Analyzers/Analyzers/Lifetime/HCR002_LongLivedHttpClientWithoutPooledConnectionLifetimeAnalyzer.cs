@@ -33,10 +33,10 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             SyntaxKind.FieldDeclaration);
     }
 
-    private static void AnalyzeFieldDeclaration(SyntaxNodeAnalysisContext context, ISet<string> singletonTypes)
+    private static void AnalyzeFieldDeclaration(SyntaxNodeAnalysisContext context, IReadOnlyCollection<string> singletonTypes)
     {
         var field = (FieldDeclarationSyntax)context.Node;
-        if (!IsLongLivedField(field, singletonTypes))
+        if (!IsLongLivedField(field, singletonTypes, context.SemanticModel, context.CancellationToken))
         {
             return;
         }
@@ -64,29 +64,61 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         }
     }
 
-    private static HashSet<string> GetKnownSingletonTypes(Compilation compilation, System.Threading.CancellationToken cancellationToken)
+    private static IReadOnlyCollection<string> GetKnownSingletonTypes(
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
-        return new HashSet<string>(
-            compilation.SyntaxTrees
-                .Select(tree => tree.GetRoot(cancellationToken))
-                .SelectMany(ServiceRegistrationCollector.Collect)
-                .Where(registration => registration.Kind == ServiceRegistrationKind.Singleton)
-                .SelectMany(registration => new[]
-                {
-                    registration.ServiceTypeName,
-                    registration.ImplementationTypeName
-                })
-                .Where(typeName => typeName is not null)
-                .SelectMany(typeName => TypeNameUtilities.GetComparableNames(typeName!)),
-            System.StringComparer.Ordinal);
+        return compilation.SyntaxTrees
+            .Select(tree => tree.GetRoot(cancellationToken))
+            .SelectMany(ServiceRegistrationCollector.Collect)
+            .Where(registration => registration.Kind == ServiceRegistrationKind.Singleton)
+            .SelectMany(registration => new[]
+            {
+                registration.ServiceTypeName,
+                registration.ImplementationTypeName
+            })
+            .Where(typeName => typeName is not null)
+            .Select(typeName => NormalizeTypeName(typeName!))
+            .ToArray();
     }
 
-    private static bool IsLongLivedField(FieldDeclarationSyntax field, ISet<string> singletonTypes)
+    private static bool IsLongLivedField(
+        FieldDeclarationSyntax field,
+        IReadOnlyCollection<string> singletonTypes,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
-        return field.Modifiers.Any(SyntaxKind.StaticKeyword) ||
-            field.FirstAncestorOrSelf<TypeDeclarationSyntax>() is { } containingType &&
-            (containingType.Identifier.ValueText.EndsWith("Singleton", System.StringComparison.Ordinal) ||
-                singletonTypes.Contains(containingType.Identifier.ValueText));
+        if (field.Modifiers.Any(SyntaxKind.StaticKeyword))
+        {
+            return true;
+        }
+
+        if (field.FirstAncestorOrSelf<TypeDeclarationSyntax>() is not { } containingType)
+        {
+            return false;
+        }
+
+        return containingType.Identifier.ValueText.EndsWith("Singleton", System.StringComparison.Ordinal) ||
+            semanticModel.GetDeclaredSymbol(containingType, cancellationToken) is INamedTypeSymbol containingTypeSymbol &&
+            singletonTypes.Any(typeName => MatchesContainingType(containingTypeSymbol, typeName));
+    }
+
+    private static bool MatchesContainingType(INamedTypeSymbol containingType, string registrationTypeName)
+    {
+        if (registrationTypeName.Contains("."))
+        {
+            return NormalizeTypeName(containingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)) == registrationTypeName;
+        }
+
+        return containingType.Name == TypeNameUtilities.ToSimpleName(registrationTypeName);
+    }
+
+    private static string NormalizeTypeName(string typeName)
+    {
+        typeName = typeName.Trim();
+        return typeName.StartsWith("global::", System.StringComparison.Ordinal)
+            ? typeName.Substring("global::".Length)
+            : typeName;
     }
 
     private static bool HasPooledConnectionLifetime(
