@@ -100,6 +100,71 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenStandardResilienceHandlerIsStackedOnBuilderParameter()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IHttpClientBuilder builder)
+                {
+                    return builder
+                        .AddStandardResilienceHandler()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR040, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenLookalikeStandardResilienceHandlerIsStackedOnCustomBuilder()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static CustomBuilder Configure(CustomBuilder builder)
+                {
+                    return builder
+                        .AddStandardResilienceHandler()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class CustomBuilder
+            {
+            }
+
+            public static class CustomBuilderExtensions
+            {
+                public static CustomBuilder AddStandardResilienceHandler(this CustomBuilder builder)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenSameNamedCustomResilienceHandlerIsStacked()
     {
         const string source = """
@@ -181,6 +246,38 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
                 }
 
                 public static IHttpClientBuilder AddResilienceHandler(this IHttpClientBuilder builder, string name, System.Action<object> configure)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenLookalikeNamedResilienceHandlerIsStackedOnCustomBuilder()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static CustomBuilder Configure(CustomBuilder builder)
+                {
+                    return builder
+                        .AddResilienceHandler("github", item => { })
+                        .AddResilienceHandler("github", item => { });
+                }
+            }
+
+            public sealed class CustomBuilder
+            {
+            }
+
+            public static class CustomBuilderExtensions
+            {
+                public static CustomBuilder AddResilienceHandler(this CustomBuilder builder, string name, System.Action<object> configure)
                 {
                     return builder;
                 }

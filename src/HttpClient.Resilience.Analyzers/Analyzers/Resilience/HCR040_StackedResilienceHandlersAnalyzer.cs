@@ -25,7 +25,7 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
-        if (!IsDuplicateResilienceHandlerInChain(invocation))
+        if (!IsDuplicateResilienceHandlerInChain(invocation, context.SemanticModel, context.CancellationToken))
         {
             return;
         }
@@ -36,10 +36,18 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
             memberAccess.Name.GetLocation()));
     }
 
-    private static bool IsDuplicateResilienceHandlerInChain(InvocationExpressionSyntax invocation)
+    private static bool IsDuplicateResilienceHandlerInChain(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
-        return (IsAddStandardResilienceHandlerInvocation(invocation) &&
-            CountStandardResilienceHandlersInChain(invocation) > 1) ||
+        if (!ChainLooksLikeHttpClientBuilder(invocation, semanticModel, cancellationToken))
+        {
+            return false;
+        }
+
+        return IsAddStandardResilienceHandlerInvocation(invocation) &&
+            CountStandardResilienceHandlersInChain(invocation) > 1 ||
             IsDuplicateNamedResilienceHandlerInChain(invocation);
     }
 
@@ -121,5 +129,102 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
 
         handlerName = literal.Token.ValueText;
         return true;
+    }
+
+    private static bool ChainLooksLikeHttpClientBuilder(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return GetInvocationChain(invocation).Any(candidate =>
+            IsAddHttpClientInvocation(candidate) ||
+            candidate.Expression is MemberAccessExpressionSyntax memberAccess &&
+            IsHttpClientBuilderReceiver(memberAccess.Expression, semanticModel, cancellationToken));
+    }
+
+    private static bool IsAddHttpClientInvocation(InvocationExpressionSyntax invocation)
+    {
+        return invocation.Expression is MemberAccessExpressionSyntax
+        {
+            Name.Identifier.ValueText: "AddHttpClient"
+        };
+    }
+
+    private static bool IsHttpClientBuilderReceiver(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (IsHttpClientBuilderType(semanticModel.GetTypeInfo(expression, cancellationToken).Type))
+        {
+            return true;
+        }
+
+        return semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
+        {
+            ILocalSymbol local => IsHttpClientBuilderType(local.Type),
+            IParameterSymbol parameter => IsHttpClientBuilderType(parameter.Type),
+            IFieldSymbol field => IsHttpClientBuilderType(field.Type),
+            IPropertySymbol property => IsHttpClientBuilderType(property.Type),
+            _ => false
+        } || SyntacticReceiverLooksLikeHttpClientBuilder(expression);
+    }
+
+    private static bool IsHttpClientBuilderType(ITypeSymbol? type)
+    {
+        return type is not null &&
+            type.Name == "IHttpClientBuilder";
+    }
+
+    private static bool SyntacticReceiverLooksLikeHttpClientBuilder(ExpressionSyntax expression)
+    {
+        return expression is IdentifierNameSyntax identifier &&
+            (ParameterLooksLikeHttpClientBuilder(identifier) ||
+                LocalLooksLikeHttpClientBuilder(identifier) ||
+                FieldOrPropertyLooksLikeHttpClientBuilder(identifier));
+    }
+
+    private static bool ParameterLooksLikeHttpClientBuilder(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<BaseMethodDeclarationSyntax>()?
+            .ParameterList.Parameters
+            .Any(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText &&
+                parameter.Type is not null &&
+                IsHttpClientBuilderTypeName(parameter.Type)) == true;
+    }
+
+    private static bool LocalLooksLikeHttpClientBuilder(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<BlockSyntax>()?
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+                variable.Parent is VariableDeclarationSyntax declaration &&
+                IsHttpClientBuilderTypeName(declaration.Type)) == true;
+    }
+
+    private static bool FieldOrPropertyLooksLikeHttpClientBuilder(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
+            .Members
+            .Any(member => member switch
+            {
+                FieldDeclarationSyntax field => IsHttpClientBuilderTypeName(field.Declaration.Type) &&
+                    field.Declaration.Variables.Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText),
+                PropertyDeclarationSyntax property => IsHttpClientBuilderTypeName(property.Type) &&
+                    property.Identifier.ValueText == identifier.Identifier.ValueText,
+                _ => false
+            }) == true;
+    }
+
+    private static bool IsHttpClientBuilderTypeName(TypeSyntax type)
+    {
+        return type switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "IHttpClientBuilder",
+            QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText == "IHttpClientBuilder",
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.Name.Identifier.ValueText == "IHttpClientBuilder",
+            _ => false
+        };
     }
 }
