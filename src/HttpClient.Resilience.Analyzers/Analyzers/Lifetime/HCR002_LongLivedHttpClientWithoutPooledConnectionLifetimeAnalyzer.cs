@@ -207,9 +207,16 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        if (HttpClientSymbols.IsHttpClient(semanticModel.GetTypeInfo(creation, cancellationToken).Type))
+        var createdType = semanticModel.GetTypeInfo(creation, cancellationToken).Type;
+        if (createdType is not null && createdType is not IErrorTypeSymbol)
         {
-            return true;
+            return HttpClientSymbols.IsHttpClient(createdType);
+        }
+
+        var declaredType = semanticModel.GetTypeInfo(fieldType, cancellationToken).Type;
+        if (declaredType is not null && declaredType is not IErrorTypeSymbol)
+        {
+            return HttpClientSymbols.IsHttpClient(declaredType);
         }
 
         if (HttpClientSymbols.IsHttpClientName(fieldType))
@@ -226,9 +233,10 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        if (HttpClientSymbols.IsSocketsHttpHandler(semanticModel.GetTypeInfo(creation, cancellationToken).Type))
+        var createdType = semanticModel.GetTypeInfo(creation, cancellationToken).Type;
+        if (createdType is not null && createdType is not IErrorTypeSymbol)
         {
-            return true;
+            return HttpClientSymbols.IsSocketsHttpHandler(createdType);
         }
 
         return creation is ObjectCreationExpressionSyntax objectCreation &&

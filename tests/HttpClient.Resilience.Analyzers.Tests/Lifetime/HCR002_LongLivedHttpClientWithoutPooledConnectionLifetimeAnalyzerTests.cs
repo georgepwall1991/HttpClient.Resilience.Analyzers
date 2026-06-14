@@ -88,6 +88,28 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenStaticFieldUsesResolvedCustomHttpClient()
+    {
+        const string source = """
+            namespace Custom
+            {
+                public sealed class HttpClient
+                {
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+                private static readonly Custom.HttpClient Client = new Custom.HttpClient();
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenRegisteredSingletonOwnsInstanceHttpClientField()
     {
         const string source = """
