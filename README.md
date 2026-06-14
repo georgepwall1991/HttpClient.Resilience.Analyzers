@@ -1,5 +1,8 @@
 # HttpClient.Resilience.Analyzers
 
+[![CI](https://github.com/georg-jung/HttpClient.Resilience.Analyzers/actions/workflows/ci.yml/badge.svg)](https://github.com/georg-jung/HttpClient.Resilience.Analyzers/actions/workflows/ci.yml)
+[![NuGet](https://img.shields.io/nuget/v/HttpClient.Resilience.Analyzers.svg)](https://www.nuget.org/packages/HttpClient.Resilience.Analyzers)
+
 Compile-time safety for `.NET` `HttpClient`, `IHttpClientFactory`, typed clients, retries, handlers, and outbound HTTP resilience.
 
 ## What It Catches
@@ -35,7 +38,7 @@ See [implementation status](docs/implementation-status.md) for current analyzer 
 
 Implemented diagnostic slices:
 
-- `HCR001` for high-confidence method-local `new HttpClient()` usage.
+- `HCR001` for high-confidence method-local `new HttpClient()` usage, with a partial code fix when `IHttpClientFactory` is already in scope.
 - `HCR002` for static manual `HttpClient` fields without `PooledConnectionLifetime`, with a code fix.
 - `HCR003` for factory-created clients cached into static fields or known singleton fields.
 - `HCR004` for typed clients injected into singleton services.

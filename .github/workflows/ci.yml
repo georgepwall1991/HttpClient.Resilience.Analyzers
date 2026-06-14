@@ -38,4 +38,18 @@ jobs:
         shell: pwsh
         run: |
           $package = Get-ChildItem artifacts/packages/*.nupkg | Select-Object -First 1
-          tar -tf $package.FullName | Select-String 'analyzers/dotnet/cs/HttpClient.Resilience.Analyzers.dll'
+          $contents = tar -tf $package.FullName
+          $required = @(
+            'analyzers/dotnet/cs/HttpClient.Resilience.Analyzers.dll',
+            'icon.png',
+            'contentFiles/any/any/profiles/default.editorconfig',
+            'contentFiles/any/any/profiles/strict-ci.editorconfig',
+            'contentFiles/any/any/profiles/brownfield-adoption.editorconfig',
+            'contentFiles/any/any/profiles/library-author.editorconfig'
+          )
+
+          foreach ($path in $required) {
+            if ($contents -notcontains $path) {
+              throw "Package is missing $path"
+            }
+          }

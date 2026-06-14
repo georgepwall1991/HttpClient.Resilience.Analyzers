@@ -13,6 +13,7 @@
     <RepositoryUrl>https://github.com/georg-jung/HttpClient.Resilience.Analyzers</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
@@ -24,6 +25,7 @@
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" />
     <None Include="..\..\profiles\*.editorconfig" Pack="true" PackagePath="contentFiles/any/any/profiles" />
     <None Include="..\HttpClient.Resilience.Analyzers\bin\$(Configuration)\netstandard2.0\HttpClient.Resilience.Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>

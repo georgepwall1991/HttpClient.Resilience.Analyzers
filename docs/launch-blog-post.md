@@ -13,7 +13,7 @@ Most .NET services use `HttpClient`, but many production issues come from patter
 - Duplicate typed-client service registrations.
 - `DelegatingHandler` constructors that capture request-scoped data.
 - Stacked standard resilience handlers.
-- Unsafe HTTP methods retried by standard resilience handlers without explicit guardrails, including typed-client and same-file named-client cases.
+- Unsafe HTTP methods retried by standard resilience handlers without explicit guardrails, including typed-client and named-client cases across the compilation.
 - `ResponseHeadersRead` responses whose ownership is not disposed or transferred.
 - Obvious unbounded `Task.WhenAll` outbound HTTP fan-out.
 
