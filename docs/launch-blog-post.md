@@ -1,0 +1,51 @@
+# Launch Draft: Compile-Time Safety for .NET Outbound HTTP
+
+Most .NET services use `HttpClient`, but many production issues come from patterns that compile cleanly and look harmless in review: per-request clients, stale long-lived clients, duplicated retries, handler scope leaks, undisposed streaming responses, and unbounded fan-out.
+
+`HttpClient.Resilience.Analyzers` is a Roslyn analyzer package focused on those outbound HTTP failure modes.
+
+## What It Catches
+
+- Per-request `new HttpClient()` usage.
+- Static/manual clients without `SocketsHttpHandler.PooledConnectionLifetime`.
+- Factory-created clients cached in static fields or known singleton services.
+- Typed clients injected into singleton services.
+- Duplicate typed-client service registrations.
+- `DelegatingHandler` constructors that capture request-scoped data.
+- Stacked standard resilience handlers.
+- Unsafe HTTP methods retried by standard resilience handlers without explicit guardrails, including typed-client and same-file named-client cases.
+- `ResponseHeadersRead` responses whose ownership is not disposed or transferred.
+- Obvious unbounded `Task.WhenAll` outbound HTTP fan-out.
+
+## Example
+
+```csharp
+services.AddHttpClient<PaymentsClient>()
+    .AddStandardResilienceHandler();
+
+public sealed class PaymentsClient(HttpClient httpClient)
+{
+    public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+    {
+        return httpClient.PostAsync("/payments", null, cancellationToken);
+    }
+}
+```
+
+`HCR041` flags this because the standard resilience handler can retry unsafe HTTP methods. The safe default is to disable retries for unsafe methods unless the endpoint is explicitly idempotent.
+
+```csharp
+services.AddHttpClient<PaymentsClient>()
+    .AddStandardResilienceHandler(options =>
+    {
+        options.Retry.DisableForUnsafeHttpMethods();
+    });
+```
+
+## Philosophy
+
+The package is intentionally not a style analyzer. Warnings should feel like production incidents avoided. Rules start conservative, document their assumptions, and include suppression guidance for legitimate edge cases.
+
+## Status
+
+The initial preview implements the ten MVP diagnostics with tests, documentation, sample cases, `.editorconfig` profiles, and NuGet analyzer packaging.

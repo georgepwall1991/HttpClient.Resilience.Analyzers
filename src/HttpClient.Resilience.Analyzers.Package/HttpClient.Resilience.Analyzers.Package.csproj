@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageId>HttpClient.Resilience.Analyzers</PackageId>
+    <Version>0.1.0-preview.1</Version>
+    <Authors>HttpClient.Resilience.Analyzers contributors</Authors>
+    <Description>Roslyn analyzers for .NET HttpClient, IHttpClientFactory, and Microsoft.Extensions.Http.Resilience.</Description>
+    <PackageTags>httpclient;ihttpclientfactory;resilience;polly;dotnet;csharp;roslyn;analyzer;analyser;aspnetcore;static-analysis;socket-exhaustion;typed-client;retry;resilience-pipeline</PackageTags>
+    <PackageProjectUrl>https://github.com/georg-jung/HttpClient.Resilience.Analyzers</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/georg-jung/HttpClient.Resilience.Analyzers</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HttpClient.Resilience.Analyzers\HttpClient.Resilience.Analyzers.csproj" PrivateAssets="all" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\profiles\*.editorconfig" Pack="true" PackagePath="contentFiles/any/any/profiles" />
+    <None Include="..\HttpClient.Resilience.Analyzers\bin\$(Configuration)\netstandard2.0\HttpClient.Resilience.Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
+</Project>

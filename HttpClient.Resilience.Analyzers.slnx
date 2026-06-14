@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/HttpClient.Resilience.Showcase/HttpClient.Resilience.Showcase.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/HttpClient.Resilience.Analyzers.Package/HttpClient.Resilience.Analyzers.Package.csproj" />
+    <Project Path="src/HttpClient.Resilience.Analyzers/HttpClient.Resilience.Analyzers.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HttpClient.Resilience.Analyzers.Tests/HttpClient.Resilience.Analyzers.Tests.csproj" />
+  </Folder>
+</Solution>

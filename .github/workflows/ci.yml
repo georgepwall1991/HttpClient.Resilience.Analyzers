@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore HttpClient.Resilience.Analyzers.slnx
+
+      - name: Format
+        run: dotnet format HttpClient.Resilience.Analyzers.slnx --verify-no-changes --no-restore --exclude samples
+
+      - name: Build
+        run: dotnet build HttpClient.Resilience.Analyzers.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test HttpClient.Resilience.Analyzers.slnx --configuration Release --no-build --logger trx
+
+      - name: Pack
+        run: dotnet pack src/HttpClient.Resilience.Analyzers.Package/HttpClient.Resilience.Analyzers.Package.csproj --configuration Release --no-build --output artifacts/packages
+
+      - name: Validate package contents
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem artifacts/packages/*.nupkg | Select-Object -First 1
+          tar -tf $package.FullName | Select-String 'analyzers/dotnet/cs/HttpClient.Resilience.Analyzers.dll'

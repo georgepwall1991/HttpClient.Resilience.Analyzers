@@ -1,0 +1,25 @@
+# Implementation Status
+
+This project currently implements every MVP diagnostic ID from the starter document.
+
+## Implemented Rules
+
+| Rule | Analyzer | Code fix | Notes |
+|---|---:|---:|---|
+| `HCR001` | Yes | No | High-confidence method-local `new HttpClient()` detection. |
+| `HCR002` | Yes | Yes | Static manual client without `PooledConnectionLifetime`. |
+| `HCR003` | Yes | No | Factory-created clients cached into static fields or fields on known singleton services across the compilation. |
+| `HCR004` | Yes | Guide | Compilation-wide registration model for typed clients injected into singletons. |
+| `HCR005` | Yes | Yes | Duplicate typed-client registrations across the compilation. |
+| `HCR020` | Yes | Guide | High-confidence request-scoped constructor dependencies in handlers. |
+| `HCR040` | Yes | Yes | Duplicate standard resilience handlers in one fluent chain. |
+| `HCR041` | Yes | Yes | Standard resilience handlers with visible unsafe typed-client or named-client calls across the compilation. |
+| `HCR060` | Yes | Yes | `ResponseHeadersRead` response ownership and disposal. |
+| `HCR080` | Yes | Guide | Obvious unbounded `Task.WhenAll` HTTP fan-out. |
+
+## Current Limitations
+
+- Cross-file DI graph analysis is intentionally lightweight; it matches direct registration calls across syntax trees but does not expand arbitrary custom wrapper semantics beyond visible calls.
+- `HCR041` models visible typed-client and named-client call sites across syntax trees, but it does not trace client names through variables or configuration.
+- `HCR060` uses local ownership heuristics rather than full control-flow analysis.
+- `HCR080` is intentionally suggestion-level and heuristic.

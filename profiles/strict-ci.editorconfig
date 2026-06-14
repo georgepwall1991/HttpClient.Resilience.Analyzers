@@ -1,0 +1,11 @@
+[*.cs]
+dotnet_diagnostic.HCR001.severity = error
+dotnet_diagnostic.HCR002.severity = error
+dotnet_diagnostic.HCR003.severity = error
+dotnet_diagnostic.HCR004.severity = error
+dotnet_diagnostic.HCR005.severity = error
+dotnet_diagnostic.HCR020.severity = error
+dotnet_diagnostic.HCR040.severity = error
+dotnet_diagnostic.HCR041.severity = error
+dotnet_diagnostic.HCR060.severity = error
+dotnet_diagnostic.HCR080.severity = warning
