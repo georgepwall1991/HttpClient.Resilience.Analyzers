@@ -93,9 +93,10 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        if (HttpClientSymbols.IsHttpClient(semanticModel.GetTypeInfo(creation, cancellationToken).Type))
+        var createdType = semanticModel.GetTypeInfo(creation, cancellationToken).Type;
+        if (createdType is not null && createdType is not IErrorTypeSymbol)
         {
-            return true;
+            return HttpClientSymbols.IsHttpClient(createdType);
         }
 
         return creation is ObjectCreationExpressionSyntax objectCreation &&

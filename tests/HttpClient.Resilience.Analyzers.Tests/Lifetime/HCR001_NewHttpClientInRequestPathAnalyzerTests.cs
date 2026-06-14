@@ -191,6 +191,31 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenResolvedTypeIsCustomHttpClient()
+    {
+        const string source = """
+            namespace Custom
+            {
+                public sealed class HttpClient
+                {
+                }
+            }
+
+            public sealed class PaymentsService
+            {
+                public Custom.HttpClient Create()
+                {
+                    return new Custom.HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task CodeFix_UsesExistingHttpClientFactoryParameter()
     {
         const string source = """
