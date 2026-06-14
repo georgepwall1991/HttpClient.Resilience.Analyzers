@@ -386,6 +386,86 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenSingletonFactoryConstructsImplementationOwningHttpClientField()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton<IGitHubClient>(sp => new GitHubClient());
+                }
+            }
+
+            public interface IGitHubClient
+            {
+            }
+
+            public sealed class GitHubClient : IGitHubClient
+            {
+                private readonly HttpClient _client = new();
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services, Func<IServiceProvider, TService> factory) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR002, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenTypeofSingletonFactoryConstructsImplementationOwningHttpClientField()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton(typeof(IGitHubClient), sp => new GitHubClient());
+                }
+            }
+
+            public interface IGitHubClient
+            {
+            }
+
+            public sealed class GitHubClient : IGitHubClient
+            {
+                private readonly HttpClient _client = new();
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddSingleton(this IServiceCollection services, Type serviceType, Func<IServiceProvider, object> factory) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR002, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenQualifiedSingletonOwnsInstanceHttpClientField()
     {
         const string source = """
