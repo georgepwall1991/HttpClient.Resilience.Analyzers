@@ -174,10 +174,15 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
 
     private static bool SyntacticReceiverLooksLikeHttpClient(ExpressionSyntax expression)
     {
-        return expression is IdentifierNameSyntax identifier &&
-            (ParameterLooksLikeHttpClient(identifier) ||
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => ParameterLooksLikeHttpClient(identifier) ||
                 LocalLooksLikeHttpClient(identifier) ||
-                FieldOrPropertyLooksLikeHttpClient(identifier));
+                FieldOrPropertyLooksLikeHttpClient(identifier),
+            MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax, Name: IdentifierNameSyntax name } =>
+                FieldOrPropertyLooksLikeHttpClient(name),
+            _ => false
+        };
     }
 
     private static bool ParameterLooksLikeHttpClient(IdentifierNameSyntax identifier)
@@ -217,10 +222,8 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
 
     private static bool UsesConnectionLimitedClient(InvocationExpressionSyntax invocation)
     {
-        if (invocation.Expression is not MemberAccessExpressionSyntax
-            {
-                Expression: IdentifierNameSyntax receiver
-            })
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+            !TryGetHttpClientReceiverIdentifier(memberAccess.Expression, out var receiver))
         {
             return false;
         }
@@ -241,6 +244,24 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         }
 
         return ReceiverMemberUsesConnectionLimitedHandler(receiver);
+    }
+
+    private static bool TryGetHttpClientReceiverIdentifier(
+        ExpressionSyntax expression,
+        out IdentifierNameSyntax receiver)
+    {
+        switch (expression)
+        {
+            case IdentifierNameSyntax identifier:
+                receiver = identifier;
+                return true;
+            case MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax, Name: IdentifierNameSyntax name }:
+                receiver = name;
+                return true;
+            default:
+                receiver = null!;
+                return false;
+        }
     }
 
     private static bool ReceiverMemberUsesConnectionLimitedHandler(IdentifierNameSyntax receiver)

@@ -321,6 +321,35 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenThisQualifiedHttpClientFieldUsesInlineConnectionLimitedHandler()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                private readonly HttpClient _client = new(new SocketsHttpHandler
+                {
+                    MaxConnectionsPerServer = 8
+                });
+
+                public Task SendAsync(IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(urls.Select(url => this._client.GetAsync(url, cancellationToken)));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenHttpClientFieldUsesConnectionLimitedHandlerField()
     {
         const string source = """
@@ -371,6 +400,35 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
                 public Task SendAsync(IEnumerable<string> urls, CancellationToken cancellationToken)
                 {
                     return Task.WhenAll(urls.Select(url => Client.GetAsync(url, cancellationToken)));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenThisQualifiedHttpClientPropertyUsesInlineConnectionLimitedHandler()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                private HttpClient Client { get; } = new HttpClient(new SocketsHttpHandler
+                {
+                    MaxConnectionsPerServer = 8
+                });
+
+                public Task SendAsync(IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(urls.Select(url => this.Client.GetAsync(url, cancellationToken)));
                 }
             }
             """;
