@@ -40,7 +40,7 @@ Implemented diagnostic slices:
 
 - `HCR001` for high-confidence `new HttpClient()` usage in request-path types, loops, `using` ownership patterns, and top-level loop/using statements, with a partial code fix when `IHttpClientFactory` is already in scope.
 - `HCR002` for static or singleton-owned manual `HttpClient` fields without `PooledConnectionLifetime`, with a code fix.
-- `HCR003` for factory-created clients cached into static fields or known singleton fields.
+- `HCR003` for factory-created clients cached through assignments or initializers into static fields or known singleton fields.
 - `HCR004` for typed clients injected into singleton services.
 - `HCR005` for duplicate typed-client service registrations, with a code fix.
 - `HCR020` for request-scoped data and known scoped services captured by `DelegatingHandler` constructors.

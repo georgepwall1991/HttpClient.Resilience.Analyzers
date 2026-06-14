@@ -33,6 +33,9 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(
             nodeContext => AnalyzeAssignment(nodeContext, singletonTypes),
             SyntaxKind.SimpleAssignmentExpression);
+        context.RegisterSyntaxNodeAction(
+            nodeContext => AnalyzeFieldInitializer(nodeContext, singletonTypes),
+            SyntaxKind.VariableDeclarator);
     }
 
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context, ISet<string> singletonTypes)
@@ -57,6 +60,31 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(
             DiagnosticDescriptors.HCR003,
             assignment.Left.GetLocation()));
+    }
+
+    private static void AnalyzeFieldInitializer(SyntaxNodeAnalysisContext context, ISet<string> singletonTypes)
+    {
+        var variable = (VariableDeclaratorSyntax)context.Node;
+        if (variable.Parent?.Parent is not FieldDeclarationSyntax ||
+            variable.Initializer is not { Value: { } initializer } ||
+            !IsCreateClientInvocation(initializer))
+        {
+            return;
+        }
+
+        if (context.SemanticModel.GetDeclaredSymbol(variable, context.CancellationToken) is not IFieldSymbol field)
+        {
+            return;
+        }
+
+        if (!IsLongLivedField(field, singletonTypes))
+        {
+            return;
+        }
+
+        context.ReportDiagnostic(Diagnostic.Create(
+            DiagnosticDescriptors.HCR003,
+            variable.Identifier.GetLocation()));
     }
 
     private static bool IsCreateClientInvocation(ExpressionSyntax expression)

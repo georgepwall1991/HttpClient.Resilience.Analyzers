@@ -35,6 +35,30 @@ public sealed class HCR003_CachedFactoryClientAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenFactoryClientIsInitializedIntoStaticField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ClientCache
+            {
+                private static readonly IHttpClientFactory Factory = null!;
+                private static readonly HttpClient Client = Factory.CreateClient("github");
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR003, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenFactoryClientIsUsedAsLocal()
     {
         const string source = """
@@ -81,6 +105,51 @@ public sealed class HCR003_CachedFactoryClientAnalyzerTests
                 {
                     _client = factory.CreateClient("github");
                 }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR003, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenFactoryClientIsInitializedIntoRegisteredSingletonField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton<ClientRunner>();
+                }
+            }
+
+            public sealed class ClientRunner
+            {
+                private readonly HttpClient _client = FactoryProvider.Factory.CreateClient("github");
+            }
+
+            public static class FactoryProvider
+            {
+                public static IHttpClientFactory Factory { get; } = null!;
             }
 
             public interface IServiceCollection
