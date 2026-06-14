@@ -56,6 +56,78 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenCompletionOptionIsFullyQualified()
+    {
+        const string source = """
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(
+                    System.Net.Http.HttpClient client,
+                    System.Net.Http.HttpRequestMessage request,
+                    CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(
+                        request,
+                        System.Net.Http.HttpCompletionOption.ResponseHeadersRead,
+                        cancellationToken);
+                    _ = await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR060, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenCompletionOptionIsCustomLookalike()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public enum HttpCompletionOption
+            {
+                ResponseHeadersRead
+            }
+
+            public static class HttpClientExtensions
+            {
+                public static Task<HttpResponseMessage> SendAsync(
+                    this HttpClient client,
+                    string uri,
+                    HttpCompletionOption completionOption,
+                    CancellationToken cancellationToken)
+                {
+                    return Task.FromResult(new HttpResponseMessage());
+                }
+            }
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(
+                        "/events",
+                        HttpCompletionOption.ResponseHeadersRead,
+                        cancellationToken);
+                    _ = await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenResponseHeadersReadResultUsesUsingDeclaration()
     {
         const string source = """

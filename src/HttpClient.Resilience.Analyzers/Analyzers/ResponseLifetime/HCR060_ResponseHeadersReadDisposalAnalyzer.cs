@@ -88,11 +88,10 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         }
 
         return invocation.ArgumentList.Arguments
-            .Select(argument => UnwrapParentheses(argument.Expression))
-            .OfType<MemberAccessExpressionSyntax>()
-            .Any(memberAccess =>
-                memberAccess.Name.Identifier.ValueText == "ResponseHeadersRead" &&
-                memberAccess.Expression.ToString() == "HttpCompletionOption");
+            .Any(argument => IsResponseHeadersReadCompletionOption(
+                argument.Expression,
+                semanticModel,
+                cancellationToken));
     }
 
     private static bool IsHttpResponseMethodName(string methodName)
@@ -132,6 +131,55 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         }
 
         return SyntacticReceiverLooksLikeHttpClient(expression);
+    }
+
+    private static bool IsResponseHeadersReadCompletionOption(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        expression = UnwrapParentheses(expression);
+
+        var symbol = semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol;
+        if (symbol is IFieldSymbol field)
+        {
+            return field.Name == "ResponseHeadersRead" &&
+                IsHttpCompletionOption(field.ContainingType);
+        }
+
+        var expressionType = semanticModel.GetTypeInfo(expression, cancellationToken).Type;
+        if (expressionType is not null && expressionType is not IErrorTypeSymbol)
+        {
+            return false;
+        }
+
+        return SyntacticExpressionLooksLikeResponseHeadersRead(expression);
+    }
+
+    private static bool IsHttpCompletionOption(ITypeSymbol? type)
+    {
+        return type is not null &&
+            type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::System.Net.Http.HttpCompletionOption";
+    }
+
+    private static bool SyntacticExpressionLooksLikeResponseHeadersRead(ExpressionSyntax expression)
+    {
+        return expression is MemberAccessExpressionSyntax
+        {
+            Name.Identifier.ValueText: "ResponseHeadersRead"
+        } memberAccess && SyntacticExpressionLooksLikeHttpCompletionOption(memberAccess.Expression);
+    }
+
+    private static bool SyntacticExpressionLooksLikeHttpCompletionOption(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "HttpCompletionOption",
+            MemberAccessExpressionSyntax memberAccess => memberAccess.ToString() == "System.Net.Http.HttpCompletionOption",
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.Name.Identifier.ValueText == "HttpCompletionOption",
+            _ => false
+        };
     }
 
     private static bool SyntacticReceiverLooksLikeHttpClient(ExpressionSyntax expression)
