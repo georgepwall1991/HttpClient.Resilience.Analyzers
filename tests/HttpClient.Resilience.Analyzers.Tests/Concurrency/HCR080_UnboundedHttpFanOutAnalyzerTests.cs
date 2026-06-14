@@ -206,6 +206,44 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenSemaphoreWaitAndReleaseUseDifferentReceivers()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(HttpClient client, IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    var waitSemaphore = new SemaphoreSlim(8);
+                    var releaseSemaphore = new SemaphoreSlim(8);
+                    return Task.WhenAll(urls.Select(async url =>
+                    {
+                        await waitSemaphore.WaitAsync(cancellationToken);
+                        try
+                        {
+                            await client.GetAsync(url, cancellationToken);
+                        }
+                        finally
+                        {
+                            releaseSemaphore.Release();
+                        }
+                    }));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenHttpClientUsesInlineConnectionLimitedHandler()
     {
         const string source = """

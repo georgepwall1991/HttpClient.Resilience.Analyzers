@@ -370,15 +370,26 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
 
     private static bool UsesSemaphoreGate(LambdaExpressionSyntax lambda)
     {
-        var invocationNames = lambda.Body
+        var semaphoreWaitReceivers = lambda.Body
             .DescendantNodesAndSelf()
             .OfType<InvocationExpressionSyntax>()
             .Select(invocation => invocation.Expression)
             .OfType<MemberAccessExpressionSyntax>()
-            .Select(memberAccess => memberAccess.Name.Identifier.ValueText)
+            .Where(memberAccess => memberAccess.Name.Identifier.ValueText == "WaitAsync")
+            .Select(memberAccess => memberAccess.Expression.ToString())
             .ToArray();
 
-        return invocationNames.Contains("WaitAsync", System.StringComparer.Ordinal) &&
-            invocationNames.Contains("Release", System.StringComparer.Ordinal);
+        if (semaphoreWaitReceivers.Length == 0)
+        {
+            return false;
+        }
+
+        return lambda.Body
+            .DescendantNodesAndSelf()
+            .OfType<InvocationExpressionSyntax>()
+            .Select(invocation => invocation.Expression)
+            .OfType<MemberAccessExpressionSyntax>()
+            .Any(memberAccess => memberAccess.Name.Identifier.ValueText == "Release" &&
+                semaphoreWaitReceivers.Contains(memberAccess.Expression.ToString(), System.StringComparer.Ordinal));
     }
 }
