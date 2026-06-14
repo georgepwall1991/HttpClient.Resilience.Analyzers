@@ -1,13 +1,20 @@
-name: ci
+name: CI
 
 on:
   push:
     branches:
       - main
   pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
+    name: Build, test, and pack
     runs-on: windows-latest
 
     steps:
@@ -17,23 +24,40 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Restore
         run: dotnet restore HttpClient.Resilience.Analyzers.slnx
 
-      - name: Format
+      - name: Verify formatting
         run: dotnet format HttpClient.Resilience.Analyzers.slnx --verify-no-changes --no-restore --exclude samples
 
       - name: Build
         run: dotnet build HttpClient.Resilience.Analyzers.slnx --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test HttpClient.Resilience.Analyzers.slnx --configuration Release --no-build --logger trx
+        run: dotnet test HttpClient.Resilience.Analyzers.slnx --configuration Release --no-build --logger trx --results-directory artifacts/test-results
 
       - name: Pack
         run: dotnet pack src/HttpClient.Resilience.Analyzers.Package/HttpClient.Resilience.Analyzers.Package.csproj --configuration Release --no-build --output artifacts/packages
 
-      - name: Validate package contents
+      - name: Validate package
         shell: pwsh
-        run: ./scripts/Validate-Package.ps1 -PackagePath (Get-ChildItem artifacts/packages/*.nupkg | Select-Object -First 1).FullName
+        run: |
+          $package = Get-ChildItem artifacts/packages/*.nupkg | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          ./scripts/Validate-Package.ps1 -PackagePath $package.FullName
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: artifacts/packages/*.nupkg
+          if-no-files-found: error
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: artifacts/test-results/*.trx
+          if-no-files-found: ignore
