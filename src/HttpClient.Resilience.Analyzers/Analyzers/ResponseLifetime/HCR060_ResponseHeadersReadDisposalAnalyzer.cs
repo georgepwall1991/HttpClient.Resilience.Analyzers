@@ -38,7 +38,8 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                 continue;
             }
 
-            if (!IsResponseHeadersReadHttpCall(
+            if (!InitializerMaterializesResponse(variable.Initializer.Value) ||
+                !IsResponseHeadersReadHttpCall(
                 variable.Initializer.Value,
                 context.SemanticModel,
                 context.CancellationToken))
@@ -55,6 +56,12 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                 DiagnosticDescriptors.HCR060,
                 variable.Identifier.GetLocation()));
         }
+    }
+
+    private static bool InitializerMaterializesResponse(ExpressionSyntax expression)
+    {
+        expression = UnwrapParentheses(expression);
+        return expression is AwaitExpressionSyntax;
     }
 
     private static bool IsResponseHeadersReadHttpCall(
