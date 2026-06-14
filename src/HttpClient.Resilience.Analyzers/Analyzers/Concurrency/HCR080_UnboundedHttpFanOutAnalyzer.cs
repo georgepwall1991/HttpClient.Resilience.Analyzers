@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Collections.Generic;
 using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using Microsoft.CodeAnalysis;
@@ -81,13 +82,110 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             .Select(argument => argument.Expression)
             .OfType<LambdaExpressionSyntax>()
             .Any(lambda => !UsesSemaphoreGate(lambda) &&
-                lambda.Body.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>().Any(IsHttpCall));
+                lambda.Body.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>().Any(IsUnboundedHttpCall));
     }
 
     private static bool IsHttpCall(InvocationExpressionSyntax invocation)
     {
         return invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
             HttpCallMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal);
+    }
+
+    private static bool IsUnboundedHttpCall(InvocationExpressionSyntax invocation)
+    {
+        return IsHttpCall(invocation) && !UsesConnectionLimitedClient(invocation);
+    }
+
+    private static bool UsesConnectionLimitedClient(InvocationExpressionSyntax invocation)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax
+            {
+                Expression: IdentifierNameSyntax receiver
+            })
+        {
+            return false;
+        }
+
+        var scope = invocation.FirstAncestorOrSelf<MethodDeclarationSyntax>() as SyntaxNode ??
+            invocation.SyntaxTree.GetRoot();
+        var declarations = scope
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .ToArray();
+        var clientDeclaration = declarations
+            .FirstOrDefault(declaration => declaration.Identifier.ValueText == receiver.Identifier.ValueText);
+
+        return clientDeclaration?.Initializer?.Value is { } value &&
+            IsConnectionLimitedHttpClientCreation(value, declarations);
+    }
+
+    private static bool IsConnectionLimitedHttpClientCreation(
+        ExpressionSyntax expression,
+        IReadOnlyCollection<VariableDeclaratorSyntax> declarations)
+    {
+        if (expression is not BaseObjectCreationExpressionSyntax creation ||
+            !IsHttpClientCreation(creation) ||
+            creation.ArgumentList is not { Arguments.Count: > 0 } argumentList)
+        {
+            return false;
+        }
+
+        return argumentList.Arguments
+            .Select(argument => argument.Expression)
+            .Any(argument => IsConnectionLimitedHandler(argument, declarations));
+    }
+
+    private static bool IsHttpClientCreation(BaseObjectCreationExpressionSyntax creation)
+    {
+        return creation is ImplicitObjectCreationExpressionSyntax ||
+            creation is ObjectCreationExpressionSyntax objectCreation &&
+            objectCreation.Type.ToString().EndsWith("HttpClient", System.StringComparison.Ordinal);
+    }
+
+    private static bool IsConnectionLimitedHandler(
+        ExpressionSyntax expression,
+        IReadOnlyCollection<VariableDeclaratorSyntax> declarations)
+    {
+        if (expression is BaseObjectCreationExpressionSyntax creation)
+        {
+            return IsSocketsHttpHandlerCreation(creation) &&
+                HasMaxConnectionsPerServerInitializer(creation);
+        }
+
+        if (expression is not IdentifierNameSyntax identifier)
+        {
+            return false;
+        }
+
+        var handlerDeclaration = declarations
+            .FirstOrDefault(declaration => declaration.Identifier.ValueText == identifier.Identifier.ValueText);
+
+        return handlerDeclaration?.Initializer?.Value is BaseObjectCreationExpressionSyntax handlerCreation &&
+            IsSocketsHttpHandlerCreation(handlerCreation) &&
+            HasMaxConnectionsPerServerInitializer(handlerCreation);
+    }
+
+    private static bool IsSocketsHttpHandlerCreation(BaseObjectCreationExpressionSyntax creation)
+    {
+        return creation is ObjectCreationExpressionSyntax objectCreation &&
+            objectCreation.Type.ToString().EndsWith("SocketsHttpHandler", System.StringComparison.Ordinal);
+    }
+
+    private static bool HasMaxConnectionsPerServerInitializer(BaseObjectCreationExpressionSyntax creation)
+    {
+        return creation.Initializer?.Expressions
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => GetAssignedMemberName(assignment.Left) == "MaxConnectionsPerServer") == true;
+    }
+
+    private static string? GetAssignedMemberName(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText,
+            _ => null
+        };
     }
 
     private static bool UsesSemaphoreGate(LambdaExpressionSyntax lambda)

@@ -47,7 +47,7 @@ Implemented diagnostic slices:
 - `HCR040` for stacked `AddStandardResilienceHandler()` calls in one fluent chain, with a code fix.
 - `HCR041` for standard resilience handlers paired with visible unsafe typed-client or named-client calls across the compilation, with retry-guard detection and a code fix.
 - `HCR060` for undisposed `ResponseHeadersRead` responses, including a simple code fix.
-- `HCR080` for obvious unbounded `Task.WhenAll` HTTP fan-out.
+- `HCR080` for obvious unbounded `Task.WhenAll` HTTP fan-out, with bounded-concurrency and connection-limit exclusions.
 
 ## Example
 
