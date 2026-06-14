@@ -43,21 +43,30 @@ internal static class ServiceRegistrationCollector
 
     private static ServiceRegistrationModel? TryCreate(InvocationExpressionSyntax invocation)
     {
-        if (invocation.Expression is not MemberAccessExpressionSyntax
-            {
-                Name: GenericNameSyntax genericName
-            } memberAccess)
-        {
-            return null;
-        }
-
-        var kind = TryGetKind(genericName.Identifier.ValueText);
-        if (kind is null || genericName.TypeArgumentList.Arguments.Count is < 1 or > 2)
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
         {
             return null;
         }
 
         if (!IsLikelyServiceCollectionReceiver(memberAccess.Expression))
+        {
+            return null;
+        }
+
+        return memberAccess.Name switch
+        {
+            GenericNameSyntax genericName => TryCreateGenericRegistration(invocation, genericName),
+            IdentifierNameSyntax identifier => TryCreateTypeofRegistration(invocation, identifier),
+            _ => null
+        };
+    }
+
+    private static ServiceRegistrationModel? TryCreateGenericRegistration(
+        InvocationExpressionSyntax invocation,
+        GenericNameSyntax genericName)
+    {
+        var kind = TryGetKind(genericName.Identifier.ValueText);
+        if (kind is null || genericName.TypeArgumentList.Arguments.Count is < 1 or > 2)
         {
             return null;
         }
@@ -73,6 +82,46 @@ internal static class ServiceRegistrationCollector
             implementationType,
             genericName.GetLocation(),
             invocation);
+    }
+
+    private static ServiceRegistrationModel? TryCreateTypeofRegistration(
+        InvocationExpressionSyntax invocation,
+        IdentifierNameSyntax identifier)
+    {
+        var kind = TryGetKind(identifier.Identifier.ValueText);
+        if (kind is null ||
+            kind == ServiceRegistrationKind.HttpClient ||
+            invocation.ArgumentList.Arguments.Count is < 1 or > 2 ||
+            !TryGetTypeofArgument(invocation.ArgumentList.Arguments[0], out var serviceType))
+        {
+            return null;
+        }
+
+        string? implementationType = null;
+        if (invocation.ArgumentList.Arguments.Count == 2 &&
+            !TryGetTypeofArgument(invocation.ArgumentList.Arguments[1], out implementationType))
+        {
+            return null;
+        }
+
+        return new ServiceRegistrationModel(
+            kind.Value,
+            serviceType,
+            implementationType,
+            identifier.GetLocation(),
+            invocation);
+    }
+
+    private static bool TryGetTypeofArgument(ArgumentSyntax argument, out string typeName)
+    {
+        if (argument.Expression is TypeOfExpressionSyntax typeOfExpression)
+        {
+            typeName = typeOfExpression.Type.ToString();
+            return true;
+        }
+
+        typeName = string.Empty;
+        return false;
     }
 
     private static ServiceRegistrationKind? TryGetKind(string methodName)

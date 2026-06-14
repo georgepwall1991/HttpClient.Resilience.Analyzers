@@ -160,6 +160,82 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenDuplicateRegistrationUsesTypeofServiceType()
+    {
+        const string source = """
+            using System;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddTransient(typeof(PaymentsClient));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient(this IServiceCollection services, Type serviceType) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR005, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenDuplicateRegistrationUsesTypeofServiceAndImplementationTypes()
+    {
+        const string source = """
+            using System;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<IPaymentsClient, PaymentsClient>();
+                    services.AddTransient(typeof(IPaymentsClient), typeof(PaymentsClient));
+                }
+            }
+
+            public interface IPaymentsClient
+            {
+            }
+
+            public sealed class PaymentsClient : IPaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TService, TImplementation>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient(this IServiceCollection services, Type serviceType, Type implementationType) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR005, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenDuplicateRegistrationUsesQualifiedTypeName()
     {
         const string source = """
@@ -233,6 +309,51 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
             {
                 public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
                 public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenTypeofDuplicateTargetsDifferentSameNamedType()
+    {
+        const string source = """
+            using System;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<Clients.PaymentsClient>();
+                    services.AddTransient(typeof(Other.PaymentsClient));
+                }
+            }
+
+            namespace Clients
+            {
+                public sealed class PaymentsClient
+                {
+                }
+            }
+
+            namespace Other
+            {
+                public sealed class PaymentsClient
+                {
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient(this IServiceCollection services, Type serviceType) => services;
             }
             """;
 
