@@ -26,3 +26,9 @@ Keep `HCR080` at `suggestion` or `warning` until the team agrees on fan-out limi
 ## Per-Rule Overrides
 
 Rule pages under `docs/rules/` describe current detection and suppression guidance. Prefer changing individual severities over disabling the whole package.
+
+## Analyzer Packaging References
+
+- [NuGet analyzer package conventions](https://learn.microsoft.com/en-us/nuget/guides/analyzers-conventions)
+- [Code analysis in .NET](https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/overview)
+- [Roslyn analyzer and code fix tutorial](https://learn.microsoft.com/en-us/dotnet/csharp/roslyn-sdk/tutorials/how-to-write-csharp-analyzer-code-fix)
