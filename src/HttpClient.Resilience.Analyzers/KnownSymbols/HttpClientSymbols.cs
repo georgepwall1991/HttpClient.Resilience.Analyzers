@@ -20,9 +20,20 @@ internal static class HttpClientSymbols
             type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == "global::System.Net.Http.SocketsHttpHandler";
     }
 
+    public static bool IsHttpClientFactory(ITypeSymbol? type)
+    {
+        return type is not null &&
+            type.Name == "IHttpClientFactory";
+    }
+
     public static bool IsHttpClientName(TypeSyntax type)
     {
         return IsTypeName(type, "HttpClient");
+    }
+
+    public static bool IsHttpClientFactoryName(TypeSyntax type)
+    {
+        return IsTypeName(type, "IHttpClientFactory");
     }
 
     public static bool IsSocketsHttpHandlerName(TypeSyntax type)

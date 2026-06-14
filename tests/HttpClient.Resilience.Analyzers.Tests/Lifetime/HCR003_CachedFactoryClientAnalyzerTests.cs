@@ -84,6 +84,56 @@ public sealed class HCR003_CachedFactoryClientAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenLookalikeFactoryClientIsAssignedToStaticField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ClientCache
+            {
+                private static HttpClient _client = null!;
+
+                public static void Initialize(CustomFactory factory)
+                {
+                    _client = factory.CreateClient("github");
+                }
+            }
+
+            public sealed class CustomFactory
+            {
+                public HttpClient CreateClient(string name) => new();
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenLookalikeFactoryClientIsInitializedIntoStaticField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ClientCache
+            {
+                private static readonly CustomFactory Factory = new();
+                private static readonly HttpClient Client = Factory.CreateClient("github");
+            }
+
+            public sealed class CustomFactory
+            {
+                public HttpClient CreateClient(string name) => new();
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenFactoryClientIsAssignedToFieldOnRegisteredSingleton()
     {
         const string source = """

@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Collections.Generic;
 using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
+using HttpClient.Resilience.Analyzers.KnownSymbols;
 using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -41,7 +42,7 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context, ISet<string> singletonTypes)
     {
         var assignment = (AssignmentExpressionSyntax)context.Node;
-        if (!IsCreateClientInvocation(assignment.Right))
+        if (!IsCreateClientInvocation(assignment.Right, context.SemanticModel, context.CancellationToken))
         {
             return;
         }
@@ -67,7 +68,7 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
         var variable = (VariableDeclaratorSyntax)context.Node;
         if (variable.Parent?.Parent is not FieldDeclarationSyntax ||
             variable.Initializer is not { Value: { } initializer } ||
-            !IsCreateClientInvocation(initializer))
+            !IsCreateClientInvocation(initializer, context.SemanticModel, context.CancellationToken))
         {
             return;
         }
@@ -87,15 +88,85 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             variable.Identifier.GetLocation()));
     }
 
-    private static bool IsCreateClientInvocation(ExpressionSyntax expression)
+    private static bool IsCreateClientInvocation(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         return expression is InvocationExpressionSyntax
         {
             Expression: MemberAccessExpressionSyntax
             {
                 Name.Identifier.ValueText: "CreateClient"
-            }
+            } memberAccess
+        } && IsHttpClientFactoryReceiver(memberAccess.Expression, semanticModel, cancellationToken);
+    }
+
+    private static bool IsHttpClientFactoryReceiver(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (HttpClientSymbols.IsHttpClientFactory(semanticModel.GetTypeInfo(expression, cancellationToken).Type))
+        {
+            return true;
+        }
+
+        return semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
+        {
+            ILocalSymbol local => HttpClientSymbols.IsHttpClientFactory(local.Type),
+            IParameterSymbol parameter => HttpClientSymbols.IsHttpClientFactory(parameter.Type),
+            IFieldSymbol field => HttpClientSymbols.IsHttpClientFactory(field.Type),
+            IPropertySymbol property => HttpClientSymbols.IsHttpClientFactory(property.Type),
+            _ => false
+        } || SyntacticReceiverLooksLikeHttpClientFactory(expression);
+    }
+
+    private static bool SyntacticReceiverLooksLikeHttpClientFactory(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => ParameterLooksLikeHttpClientFactory(identifier) ||
+                LocalLooksLikeHttpClientFactory(identifier) ||
+                FieldOrPropertyLooksLikeHttpClientFactory(identifier),
+            MemberAccessExpressionSyntax { Name: IdentifierNameSyntax name } => FieldOrPropertyLooksLikeHttpClientFactory(name),
+            _ => false
         };
+    }
+
+    private static bool ParameterLooksLikeHttpClientFactory(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<BaseMethodDeclarationSyntax>()?
+            .ParameterList.Parameters
+            .Any(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText &&
+                parameter.Type is not null &&
+                HttpClientSymbols.IsHttpClientFactoryName(parameter.Type)) == true;
+    }
+
+    private static bool LocalLooksLikeHttpClientFactory(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<BlockSyntax>()?
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+                variable.Parent is VariableDeclarationSyntax declaration &&
+                HttpClientSymbols.IsHttpClientFactoryName(declaration.Type)) == true;
+    }
+
+    private static bool FieldOrPropertyLooksLikeHttpClientFactory(IdentifierNameSyntax identifier)
+    {
+        var root = identifier.SyntaxTree.GetRoot();
+
+        return root
+            .DescendantNodes()
+            .Any(node => node switch
+            {
+                FieldDeclarationSyntax field => HttpClientSymbols.IsHttpClientFactoryName(field.Declaration.Type) &&
+                    field.Declaration.Variables.Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText),
+                PropertyDeclarationSyntax property => HttpClientSymbols.IsHttpClientFactoryName(property.Type) &&
+                    property.Identifier.ValueText == identifier.Identifier.ValueText,
+                _ => false
+            });
     }
 
     private static HashSet<string> GetKnownSingletonTypes(IEnumerable<SyntaxNode> roots)
