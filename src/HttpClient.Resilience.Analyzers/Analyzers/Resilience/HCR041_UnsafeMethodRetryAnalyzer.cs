@@ -20,6 +20,23 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         "Put"
     };
 
+    private static readonly string[] UnsafeHttpMethodNames =
+    {
+        "Connect",
+        "Delete",
+        "Patch",
+        "Post",
+        "Put"
+    };
+
+    private static readonly string[] SafeHttpMethodNames =
+    {
+        "Get",
+        "Head",
+        "Options",
+        "Trace"
+    };
+
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
         ImmutableArray.Create(DiagnosticDescriptors.HCR041);
 
@@ -45,7 +62,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
         if (!IsAddStandardResilienceHandlerInvocation(invocation) ||
-            ContainsDisableForUnsafeHttpMethods(invocation))
+            HasUnsafeMethodRetryGuard(invocation))
         {
             return;
         }
@@ -81,6 +98,12 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         };
     }
 
+    private static bool HasUnsafeMethodRetryGuard(InvocationExpressionSyntax invocation)
+    {
+        return ContainsDisableForUnsafeHttpMethods(invocation) ||
+            ContainsSafeOnlyRetryPredicate(invocation);
+    }
+
     private static bool ContainsDisableForUnsafeHttpMethods(InvocationExpressionSyntax invocation)
     {
         return invocation
@@ -90,6 +113,35 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             {
                 Name.Identifier.ValueText: "DisableForUnsafeHttpMethods"
             });
+    }
+
+    private static bool ContainsSafeOnlyRetryPredicate(InvocationExpressionSyntax invocation)
+    {
+        return invocation
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(IsSafeOnlyShouldHandleAssignment);
+    }
+
+    private static bool IsSafeOnlyShouldHandleAssignment(AssignmentExpressionSyntax assignment)
+    {
+        if (assignment.Left is not MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "ShouldHandle"
+            })
+        {
+            return false;
+        }
+
+        var httpMethods = assignment.Right
+            .DescendantNodes()
+            .OfType<MemberAccessExpressionSyntax>()
+            .Where(memberAccess => memberAccess.Expression.ToString() == "HttpMethod")
+            .Select(memberAccess => memberAccess.Name.Identifier.ValueText)
+            .ToArray();
+
+        return httpMethods.Any(method => SafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal)) &&
+            !httpMethods.Any(method => UnsafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal));
     }
 
     private static string? FindTypedClientInChain(InvocationExpressionSyntax invocation)
