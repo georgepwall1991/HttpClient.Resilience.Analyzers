@@ -41,7 +41,8 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
 
         foreach (var singleton in singletonRegistrations)
         {
-            if (!ConstructorConsumesTypedClient(roots, singleton.ImplementationTypeName ?? singleton.ServiceTypeName, typedClients))
+            if (!ConstructorConsumesTypedClient(roots, singleton.ImplementationTypeName ?? singleton.ServiceTypeName, typedClients) &&
+                !SingletonFactoryResolvesTypedClient(singleton, typedClients))
             {
                 continue;
             }
@@ -50,6 +51,80 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
                 DiagnosticDescriptors.HCR004,
                 singleton.Location));
         }
+    }
+
+    private static bool SingletonFactoryResolvesTypedClient(
+        ServiceRegistrationModel singleton,
+        ISet<string> typedClients)
+    {
+        return singleton.Invocation.ArgumentList.Arguments
+            .Select(argument => argument.Expression)
+            .OfType<LambdaExpressionSyntax>()
+            .Any(lambda => lambda.Body
+                .DescendantNodesAndSelf()
+                .OfType<InvocationExpressionSyntax>()
+                .Any(invocation => IsServiceProviderResolutionOfTypedClient(invocation, lambda, typedClients)));
+    }
+
+    private static bool IsServiceProviderResolutionOfTypedClient(
+        InvocationExpressionSyntax invocation,
+        LambdaExpressionSyntax containingLambda,
+        ISet<string> typedClients)
+    {
+        return invocation.Expression is MemberAccessExpressionSyntax
+        {
+            Expression: IdentifierNameSyntax receiver,
+            Name: GenericNameSyntax
+            {
+                Identifier.ValueText: "GetService" or "GetRequiredService",
+                TypeArgumentList.Arguments.Count: 1
+            } genericName
+        } &&
+        IsServiceProviderFactoryParameter(receiver, containingLambda) &&
+        TypeNameUtilities.GetComparableNames(UnwrapNullableType(genericName.TypeArgumentList.Arguments[0]).ToString())
+            .Any(typedClients.Contains);
+    }
+
+    private static bool IsServiceProviderFactoryParameter(
+        IdentifierNameSyntax receiver,
+        LambdaExpressionSyntax containingLambda)
+    {
+        return containingLambda switch
+        {
+            SimpleLambdaExpressionSyntax simple => ParameterMatchesServiceProvider(simple.Parameter, receiver),
+            ParenthesizedLambdaExpressionSyntax parenthesized => parenthesized.ParameterList.Parameters
+                .Any(parameter => ParameterMatchesServiceProvider(parameter, receiver)),
+            _ => false
+        };
+    }
+
+    private static bool ParameterMatchesServiceProvider(ParameterSyntax parameter, IdentifierNameSyntax receiver)
+    {
+        if (parameter.Identifier.ValueText != receiver.Identifier.ValueText)
+        {
+            return false;
+        }
+
+        return parameter.Type is null
+            ? IsLikelyServiceProviderParameterName(parameter.Identifier.ValueText)
+            : IsServiceProviderTypeName(parameter.Type);
+    }
+
+    private static bool IsLikelyServiceProviderParameterName(string name)
+    {
+        return name is "provider" or "serviceProvider" or "sp";
+    }
+
+    private static bool IsServiceProviderTypeName(TypeSyntax type)
+    {
+        return type switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "IServiceProvider",
+            QualifiedNameSyntax qualified => qualified.ToString() == "System.IServiceProvider" ||
+                qualified.ToString() == "global::System.IServiceProvider",
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() == "global::System.IServiceProvider",
+            _ => false
+        };
     }
 
     private static bool ConstructorConsumesTypedClient(IEnumerable<SyntaxNode> roots, string singletonTypeName, ISet<string> typedClients)

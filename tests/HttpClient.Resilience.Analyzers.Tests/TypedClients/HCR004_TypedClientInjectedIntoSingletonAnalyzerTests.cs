@@ -85,6 +85,185 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenSingletonFactoryResolvesTypedClient()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton<PaymentJob>(sp => PaymentJob.Create(sp.GetRequiredService<PaymentsClient>()));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentJob
+            {
+                public static PaymentJob Create(PaymentsClient paymentsClient) => new();
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services, System.Func<System.IServiceProvider, TService> factory) => services;
+            }
+
+            public static class ServiceProviderExtensions
+            {
+                public static TService GetRequiredService<TService>(this System.IServiceProvider provider) => default!;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenSingletonFactoryUsesTypedServiceProviderParameter()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton<PaymentJob>((System.IServiceProvider factory) =>
+                        PaymentJob.Create(factory.GetService<PaymentsClient>()));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentJob
+            {
+                public static PaymentJob Create(PaymentsClient? paymentsClient) => new();
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services, System.Func<System.IServiceProvider, TService> factory) => services;
+            }
+
+            public static class ServiceProviderExtensions
+            {
+                public static TService? GetService<TService>(this System.IServiceProvider provider) => default;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenSingletonFactoryResolvesNonTypedService()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton<PaymentJob>(sp => PaymentJob.Create(sp.GetRequiredService<Clock>()));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class Clock
+            {
+            }
+
+            public sealed class PaymentJob
+            {
+                public static PaymentJob Create(Clock clock) => new();
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services, System.Func<System.IServiceProvider, TService> factory) => services;
+            }
+
+            public static class ServiceProviderExtensions
+            {
+                public static TService GetRequiredService<TService>(this System.IServiceProvider provider) => default!;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenFactoryReceiverIsNotServiceProviderParameter()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton<PaymentJob>(factory => PaymentJob.Create(factory.GetRequiredService<PaymentsClient>()));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentJob
+            {
+                public static PaymentJob Create(PaymentsClient paymentsClient) => new();
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public sealed class CustomFactory
+            {
+                public TService GetRequiredService<TService>() => default!;
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services, System.Func<CustomFactory, TService> factory) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenSingletonDoesNotConsumeTypedClient()
     {
         const string source = """
