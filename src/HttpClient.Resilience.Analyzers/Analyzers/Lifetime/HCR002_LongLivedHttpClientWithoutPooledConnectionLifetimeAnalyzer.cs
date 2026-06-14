@@ -31,6 +31,9 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         context.RegisterSyntaxNodeAction(
             nodeContext => AnalyzeFieldDeclaration(nodeContext, singletonTypes),
             SyntaxKind.FieldDeclaration);
+        context.RegisterSyntaxNodeAction(
+            nodeContext => AnalyzeAssignment(nodeContext, singletonTypes),
+            SyntaxKind.SimpleAssignmentExpression);
     }
 
     private static void AnalyzeFieldDeclaration(SyntaxNodeAnalysisContext context, IReadOnlyCollection<string> singletonTypes)
@@ -62,6 +65,74 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
                 DiagnosticDescriptors.HCR002,
                 variable.Identifier.GetLocation()));
         }
+    }
+
+    private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context, IReadOnlyCollection<string> singletonTypes)
+    {
+        var assignment = (AssignmentExpressionSyntax)context.Node;
+        if (UnwrapParentheses(assignment.Right) is not BaseObjectCreationExpressionSyntax creation)
+        {
+            return;
+        }
+
+        if (!AssignmentTargetsLongLivedHttpClientField(
+                assignment.Left,
+                creation,
+                singletonTypes,
+                context.SemanticModel,
+                context.CancellationToken) ||
+            HasPooledConnectionLifetime(creation, context.SemanticModel, context.CancellationToken))
+        {
+            return;
+        }
+
+        context.ReportDiagnostic(Diagnostic.Create(
+            DiagnosticDescriptors.HCR002,
+            assignment.Left.GetLocation()));
+    }
+
+    private static bool AssignmentTargetsLongLivedHttpClientField(
+        ExpressionSyntax target,
+        BaseObjectCreationExpressionSyntax creation,
+        IReadOnlyCollection<string> singletonTypes,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (semanticModel.GetSymbolInfo(target, cancellationToken).Symbol is IFieldSymbol field)
+        {
+            return IsLongLivedField(field, singletonTypes) &&
+                IsHttpClientCreation(field, creation, semanticModel, cancellationToken);
+        }
+
+        if (semanticModel.GetSymbolInfo(target, cancellationToken).Symbol is ILocalSymbol)
+        {
+            return false;
+        }
+
+        return TryGetVisibleAssignedField(target) is { } fieldDeclaration &&
+            IsLongLivedField(fieldDeclaration, singletonTypes, semanticModel, cancellationToken) &&
+            IsHttpClientFieldCreation(fieldDeclaration.Declaration.Type, creation, semanticModel, cancellationToken);
+    }
+
+    private static FieldDeclarationSyntax? TryGetVisibleAssignedField(ExpressionSyntax target)
+    {
+        var fieldName = target switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText,
+            _ => null
+        };
+
+        if (fieldName is null)
+        {
+            return null;
+        }
+
+        return target.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
+            .Members
+            .OfType<FieldDeclarationSyntax>()
+            .FirstOrDefault(field => field.Declaration.Variables.Any(variable =>
+                variable.Identifier.ValueText == fieldName));
     }
 
     private static IReadOnlyCollection<string> GetKnownSingletonTypes(
@@ -100,7 +171,19 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
 
         return containingType.Identifier.ValueText.EndsWith("Singleton", System.StringComparison.Ordinal) ||
             semanticModel.GetDeclaredSymbol(containingType, cancellationToken) is INamedTypeSymbol containingTypeSymbol &&
-            singletonTypes.Any(typeName => MatchesContainingType(containingTypeSymbol, typeName));
+            IsKnownSingletonType(containingTypeSymbol, singletonTypes);
+    }
+
+    private static bool IsLongLivedField(IFieldSymbol field, IReadOnlyCollection<string> singletonTypes)
+    {
+        return field.IsStatic ||
+            field.ContainingType.Name.EndsWith("Singleton", System.StringComparison.Ordinal) ||
+            IsKnownSingletonType(field.ContainingType, singletonTypes);
+    }
+
+    private static bool IsKnownSingletonType(INamedTypeSymbol containingType, IReadOnlyCollection<string> singletonTypes)
+    {
+        return singletonTypes.Any(typeName => MatchesContainingType(containingType, typeName));
     }
 
     private static bool MatchesContainingType(INamedTypeSymbol containingType, string registrationTypeName)
@@ -226,6 +309,35 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
 
         return creation is ObjectCreationExpressionSyntax objectCreation &&
             HttpClientSymbols.IsHttpClientName(objectCreation.Type);
+    }
+
+    private static bool IsHttpClientCreation(
+        IFieldSymbol field,
+        BaseObjectCreationExpressionSyntax creation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (!HttpClientSymbols.IsHttpClient(field.Type) &&
+            !FieldSyntaxTypeLooksLikeHttpClient(field, cancellationToken))
+        {
+            return false;
+        }
+
+        var createdType = semanticModel.GetTypeInfo(creation, cancellationToken).Type;
+        return createdType is null ||
+            createdType is IErrorTypeSymbol ||
+            HttpClientSymbols.IsHttpClient(createdType);
+    }
+
+    private static bool FieldSyntaxTypeLooksLikeHttpClient(
+        IFieldSymbol field,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return field.DeclaringSyntaxReferences
+            .Select(reference => reference.GetSyntax(cancellationToken))
+            .OfType<VariableDeclaratorSyntax>()
+            .Any(variable => variable.Parent is VariableDeclarationSyntax declaration &&
+                HttpClientSymbols.IsHttpClientName(declaration.Type));
     }
 
     private static bool IsSocketsHttpHandlerCreation(

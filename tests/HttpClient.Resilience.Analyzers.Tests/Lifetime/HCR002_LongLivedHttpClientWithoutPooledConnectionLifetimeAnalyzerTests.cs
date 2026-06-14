@@ -26,6 +26,29 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenStaticHttpClientIsAssignedDefaultHandler()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static HttpClient Client = null!;
+
+                public static void Initialize()
+                {
+                    Client = new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR002, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenStaticHttpClientHasPooledConnectionLifetime()
     {
         const string source = """
@@ -126,6 +149,46 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             public sealed class GitHubClient
             {
                 private readonly HttpClient _client = new();
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR002, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenRegisteredSingletonAssignsInstanceHttpClientField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton<GitHubClient>();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+                private readonly HttpClient _client;
+
+                public GitHubClient()
+                {
+                    _client = new HttpClient();
+                }
             }
 
             public interface IServiceCollection
@@ -288,6 +351,49 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
                 };
 
                 private readonly HttpClient _client = new(Handler);
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenRegisteredSingletonAssignsConfiguredInstanceHttpClientField()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton<GitHubClient>();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+                private readonly HttpClient _client;
+
+                public GitHubClient()
+                {
+                    _client = new HttpClient(new SocketsHttpHandler
+                    {
+                        PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+                    });
+                }
             }
 
             public interface IServiceCollection
