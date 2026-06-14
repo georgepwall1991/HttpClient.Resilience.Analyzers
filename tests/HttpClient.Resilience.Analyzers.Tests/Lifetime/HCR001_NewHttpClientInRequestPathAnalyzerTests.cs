@@ -366,6 +366,56 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenHttpClientIsCreatedInMSTestInitializeMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                [TestInitialize]
+                public void Create()
+                {
+                    _ = new HttpClient();
+                }
+            }
+
+            public sealed class TestInitializeAttribute : System.Attribute
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHttpClientIsCreatedInMSTestCleanupMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                [TestCleanup]
+                public void Create()
+                {
+                    _ = new HttpClient();
+                }
+            }
+
+            public sealed class TestCleanupAttribute : System.Attribute
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenResolvedTypeIsCustomHttpClient()
     {
         const string source = """
