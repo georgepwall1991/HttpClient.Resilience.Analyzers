@@ -6,7 +6,7 @@ This project currently implements every MVP diagnostic ID from the starter docum
 
 | Rule | Analyzer | Code fix | Notes |
 |---|---:|---:|---|
-| `HCR001` | Yes | Partial | High-confidence method-local `new HttpClient()` detection; code fix uses an existing `IHttpClientFactory` parameter when one is already in scope. |
+| `HCR001` | Yes | Partial | High-confidence `new HttpClient()` detection in request-path types, loops, `using` ownership patterns, and top-level loop/using statements; code fix uses an existing `IHttpClientFactory` parameter when one is already in scope. |
 | `HCR002` | Yes | Yes | Static manual client without `PooledConnectionLifetime`. |
 | `HCR003` | Yes | No | Factory-created clients cached into static fields or fields on known singleton services across the compilation. |
 | `HCR004` | Yes | Guide | Compilation-wide registration model for typed clients injected into singletons. |

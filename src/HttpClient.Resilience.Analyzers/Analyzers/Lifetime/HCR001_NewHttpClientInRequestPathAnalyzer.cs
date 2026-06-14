@@ -40,9 +40,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
             return;
         }
 
-        if (creation.FirstAncestorOrSelf<MethodDeclarationSyntax>() is null &&
-            creation.FirstAncestorOrSelf<LocalFunctionStatementSyntax>() is null &&
-            creation.FirstAncestorOrSelf<AnonymousFunctionExpressionSyntax>() is null)
+        if (!IsInExecutableCodeContext(creation))
         {
             return;
         }
@@ -67,6 +65,14 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
         return IsInsideLoop(node) ||
             IsDisposedInUsing(node) ||
             IsInsideLikelyRequestPathType(node);
+    }
+
+    private static bool IsInExecutableCodeContext(SyntaxNode node)
+    {
+        return node.FirstAncestorOrSelf<MethodDeclarationSyntax>() is not null ||
+            node.FirstAncestorOrSelf<LocalFunctionStatementSyntax>() is not null ||
+            node.FirstAncestorOrSelf<AnonymousFunctionExpressionSyntax>() is not null ||
+            node.FirstAncestorOrSelf<GlobalStatementSyntax>() is not null;
     }
 
     private static bool IsHttpClientCreation(
@@ -94,7 +100,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
     private static bool IsDisposedInUsing(SyntaxNode node)
     {
         return node.FirstAncestorOrSelf<UsingStatementSyntax>() is not null ||
-            node.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>()?.UsingKeyword != default;
+            node.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>()?.UsingKeyword.IsKind(SyntaxKind.UsingKeyword) == true;
     }
 
     private static bool IsInsideLikelyRequestPathType(SyntaxNode node)

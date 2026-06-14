@@ -54,6 +54,73 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenTopLevelUsingDeclarationCreatesHttpClient()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            using var client = new HttpClient();
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenTopLevelLoopCreatesHttpClient()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            foreach (var url in new[] { "https://example.com" })
+            {
+                _ = new HttpClient();
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenPlainTopLevelHttpClientHasNoRequestPathEvidence()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            var client = new HttpClient();
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenPlainLocalHttpClientHasNoRequestPathEvidence()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class Utility
+            {
+                public HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenHttpClientIsCreatedInTestType()
     {
         const string source = """
