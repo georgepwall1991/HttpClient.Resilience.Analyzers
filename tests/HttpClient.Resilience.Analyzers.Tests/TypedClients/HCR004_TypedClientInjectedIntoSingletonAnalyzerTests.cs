@@ -388,4 +388,37 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
 
         Assert.Empty(diagnostics);
     }
+
+    [Fact]
+    public async Task DoesNotReport_WhenLookalikeServicesParameterIsNotIServiceCollection()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(CustomServices services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton<PaymentJob>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentJob(PaymentsClient paymentsClient)
+            {
+            }
+
+            public sealed class CustomServices
+            {
+                public CustomServices AddHttpClient<TClient>() => this;
+                public CustomServices AddSingleton<TService>() => this;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
 }
