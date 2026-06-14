@@ -45,6 +45,46 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenSingletonConsumesNullableTypedClient()
+    {
+        const string source = """
+            #nullable enable
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton<PaymentJob>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentJob(PaymentsClient? paymentsClient)
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenSingletonDoesNotConsumeTypedClient()
     {
         const string source = """

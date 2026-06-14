@@ -64,7 +64,7 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
             foreach (var parameter in GetConstructorParameters(singletonClass))
             {
                 if (parameter.Type is not null &&
-                    TypeNameUtilities.GetComparableNames(parameter.Type.ToString()).Any(typedClients.Contains))
+                    TypeNameUtilities.GetComparableNames(UnwrapNullableType(parameter.Type).ToString()).Any(typedClients.Contains))
                 {
                     return true;
                 }
@@ -72,6 +72,13 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
         }
 
         return false;
+    }
+
+    private static TypeSyntax UnwrapNullableType(TypeSyntax type)
+    {
+        return type is NullableTypeSyntax nullable
+            ? nullable.ElementType
+            : type;
     }
 
     private static bool DeclaredTypeMatchesRegistration(ClassDeclarationSyntax classDeclaration, string registrationTypeName)
