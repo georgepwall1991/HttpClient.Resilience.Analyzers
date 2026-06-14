@@ -14,7 +14,7 @@ This project currently implements every MVP diagnostic ID from the starter docum
 | `HCR020` | Yes | Guide | High-confidence request-scoped and known scoped service constructor dependencies in handlers. |
 | `HCR040` | Yes | Yes | Duplicate standard resilience handlers and same-name custom resilience handlers in one fluent chain. |
 | `HCR041` | Yes | Yes | Standard resilience handlers with visible unsafe typed-client or named-client calls across the compilation, including unsafe `HttpRequestMessage` `Send`/`SendAsync` shapes; skips disabled retries and safe-method-only retry predicates. |
-| `HCR060` | Yes | Yes | `ResponseHeadersRead` HTTP response ownership and disposal, with direct response/wrapper transfer heuristics. |
+| `HCR060` | Yes | Yes | `ResponseHeadersRead` HTTP response ownership and disposal, with `HttpClient` receiver validation and direct response/wrapper transfer heuristics. |
 | `HCR080` | Yes | Guide | Obvious unbounded `Task.WhenAll` HTTP fan-out; skips visible semaphore gates, bounded `Parallel.ForEachAsync`, and local `MaxConnectionsPerServer` clients. |
 
 ## Current Limitations

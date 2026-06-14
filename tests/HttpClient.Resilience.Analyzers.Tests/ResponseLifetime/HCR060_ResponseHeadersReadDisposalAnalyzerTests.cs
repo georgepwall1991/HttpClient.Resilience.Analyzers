@@ -148,6 +148,32 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenLookalikeMethodDoesNotReturnHttpResponseMessage()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+
+            public sealed class Client
+            {
+                public void Use(NotHttpClient client, CancellationToken cancellationToken)
+                {
+                    var result = client.GetAsync("/events", HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                }
+            }
+
+            public sealed class NotHttpClient
+            {
+                public string GetAsync(string path, HttpCompletionOption completionOption, CancellationToken cancellationToken) => path;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenResponseIsReturnedToCaller()
     {
         const string source = """

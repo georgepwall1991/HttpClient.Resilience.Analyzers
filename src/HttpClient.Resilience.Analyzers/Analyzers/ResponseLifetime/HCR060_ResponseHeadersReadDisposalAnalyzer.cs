@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
+using HttpClient.Resilience.Analyzers.KnownSymbols;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -37,7 +38,10 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                 continue;
             }
 
-            if (!IsResponseHeadersReadHttpCall(variable.Initializer.Value))
+            if (!IsResponseHeadersReadHttpCall(
+                variable.Initializer.Value,
+                context.SemanticModel,
+                context.CancellationToken))
             {
                 continue;
             }
@@ -53,18 +57,25 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         }
     }
 
-    private static bool IsResponseHeadersReadHttpCall(ExpressionSyntax expression)
+    private static bool IsResponseHeadersReadHttpCall(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         return expression
             .DescendantNodesAndSelf()
             .OfType<InvocationExpressionSyntax>()
-            .Any(IsResponseHeadersReadHttpCall);
+            .Any(invocation => IsResponseHeadersReadHttpCall(invocation, semanticModel, cancellationToken));
     }
 
-    private static bool IsResponseHeadersReadHttpCall(InvocationExpressionSyntax invocation)
+    private static bool IsResponseHeadersReadHttpCall(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
-            !IsHttpResponseMethodName(memberAccess.Name.Identifier.ValueText))
+            !IsHttpResponseMethodName(memberAccess.Name.Identifier.ValueText) ||
+            !IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken))
         {
             return false;
         }
@@ -86,6 +97,67 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             "PostAsync" or
             "PutAsync" or
             "SendAsync";
+    }
+
+    private static bool IsHttpClientReceiver(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (HttpClientSymbols.IsHttpClient(semanticModel.GetTypeInfo(expression, cancellationToken).Type))
+        {
+            return true;
+        }
+
+        return semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
+        {
+            ILocalSymbol local => HttpClientSymbols.IsHttpClient(local.Type),
+            IParameterSymbol parameter => HttpClientSymbols.IsHttpClient(parameter.Type),
+            IFieldSymbol field => HttpClientSymbols.IsHttpClient(field.Type),
+            IPropertySymbol property => HttpClientSymbols.IsHttpClient(property.Type),
+            _ => false
+        } || SyntacticReceiverLooksLikeHttpClient(expression);
+    }
+
+    private static bool SyntacticReceiverLooksLikeHttpClient(ExpressionSyntax expression)
+    {
+        return expression is IdentifierNameSyntax identifier &&
+            (ParameterLooksLikeHttpClient(identifier) ||
+                LocalLooksLikeHttpClient(identifier) ||
+                FieldOrPropertyLooksLikeHttpClient(identifier));
+    }
+
+    private static bool ParameterLooksLikeHttpClient(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<BaseMethodDeclarationSyntax>()?
+            .ParameterList.Parameters
+            .Any(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText &&
+                parameter.Type is not null &&
+                HttpClientSymbols.IsHttpClientName(parameter.Type)) == true;
+    }
+
+    private static bool LocalLooksLikeHttpClient(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<BlockSyntax>()?
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+                variable.Parent is VariableDeclarationSyntax declaration &&
+                HttpClientSymbols.IsHttpClientName(declaration.Type)) == true;
+    }
+
+    private static bool FieldOrPropertyLooksLikeHttpClient(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
+            .Members
+            .Any(member => member switch
+            {
+                FieldDeclarationSyntax field => HttpClientSymbols.IsHttpClientName(field.Declaration.Type) &&
+                    field.Declaration.Variables.Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText),
+                PropertyDeclarationSyntax property => HttpClientSymbols.IsHttpClientName(property.Type) &&
+                    property.Identifier.ValueText == identifier.Identifier.ValueText,
+                _ => false
+            }) == true;
     }
 
     private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
