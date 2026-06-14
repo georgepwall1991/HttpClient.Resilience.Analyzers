@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Push package to NuGet.org'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build, validate, and publish package
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore HttpClient.Resilience.Analyzers.slnx
+
+      - name: Verify formatting
+        run: dotnet format HttpClient.Resilience.Analyzers.slnx --verify-no-changes --no-restore --exclude samples
+
+      - name: Build
+        run: dotnet build HttpClient.Resilience.Analyzers.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test HttpClient.Resilience.Analyzers.slnx --configuration Release --no-build --logger trx --results-directory artifacts/test-results
+
+      - name: Pack
+        run: dotnet pack src/HttpClient.Resilience.Analyzers.Package/HttpClient.Resilience.Analyzers.Package.csproj --configuration Release --no-build --output artifacts/packages
+
+      - name: Validate package
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem artifacts/packages/*.nupkg | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          ./scripts/Validate-Package.ps1 -PackagePath $package.FullName
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: artifacts/packages/*.nupkg
+          if-no-files-found: error
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: artifacts/test-results/*.trx
+          if-no-files-found: ignore
+
+      - name: Publish to NuGet
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true'
+        shell: pwsh
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:NUGET_API_KEY)) {
+              throw 'NUGET_API_KEY repository secret is required to publish.'
+          }
+
+          $packages = Get-ChildItem artifacts/packages/*.nupkg
+          foreach ($package in $packages) {
+              dotnet nuget push $package.FullName `
+                  --api-key $env:NUGET_API_KEY `
+                  --source https://api.nuget.org/v3/index.json `
+                  --skip-duplicate
+          }

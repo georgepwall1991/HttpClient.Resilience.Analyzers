@@ -32,9 +32,10 @@ The repository is scaffolded with:
 - A NuGet package project that packs analyzer DLLs under `analyzers/dotnet/cs`.
 - An xUnit test project with analyzer test infrastructure.
 - A sample project wired to the local analyzer project. The sample promotes HCR080 to warning locally so its build output visibly demonstrates every MVP diagnostic.
-- Rule docs, `.editorconfig` profiles, and a GitHub Actions CI pipeline.
+- Rule docs, `.editorconfig` profiles, and GitHub Actions CI/release pipelines.
 
 See [implementation status](docs/implementation-status.md) for current analyzer and code-fix coverage.
+See [releasing](docs/releasing.md) for the guarded NuGet publish workflow.
 
 Implemented diagnostic slices:
 
