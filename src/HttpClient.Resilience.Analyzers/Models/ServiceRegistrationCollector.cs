@@ -91,8 +91,121 @@ internal static class ServiceRegistrationCollector
     {
         return receiver switch
         {
-            IdentifierNameSyntax identifier => IsServiceCollectionVariableName(identifier.Identifier.ValueText),
-            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText == "Services",
+            IdentifierNameSyntax identifier => IdentifierLooksLikeServiceCollection(identifier),
+            MemberAccessExpressionSyntax memberAccess => ServicesMemberLooksLikeServiceCollection(memberAccess),
+            _ => false
+        };
+    }
+
+    private static bool IdentifierLooksLikeServiceCollection(IdentifierNameSyntax identifier)
+    {
+        if (VisibleIdentifierDeclarationType(identifier) is { } type)
+        {
+            return IsServiceCollectionTypeName(type);
+        }
+
+        return IsServiceCollectionVariableName(identifier.Identifier.ValueText);
+    }
+
+    private static TypeSyntax? VisibleIdentifierDeclarationType(IdentifierNameSyntax identifier)
+    {
+        return identifier
+            .Ancestors()
+            .OfType<BaseMethodDeclarationSyntax>()
+            .SelectMany(method => method.ParameterList.Parameters)
+            .FirstOrDefault(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText)
+            ?.Type ??
+            identifier
+                .FirstAncestorOrSelf<BlockSyntax>()?
+                .DescendantNodes()
+                .OfType<VariableDeclaratorSyntax>()
+                .Where(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+                    variable.SpanStart < identifier.SpanStart)
+                .Select(variable => variable.Parent)
+                .OfType<VariableDeclarationSyntax>()
+                .Select(declaration => declaration.Type)
+                .FirstOrDefault() ??
+            identifier
+                .FirstAncestorOrSelf<TypeDeclarationSyntax>()?
+                .Members
+                .Select(member => member switch
+                {
+                    FieldDeclarationSyntax field when field.Declaration.Variables.Any(variable =>
+                        variable.Identifier.ValueText == identifier.Identifier.ValueText) => field.Declaration.Type,
+                    PropertyDeclarationSyntax property when property.Identifier.ValueText == identifier.Identifier.ValueText => property.Type,
+                    _ => null
+                })
+                .FirstOrDefault(type => type is not null);
+    }
+
+    private static bool ServicesMemberLooksLikeServiceCollection(MemberAccessExpressionSyntax memberAccess)
+    {
+        return memberAccess.Name.Identifier.ValueText == "Services" &&
+            ServicesMemberType(memberAccess) is { } type &&
+            IsServiceCollectionTypeName(type);
+    }
+
+    private static TypeSyntax? ServicesMemberType(MemberAccessExpressionSyntax memberAccess)
+    {
+        if (memberAccess.Expression is IdentifierNameSyntax identifier &&
+            VisibleIdentifierTypeName(identifier) is { } receiverTypeName &&
+            FindMemberType(memberAccess, receiverTypeName) is { } receiverMemberType)
+        {
+            return receiverMemberType;
+        }
+
+        return FindMemberType(memberAccess, typeName: null);
+    }
+
+    private static string? VisibleIdentifierTypeName(IdentifierNameSyntax identifier)
+    {
+        if (VisibleIdentifierDeclarationType(identifier) is { } type &&
+            type.ToString() != "var")
+        {
+            return TypeNameUtilities.ToSimpleName(type.ToString());
+        }
+
+        return identifier
+            .FirstAncestorOrSelf<BlockSyntax>()?
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Where(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+                variable.SpanStart < identifier.SpanStart)
+            .Select(variable => variable.Initializer?.Value)
+            .OfType<InvocationExpressionSyntax>()
+            .Select(invocation => invocation.Expression)
+            .OfType<MemberAccessExpressionSyntax>()
+            .Select(memberAccess => TypeNameUtilities.ToSimpleName(memberAccess.Expression.ToString()))
+            .FirstOrDefault();
+    }
+
+    private static TypeSyntax? FindMemberType(MemberAccessExpressionSyntax memberAccess, string? typeName)
+    {
+        return memberAccess
+            .SyntaxTree
+            .GetRoot()
+            .DescendantNodes()
+            .OfType<TypeDeclarationSyntax>()
+            .Where(type => typeName is null || type.Identifier.ValueText == typeName)
+            .SelectMany(type => type.Members)
+            .Select(member => member switch
+            {
+                FieldDeclarationSyntax field when field.Declaration.Variables.Any(variable =>
+                    variable.Identifier.ValueText == memberAccess.Name.Identifier.ValueText) => field.Declaration.Type,
+                PropertyDeclarationSyntax property when property.Identifier.ValueText == memberAccess.Name.Identifier.ValueText => property.Type,
+                _ => null
+            })
+            .FirstOrDefault(type => type is not null);
+    }
+
+    private static bool IsServiceCollectionTypeName(TypeSyntax type)
+    {
+        return type switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "IServiceCollection",
+            QualifiedNameSyntax qualified => qualified.ToString() == "Microsoft.Extensions.DependencyInjection.IServiceCollection" ||
+                qualified.ToString() == "global::Microsoft.Extensions.DependencyInjection.IServiceCollection",
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() == "global::Microsoft.Extensions.DependencyInjection.IServiceCollection",
             _ => false
         };
     }
