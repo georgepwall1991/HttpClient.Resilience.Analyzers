@@ -47,7 +47,8 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
         }
 
         return IsAddStandardResilienceHandlerInvocation(invocation) &&
-            CountStandardResilienceHandlersInChain(invocation) > 1 ||
+            (CountStandardResilienceHandlersInChain(invocation) > 1 ||
+                IsDuplicateStandardHandlerOnSameBuilderInBlock(invocation, semanticModel, cancellationToken)) ||
             IsDuplicateNamedResilienceHandlerInChain(invocation, semanticModel, cancellationToken);
     }
 
@@ -81,6 +82,29 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
         {
             Name.Identifier.ValueText: "AddStandardResilienceHandler"
         };
+    }
+
+    private static bool IsDuplicateStandardHandlerOnSameBuilderInBlock(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+            !IsHttpClientBuilderReceiver(memberAccess.Expression, semanticModel, cancellationToken) ||
+            invocation.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
+        {
+            return false;
+        }
+
+        var receiverText = memberAccess.Expression.ToString();
+
+        return block
+            .DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Where(candidate => candidate.SpanStart < invocation.SpanStart)
+            .Any(candidate => candidate.Expression is MemberAccessExpressionSyntax candidateMemberAccess &&
+                candidateMemberAccess.Name.Identifier.ValueText == "AddStandardResilienceHandler" &&
+                candidateMemberAccess.Expression.ToString() == receiverText);
     }
 
     private static bool IsDuplicateNamedResilienceHandlerInChain(

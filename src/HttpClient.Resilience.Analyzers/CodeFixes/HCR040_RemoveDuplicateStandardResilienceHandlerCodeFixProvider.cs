@@ -60,6 +60,11 @@ public sealed class HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvid
             return document;
         }
 
+        if (duplicateInvocation.Parent is ExpressionStatementSyntax expressionStatement)
+        {
+            return document.WithSyntaxRoot(root.RemoveNode(expressionStatement, SyntaxRemoveOptions.KeepExteriorTrivia) ?? root);
+        }
+
         var replacement = previousInvocation
             .WithTriviaFrom(duplicateInvocation)
             .WithAdditionalAnnotations(Formatter.Annotation);
