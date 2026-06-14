@@ -36,20 +36,4 @@ jobs:
 
       - name: Validate package contents
         shell: pwsh
-        run: |
-          $package = Get-ChildItem artifacts/packages/*.nupkg | Select-Object -First 1
-          $contents = tar -tf $package.FullName
-          $required = @(
-            'analyzers/dotnet/cs/HttpClient.Resilience.Analyzers.dll',
-            'icon.png',
-            'contentFiles/any/any/profiles/default.editorconfig',
-            'contentFiles/any/any/profiles/strict-ci.editorconfig',
-            'contentFiles/any/any/profiles/brownfield-adoption.editorconfig',
-            'contentFiles/any/any/profiles/library-author.editorconfig'
-          )
-
-          foreach ($path in $required) {
-            if ($contents -notcontains $path) {
-              throw "Package is missing $path"
-            }
-          }
+        run: ./scripts/Validate-Package.ps1 -PackagePath (Get-ChildItem artifacts/packages/*.nupkg | Select-Object -First 1).FullName
