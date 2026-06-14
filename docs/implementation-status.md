@@ -13,13 +13,13 @@ This project currently implements every MVP diagnostic ID from the starter docum
 | `HCR005` | Yes | Yes | Duplicate typed-client registrations across the compilation, including visible `IServiceCollection` receiver validation and namespace-aware matching for visible qualified type names. |
 | `HCR020` | Yes | Guide | High-confidence request-scoped and known scoped service constructor dependencies in handlers, including visible `IServiceCollection` receiver validation, namespace-aware qualified and nullable scoped service names, plus lookalike qualified handler-base filtering. |
 | `HCR040` | Yes | Yes | Duplicate standard resilience handlers and same-name custom resilience handlers in one fluent `AddHttpClient`/`IHttpClientBuilder` chain, with namespace-aware lookalike custom builders skipped. |
-| `HCR041` | Yes | Yes | Standard resilience handlers with visible unsafe typed-client or named-client calls across the compilation, including service-collection chain validation, namespace-aware qualified typed-client names, and unsafe `HttpRequestMessage` `Send`/`SendAsync` shapes; validates namespace-aware typed-client `HttpClient` and named-client factory receivers, and skips disabled retries and safe-method-only retry predicates. |
+| `HCR041` | Yes | Yes | Standard resilience handlers with visible unsafe typed-client or named-client calls across the compilation, including service-collection chain validation, namespace-aware qualified typed-client names, constant named-client names, and unsafe `HttpRequestMessage` `Send`/`SendAsync` shapes; validates namespace-aware typed-client `HttpClient` and named-client factory receivers, and skips disabled retries and safe-method-only retry predicates. |
 | `HCR060` | Yes | Yes | Awaited `ResponseHeadersRead` HTTP response ownership and disposal, with resolved `HttpClient` receiver validation, task-local filtering, and returned response/wrapper transfer heuristics. |
 | `HCR080` | Yes | Guide | Obvious unbounded `Task.WhenAll` HTTP fan-out with BCL `Task` and resolved `HttpClient` receiver validation; skips visible semaphore gates, bounded `Parallel.ForEachAsync`, local/member `MaxConnectionsPerServer` clients, and resolved custom clients or lookalike async methods on non-HTTP clients. |
 
 ## Current Limitations
 
 - Cross-file DI graph analysis is intentionally lightweight; it matches direct `IServiceCollection`-shaped registration calls across syntax trees but does not expand arbitrary custom wrapper semantics beyond visible calls.
-- `HCR041` models visible typed-client and named-client call sites across syntax trees, but it does not trace client names through variables or configuration.
+- `HCR041` models visible typed-client and named-client call sites across syntax trees, including string literals and compile-time constants for named clients, but it does not trace client names through mutable variables or configuration.
 - `HCR060` uses local ownership heuristics rather than full control-flow analysis.
 - `HCR080` is intentionally suggestion-level and heuristic.

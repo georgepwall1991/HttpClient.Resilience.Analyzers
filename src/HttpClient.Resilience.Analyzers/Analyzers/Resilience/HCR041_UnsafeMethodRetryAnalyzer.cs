@@ -80,7 +80,8 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         }
 
         var namedClient = FindNamedClientInChain(invocation, context.SemanticModel, context.CancellationToken);
-        if (namedClient is not null && NamedClientSendsUnsafeHttpMethod(roots, namedClient))
+        if (namedClient is not null &&
+            NamedClientSendsUnsafeHttpMethod(roots, namedClient))
         {
             ReportDiagnostic(context, invocation);
         }
@@ -196,7 +197,10 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                 } addHttpClientAccess &&
                 IsServiceCollectionReceiver(addHttpClientAccess.Expression, semanticModel, cancellationToken) &&
                 currentInvocation.ArgumentList.Arguments.Count > 0 &&
-                TryGetStringLiteral(currentInvocation.ArgumentList.Arguments[0].Expression) is { } clientName)
+                TryGetStringConstant(
+                    currentInvocation.ArgumentList.Arguments[0].Expression,
+                    semanticModel,
+                    cancellationToken) is { } clientName)
             {
                 return clientName;
             }
@@ -349,11 +353,13 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             : namespaceName + "." + classDeclaration.Identifier.ValueText;
     }
 
-    private static bool NamedClientSendsUnsafeHttpMethod(IEnumerable<SyntaxNode> roots, string clientName)
+    private static bool NamedClientSendsUnsafeHttpMethod(
+        IEnumerable<SyntaxNode> roots,
+        string clientName)
     {
         foreach (var invocation in roots
             .SelectMany(root => root.DescendantNodes().OfType<InvocationExpressionSyntax>())
-            .Where(invocation => IsCreateClientInvocation(invocation, clientName)))
+            .Where(invocation => IsCreateClientInvocation(invocation, roots, clientName)))
         {
             if (IsDirectUnsafeCall(invocation) || AssignedClientSendsUnsafeHttpMethod(invocation, clientName))
             {
@@ -531,13 +537,18 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         return expression;
     }
 
-    private static bool IsCreateClientInvocation(InvocationExpressionSyntax invocation, string clientName)
+    private static bool IsCreateClientInvocation(
+        InvocationExpressionSyntax invocation,
+        IEnumerable<SyntaxNode> roots,
+        string clientName)
     {
         return invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
         memberAccess.Name.Identifier.ValueText == "CreateClient" &&
         SyntacticReceiverLooksLikeHttpClientFactory(memberAccess.Expression) &&
         invocation.ArgumentList.Arguments.Count > 0 &&
-        TryGetStringLiteral(invocation.ArgumentList.Arguments[0].Expression) == clientName;
+        TryGetStringConstant(
+            invocation.ArgumentList.Arguments[0].Expression,
+            roots) == clientName;
     }
 
     private static bool SyntacticReceiverLooksLikeHttpClientFactory(ExpressionSyntax expression)
@@ -635,5 +646,94 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             literal.IsKind(SyntaxKind.StringLiteralExpression)
             ? literal.Token.ValueText
             : null;
+    }
+
+    private static string? TryGetStringConstant(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (TryGetStringLiteral(expression) is { } literal)
+        {
+            return literal;
+        }
+
+        var constantValue = semanticModel.GetConstantValue(expression, cancellationToken);
+        return constantValue.HasValue && constantValue.Value is string value
+            ? value
+            : null;
+    }
+
+    private static string? TryGetStringConstant(ExpressionSyntax expression, IEnumerable<SyntaxNode> roots)
+    {
+        expression = UnwrapParentheses(expression);
+
+        if (TryGetStringLiteral(expression) is { } literal)
+        {
+            return literal;
+        }
+
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => TryGetLocalStringConstant(identifier) ??
+                TryGetFieldStringConstant(roots, identifier.Identifier.ValueText, typeName: null),
+            MemberAccessExpressionSyntax memberAccess => TryGetFieldStringConstant(
+                roots,
+                memberAccess.Name.Identifier.ValueText,
+                TypeNameUtilities.ToSimpleName(memberAccess.Expression.ToString())),
+            _ => null
+        };
+    }
+
+    private static string? TryGetLocalStringConstant(IdentifierNameSyntax identifier)
+    {
+        return identifier
+            .Ancestors()
+            .OfType<BlockSyntax>()
+            .SelectMany(block => block
+                .DescendantNodes()
+                .OfType<LocalDeclarationStatementSyntax>())
+            .Where(localDeclaration => localDeclaration.SpanStart < identifier.SpanStart &&
+                localDeclaration.Modifiers.Any(SyntaxKind.ConstKeyword) &&
+                IsStringTypeName(localDeclaration.Declaration.Type))
+            .SelectMany(localDeclaration => localDeclaration.Declaration.Variables)
+            .Where(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText)
+            .Select(variable => variable.Initializer?.Value)
+            .OfType<ExpressionSyntax>()
+            .Select(TryGetStringLiteral)
+            .FirstOrDefault(value => value is not null);
+    }
+
+    private static string? TryGetFieldStringConstant(
+        IEnumerable<SyntaxNode> roots,
+        string constantName,
+        string? typeName)
+    {
+        return roots
+            .SelectMany(root => root.DescendantNodes().OfType<FieldDeclarationSyntax>())
+            .Where(field => field.Modifiers.Any(SyntaxKind.ConstKeyword) &&
+                IsStringTypeName(field.Declaration.Type) &&
+                (typeName is null ||
+                    field.Parent is TypeDeclarationSyntax typeDeclaration &&
+                    typeDeclaration.Identifier.ValueText == typeName))
+            .SelectMany(field => field.Declaration.Variables)
+            .Where(variable => variable.Identifier.ValueText == constantName)
+            .Select(variable => variable.Initializer?.Value)
+            .OfType<ExpressionSyntax>()
+            .Select(TryGetStringLiteral)
+            .FirstOrDefault(value => value is not null);
+    }
+
+    private static bool IsStringTypeName(TypeSyntax type)
+    {
+        return type switch
+        {
+            PredefinedTypeSyntax predefined => predefined.Keyword.IsKind(SyntaxKind.StringKeyword),
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "String",
+            QualifiedNameSyntax qualified => qualified.ToString() == "System.String" ||
+                qualified.ToString() == "global::System.String",
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() == "global::System.String",
+            _ => false
+        };
     }
 }
