@@ -71,6 +71,8 @@ try {
     Assert-MetadataText 'icon' 'icon.png'
     Assert-MetadataText 'readme' 'README.md'
     Assert-MetadataText 'projectUrl' 'https://github.com/georg-jung/HttpClient.Resilience.Analyzers'
+    Assert-MetadataText 'releaseNotes' 'Initial preview with ten production-safety diagnostics for HttpClient lifetime, typed clients, handlers, resilience retries, response disposal, and outbound fan-out.'
+    Assert-MetadataText 'developmentDependency' 'true'
 
     $license = $xml.SelectSingleNode('/n:package/n:metadata/n:license', $namespaceManager)
     if ($null -eq $license -or $license.InnerText -ne 'MIT' -or $license.type -ne 'expression') {
@@ -80,6 +82,12 @@ try {
     $repository = $xml.SelectSingleNode('/n:package/n:metadata/n:repository', $namespaceManager)
     if ($null -eq $repository -or $repository.type -ne 'git' -or $repository.url -ne 'https://github.com/georg-jung/HttpClient.Resilience.Analyzers') {
         throw 'Package repository metadata is missing or incorrect.'
+    }
+
+    $dependencies = $xml.SelectNodes('/n:package/n:metadata/n:dependencies/n:dependency', $namespaceManager)
+    if ($dependencies.Count -gt 0) {
+        $dependencyIds = @($dependencies | ForEach-Object { $_.id })
+        throw "Analyzer package should not declare NuGet dependencies: $($dependencyIds -join ', ')."
     }
 
     $tags = (Get-MetadataText 'tags') -split '\s+'
