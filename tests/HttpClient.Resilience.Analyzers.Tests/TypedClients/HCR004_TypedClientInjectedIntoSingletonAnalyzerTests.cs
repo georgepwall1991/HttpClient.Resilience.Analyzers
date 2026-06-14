@@ -253,6 +253,90 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenSingletonFactoryConstructsImplementationThatConsumesTypedClient()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton<IPaymentJob>(sp => new PaymentJob(default!));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IPaymentJob
+            {
+            }
+
+            public sealed class PaymentJob(PaymentsClient paymentsClient) : IPaymentJob
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services, System.Func<System.IServiceProvider, TService> factory) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenTypeofSingletonFactoryConstructsImplementationThatConsumesTypedClient()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton(typeof(IPaymentJob), sp => new PaymentJob(default!));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IPaymentJob
+            {
+            }
+
+            public sealed class PaymentJob(PaymentsClient paymentsClient) : IPaymentJob
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton(this IServiceCollection services, System.Type serviceType, System.Func<System.IServiceProvider, object> factory) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenSingletonFactoryResolvesLazyTypedClient()
     {
         const string source = """
