@@ -65,12 +65,19 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
     private static bool DerivesFromDelegatingHandler(ClassDeclarationSyntax classDeclaration)
     {
         return classDeclaration.BaseList?.Types.Any(type =>
-            type.Type switch
-            {
-                IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "DelegatingHandler",
-                QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText == "DelegatingHandler",
-                _ => false
-            }) == true;
+            IsDelegatingHandlerTypeName(type.Type)) == true;
+    }
+
+    private static bool IsDelegatingHandlerTypeName(TypeSyntax type)
+    {
+        return type switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "DelegatingHandler",
+            QualifiedNameSyntax qualified => qualified.ToString() == "System.Net.Http.DelegatingHandler" ||
+                qualified.ToString() == "global::System.Net.Http.DelegatingHandler",
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() == "global::System.Net.Http.DelegatingHandler",
+            _ => false
+        };
     }
 
     private static ISet<string> GetKnownScopedTypes(Compilation compilation, CancellationToken cancellationToken)

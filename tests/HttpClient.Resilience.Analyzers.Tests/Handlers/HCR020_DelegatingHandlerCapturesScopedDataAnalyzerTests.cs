@@ -275,6 +275,31 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenQualifiedBaseIsLookalikeDelegatingHandler()
+    {
+        const string source = """
+            public sealed class UserHeaderHandler(IHttpContextAccessor accessor) : Custom.DelegatingHandler
+            {
+            }
+
+            public interface IHttpContextAccessor
+            {
+            }
+
+            namespace Custom
+            {
+                public abstract class DelegatingHandler
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenScopedRegistrationAndHandlerAreInDifferentFiles()
     {
         const string registrations = """
