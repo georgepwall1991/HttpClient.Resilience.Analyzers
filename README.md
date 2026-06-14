@@ -46,7 +46,7 @@ Implemented diagnostic slices:
 - `HCR020` for request-scoped data and known scoped services captured by `DelegatingHandler` constructors.
 - `HCR040` for duplicate `AddStandardResilienceHandler()` calls or same-name custom resilience handlers in one fluent chain, with a code fix.
 - `HCR041` for standard resilience handlers paired with visible unsafe typed-client or named-client calls across the compilation, including unsafe `HttpRequestMessage` `Send`/`SendAsync` shapes, with retry-guard detection and a code fix.
-- `HCR060` for undisposed `ResponseHeadersRead` responses, including a simple code fix.
+- `HCR060` for undisposed `ResponseHeadersRead` HTTP responses, including a simple code fix.
 - `HCR080` for obvious unbounded `Task.WhenAll` HTTP fan-out, with bounded-concurrency and connection-limit exclusions.
 
 ## Example

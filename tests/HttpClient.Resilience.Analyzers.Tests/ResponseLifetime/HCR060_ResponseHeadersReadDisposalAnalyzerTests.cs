@@ -32,6 +32,30 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenGetAsyncUsesResponseHeadersRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("/events", HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    _ = await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR060, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenResponseHeadersReadResultUsesUsingDeclaration()
     {
         const string source = """
@@ -93,6 +117,27 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
                 {
                     var response = await client.SendAsync(request, cancellationToken);
                     _ = await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenLocalOnlyStoresCompletionOption()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class Client
+            {
+                public HttpCompletionOption Create()
+                {
+                    var option = HttpCompletionOption.ResponseHeadersRead;
+                    return option;
                 }
             }
             """;

@@ -37,7 +37,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                 continue;
             }
 
-            if (!ContainsResponseHeadersRead(variable.Initializer.Value))
+            if (!IsResponseHeadersReadHttpCall(variable.Initializer.Value))
             {
                 continue;
             }
@@ -53,14 +53,49 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         }
     }
 
-    private static bool ContainsResponseHeadersRead(ExpressionSyntax expression)
+    private static bool IsResponseHeadersReadHttpCall(ExpressionSyntax expression)
     {
         return expression
             .DescendantNodesAndSelf()
+            .OfType<InvocationExpressionSyntax>()
+            .Any(IsResponseHeadersReadHttpCall);
+    }
+
+    private static bool IsResponseHeadersReadHttpCall(InvocationExpressionSyntax invocation)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+            !IsHttpResponseMethodName(memberAccess.Name.Identifier.ValueText))
+        {
+            return false;
+        }
+
+        return invocation.ArgumentList.Arguments
+            .Select(argument => UnwrapParentheses(argument.Expression))
             .OfType<MemberAccessExpressionSyntax>()
             .Any(memberAccess =>
                 memberAccess.Name.Identifier.ValueText == "ResponseHeadersRead" &&
                 memberAccess.Expression.ToString() == "HttpCompletionOption");
+    }
+
+    private static bool IsHttpResponseMethodName(string methodName)
+    {
+        return methodName is
+            "DeleteAsync" or
+            "GetAsync" or
+            "PatchAsync" or
+            "PostAsync" or
+            "PutAsync" or
+            "SendAsync";
+    }
+
+    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    {
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
+        return expression;
     }
 
     private static bool OwnershipIsTransferredOrDisposed(VariableDeclaratorSyntax variable)
