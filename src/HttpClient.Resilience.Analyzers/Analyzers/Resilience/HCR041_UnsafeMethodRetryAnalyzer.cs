@@ -72,6 +72,10 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         }
 
         var typedClient = FindTypedClientImplementationInChain(invocation, context.SemanticModel, context.CancellationToken);
+        typedClient ??= FindTypedClientImplementationForBuilderLocal(
+            invocation,
+            context.SemanticModel,
+            context.CancellationToken);
 
         if (typedClient is not null && TypedClientSendsUnsafeHttpMethod(roots, typedClient))
         {
@@ -80,6 +84,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         }
 
         var namedClient = FindNamedClientInChain(invocation, context.SemanticModel, context.CancellationToken);
+        namedClient ??= FindNamedClientForBuilderLocal(invocation, context.SemanticModel, context.CancellationToken);
         if (namedClient is not null &&
             NamedClientSendsUnsafeHttpMethod(roots, namedClient))
         {
@@ -183,6 +188,16 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         return null;
     }
 
+    private static string? FindTypedClientImplementationForBuilderLocal(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return FindAddHttpClientInvocationForBuilderLocal(invocation) is { } addHttpClient
+            ? FindTypedClientImplementationInChain(addHttpClient, semanticModel, cancellationToken)
+            : null;
+    }
+
     private static string? FindNamedClientInChain(
         InvocationExpressionSyntax invocation,
         SemanticModel semanticModel,
@@ -215,6 +230,38 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         }
 
         return null;
+    }
+
+    private static string? FindNamedClientForBuilderLocal(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return FindAddHttpClientInvocationForBuilderLocal(invocation) is { } addHttpClient
+            ? FindNamedClientInChain(addHttpClient, semanticModel, cancellationToken)
+            : null;
+    }
+
+    private static InvocationExpressionSyntax? FindAddHttpClientInvocationForBuilderLocal(InvocationExpressionSyntax invocation)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax
+            {
+                Expression: IdentifierNameSyntax builderIdentifier
+            } ||
+            invocation.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
+        {
+            return null;
+        }
+
+        return block
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Where(variable => variable.Identifier.ValueText == builderIdentifier.Identifier.ValueText &&
+                variable.SpanStart < invocation.SpanStart &&
+                variable.Initializer is not null)
+            .Select(variable => UnwrapParentheses(variable.Initializer!.Value))
+            .OfType<InvocationExpressionSyntax>()
+            .FirstOrDefault();
     }
 
     private static bool IsServiceCollectionReceiver(

@@ -55,6 +55,52 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenTypedClientStandardResilienceHandlerIsSplitAcrossBuilderLocal()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    var builder = services.AddHttpClient<PaymentsClient>();
+                    builder.AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR041, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenTypedClientUsesThisQualifiedHttpClientField()
     {
         const string source = """
@@ -1044,6 +1090,58 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
                     return services
                         .AddHttpClient("payments")
                         .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class PaymentJob(IHttpClientFactory factory)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    var client = factory.CreateClient("payments");
+                    return client.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR041, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenNamedClientStandardResilienceHandlerIsSplitAcrossBuilderLocal()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    var builder = services.AddHttpClient("payments");
+                    builder.AddStandardResilienceHandler();
                 }
             }
 
