@@ -28,6 +28,31 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenHandlerInheritsFromVisibleDelegatingHandlerBase()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public abstract class CorrelationHandlerBase : DelegatingHandler
+            {
+            }
+
+            public sealed class UserHeaderHandler(IHttpContextAccessor accessor) : CorrelationHandlerBase
+            {
+            }
+
+            public interface IHttpContextAccessor
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenDelegatingHandlerHasStatelessDependency()
     {
         const string source = """
@@ -291,6 +316,40 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
                 public abstract class DelegatingHandler
                 {
                 }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenQualifiedBaseTargetsDifferentSameNamedHandlerBase()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            namespace HttpPipeline
+            {
+                public abstract class CorrelationHandlerBase : DelegatingHandler
+                {
+                }
+            }
+
+            namespace Custom
+            {
+                public abstract class CorrelationHandlerBase
+                {
+                }
+            }
+
+            public sealed class UserHeaderHandler(IHttpContextAccessor accessor) : Custom.CorrelationHandlerBase
+            {
+            }
+
+            public interface IHttpContextAccessor
+            {
             }
             """;
 

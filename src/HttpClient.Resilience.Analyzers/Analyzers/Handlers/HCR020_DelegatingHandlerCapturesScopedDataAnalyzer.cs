@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
@@ -34,17 +33,24 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
 
     private static void AnalyzeCompilation(CompilationStartAnalysisContext context)
     {
-        var scopedTypes = GetKnownScopedTypes(context.Compilation, context.CancellationToken);
+        var roots = context.Compilation.SyntaxTrees
+            .Select(tree => tree.GetRoot(context.CancellationToken))
+            .ToArray();
+        var scopedTypes = GetKnownScopedTypes(roots);
+        var handlerTypes = GetKnownDelegatingHandlerTypes(roots);
 
         context.RegisterSyntaxNodeAction(
-            nodeContext => AnalyzeClass(nodeContext, scopedTypes),
+            nodeContext => AnalyzeClass(nodeContext, scopedTypes, handlerTypes),
             SyntaxKind.ClassDeclaration);
     }
 
-    private static void AnalyzeClass(SyntaxNodeAnalysisContext context, ISet<string> scopedTypes)
+    private static void AnalyzeClass(
+        SyntaxNodeAnalysisContext context,
+        ISet<string> scopedTypes,
+        ISet<string> handlerTypes)
     {
         var classDeclaration = (ClassDeclarationSyntax)context.Node;
-        if (!DerivesFromDelegatingHandler(classDeclaration))
+        if (!DerivesFromDelegatingHandler(classDeclaration, handlerTypes))
         {
             return;
         }
@@ -62,10 +68,13 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
         }
     }
 
-    private static bool DerivesFromDelegatingHandler(ClassDeclarationSyntax classDeclaration)
+    private static bool DerivesFromDelegatingHandler(
+        ClassDeclarationSyntax classDeclaration,
+        ISet<string> handlerTypes)
     {
         return classDeclaration.BaseList?.Types.Any(type =>
-            IsDelegatingHandlerTypeName(type.Type)) == true;
+            IsDelegatingHandlerTypeName(type.Type) ||
+            IsKnownDelegatingHandlerType(type.Type, handlerTypes)) == true;
     }
 
     private static bool IsDelegatingHandlerTypeName(TypeSyntax type)
@@ -80,12 +89,65 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
         };
     }
 
-    private static ISet<string> GetKnownScopedTypes(Compilation compilation, CancellationToken cancellationToken)
+    private static bool IsKnownDelegatingHandlerType(TypeSyntax type, ISet<string> handlerTypes)
+    {
+        var typeName = type.ToString();
+
+        return TypeIsQualified(type)
+            ? handlerTypes.Contains(NormalizeTypeName(typeName))
+            : handlerTypes.Contains(TypeNameUtilities.ToSimpleName(typeName));
+    }
+
+    private static ISet<string> GetKnownDelegatingHandlerTypes(IEnumerable<SyntaxNode> roots)
+    {
+        var classes = roots
+            .SelectMany(root => root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+            .ToArray();
+        var handlerTypes = new HashSet<string>(System.StringComparer.Ordinal);
+        var changed = true;
+
+        while (changed)
+        {
+            changed = false;
+
+            foreach (var classDeclaration in classes)
+            {
+                if (classDeclaration.BaseList?.Types.Any(type =>
+                    IsDelegatingHandlerTypeName(type.Type) ||
+                    IsKnownDelegatingHandlerType(type.Type, handlerTypes)) != true)
+                {
+                    continue;
+                }
+
+                foreach (var typeName in TypeNameUtilities.GetComparableNames(GetQualifiedClassName(classDeclaration)))
+                {
+                    changed |= handlerTypes.Add(typeName);
+                }
+            }
+        }
+
+        return handlerTypes;
+    }
+
+    private static string GetQualifiedClassName(ClassDeclarationSyntax classDeclaration)
+    {
+        var namespaceName = string.Join(
+            ".",
+            classDeclaration
+                .Ancestors()
+                .OfType<BaseNamespaceDeclarationSyntax>()
+                .Reverse()
+                .Select(ns => ns.Name.ToString()));
+
+        return string.IsNullOrEmpty(namespaceName)
+            ? classDeclaration.Identifier.ValueText
+            : namespaceName + "." + classDeclaration.Identifier.ValueText;
+    }
+
+    private static ISet<string> GetKnownScopedTypes(IEnumerable<SyntaxNode> roots)
     {
         return new HashSet<string>(
-            compilation.SyntaxTrees
-                .Select(tree => tree.GetRoot(cancellationToken))
-                .SelectMany(ServiceRegistrationCollector.Collect)
+            roots.SelectMany(ServiceRegistrationCollector.Collect)
                 .Where(registration => registration.Kind == ServiceRegistrationKind.Scoped)
                 .SelectMany(registration => new[]
                 {
@@ -158,5 +220,13 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
     private static bool TypeIsQualified(TypeSyntax type)
     {
         return type is QualifiedNameSyntax or AliasQualifiedNameSyntax;
+    }
+
+    private static string NormalizeTypeName(string typeName)
+    {
+        typeName = typeName.Trim();
+        return typeName.StartsWith("global::", System.StringComparison.Ordinal)
+            ? typeName.Substring("global::".Length)
+            : typeName;
     }
 }
