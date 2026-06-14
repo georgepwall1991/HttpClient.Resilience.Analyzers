@@ -38,6 +38,10 @@ jobs:
       - name: Build
         run: dotnet build HttpClient.Resilience.Analyzers.slnx --configuration Release --no-restore
 
+      - name: Validate sample diagnostics
+        shell: pwsh
+        run: ./scripts/Validate-SampleDiagnostics.ps1 -NoRestore
+
       - name: Test
         run: dotnet test HttpClient.Resilience.Analyzers.slnx --configuration Release --no-build --logger trx --results-directory artifacts/test-results
 
