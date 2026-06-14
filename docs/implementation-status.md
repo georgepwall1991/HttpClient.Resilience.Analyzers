@@ -11,7 +11,7 @@ This project currently implements every MVP diagnostic ID from the starter docum
 | `HCR003` | Yes | No | Factory-created clients cached into static fields or fields on known singleton services across the compilation. |
 | `HCR004` | Yes | Guide | Compilation-wide registration model for typed clients injected into singletons. |
 | `HCR005` | Yes | Yes | Duplicate typed-client registrations across the compilation. |
-| `HCR020` | Yes | Guide | High-confidence request-scoped constructor dependencies in handlers. |
+| `HCR020` | Yes | Guide | High-confidence request-scoped and known scoped service constructor dependencies in handlers. |
 | `HCR040` | Yes | Yes | Duplicate standard resilience handlers in one fluent chain. |
 | `HCR041` | Yes | Yes | Standard resilience handlers with visible unsafe typed-client or named-client calls across the compilation. |
 | `HCR060` | Yes | Yes | `ResponseHeadersRead` response ownership and disposal. |

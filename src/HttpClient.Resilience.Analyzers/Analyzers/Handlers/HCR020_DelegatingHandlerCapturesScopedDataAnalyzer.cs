@@ -1,7 +1,9 @@
 using System.Collections.Immutable;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using HttpClient.Resilience.Analyzers.Diagnostics;
+using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -27,10 +29,19 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterSyntaxNodeAction(AnalyzeClass, SyntaxKind.ClassDeclaration);
+        context.RegisterCompilationStartAction(AnalyzeCompilation);
     }
 
-    private static void AnalyzeClass(SyntaxNodeAnalysisContext context)
+    private static void AnalyzeCompilation(CompilationStartAnalysisContext context)
+    {
+        var scopedTypes = GetKnownScopedTypes(context.Compilation, context.CancellationToken);
+
+        context.RegisterSyntaxNodeAction(
+            nodeContext => AnalyzeClass(nodeContext, scopedTypes),
+            SyntaxKind.ClassDeclaration);
+    }
+
+    private static void AnalyzeClass(SyntaxNodeAnalysisContext context, ISet<string> scopedTypes)
     {
         var classDeclaration = (ClassDeclarationSyntax)context.Node;
         if (!DerivesFromDelegatingHandler(classDeclaration))
@@ -40,7 +51,7 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
 
         foreach (var parameter in GetConstructorParameters(classDeclaration))
         {
-            if (parameter.Type is null || !IsRequestScopedType(parameter.Type))
+            if (parameter.Type is null || !IsRequestScopedType(parameter.Type, scopedTypes))
             {
                 continue;
             }
@@ -60,6 +71,23 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
                 QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText == "DelegatingHandler",
                 _ => false
             }) == true;
+    }
+
+    private static ISet<string> GetKnownScopedTypes(Compilation compilation, CancellationToken cancellationToken)
+    {
+        return new HashSet<string>(
+            compilation.SyntaxTrees
+                .Select(tree => tree.GetRoot(cancellationToken))
+                .SelectMany(ServiceRegistrationCollector.Collect)
+                .Where(registration => registration.Kind == ServiceRegistrationKind.Scoped)
+                .SelectMany(registration => new[]
+                {
+                    registration.ServiceTypeName,
+                    registration.ImplementationTypeName
+                })
+                .Where(typeName => typeName is not null)
+                .Select(typeName => typeName!),
+            System.StringComparer.Ordinal);
     }
 
     private static IEnumerable<ParameterSyntax> GetConstructorParameters(ClassDeclarationSyntax classDeclaration)
@@ -83,7 +111,7 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
         }
     }
 
-    private static bool IsRequestScopedType(TypeSyntax type)
+    private static bool IsRequestScopedType(TypeSyntax type, ISet<string> scopedTypes)
     {
         var typeName = type switch
         {
@@ -94,6 +122,7 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
             _ => type.ToString()
         };
 
-        return RequestScopedTypeNames.Contains(typeName, System.StringComparer.Ordinal);
+        return RequestScopedTypeNames.Contains(typeName, System.StringComparer.Ordinal) ||
+            scopedTypes.Contains(typeName);
     }
 }
