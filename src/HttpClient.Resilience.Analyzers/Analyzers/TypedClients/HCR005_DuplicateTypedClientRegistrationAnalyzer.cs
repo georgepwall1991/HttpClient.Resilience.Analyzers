@@ -25,7 +25,10 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzer : Diagnostic
     private static void AnalyzeCompilation(CompilationAnalysisContext context)
     {
         var registrations = GetCompilationRegistrations(context);
-        var typedClients = ServiceRegistrationCollector.GetTypedClientTypeNames(registrations);
+        var typedClientRegistrations = registrations
+            .Where(registration => registration.Kind == ServiceRegistrationKind.HttpClient)
+            .ToArray();
+        var typedClients = ServiceRegistrationCollector.GetTypedClientTypeNames(typedClientRegistrations);
         if (typedClients.Count == 0)
         {
             return;
@@ -33,7 +36,7 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzer : Diagnostic
 
         foreach (var registration in registrations.Where(IsStandaloneServiceRegistration))
         {
-            if (!registration.MatchesAnyType(typedClients))
+            if (!MatchesAnyTypedClientRegistration(registration, typedClientRegistrations))
             {
                 continue;
             }
@@ -58,5 +61,51 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzer : Diagnostic
             ServiceRegistrationKind.Singleton or
             ServiceRegistrationKind.Scoped or
             ServiceRegistrationKind.Transient;
+    }
+
+    private static bool MatchesAnyTypedClientRegistration(
+        ServiceRegistrationModel registration,
+        IEnumerable<ServiceRegistrationModel> typedClientRegistrations)
+    {
+        return GetRegisteredTypeNames(registration)
+            .Any(registrationTypeName => typedClientRegistrations
+                .SelectMany(GetRegisteredTypeNames)
+                .Any(typedClientTypeName => TypeNamesMatch(registrationTypeName, typedClientTypeName)));
+    }
+
+    private static IEnumerable<string> GetRegisteredTypeNames(ServiceRegistrationModel registration)
+    {
+        yield return registration.ServiceTypeName;
+
+        if (registration.ImplementationTypeName is not null)
+        {
+            yield return registration.ImplementationTypeName;
+        }
+    }
+
+    private static bool TypeNamesMatch(string left, string right)
+    {
+        left = NormalizeTypeName(left);
+        right = NormalizeTypeName(right);
+
+        if (IsQualifiedTypeName(left) && IsQualifiedTypeName(right))
+        {
+            return left == right;
+        }
+
+        return TypeNameUtilities.ToSimpleName(left) == TypeNameUtilities.ToSimpleName(right);
+    }
+
+    private static string NormalizeTypeName(string typeName)
+    {
+        typeName = typeName.Trim();
+        return typeName.StartsWith("global::", System.StringComparison.Ordinal)
+            ? typeName.Substring("global::".Length)
+            : typeName;
+    }
+
+    private static bool IsQualifiedTypeName(string typeName)
+    {
+        return typeName.Contains(".");
     }
 }
