@@ -232,7 +232,90 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         }
 
         var methodName = memberAccess.Name.Identifier.ValueText;
-        return UnsafeHttpMethodPrefixes.Any(prefix => methodName.StartsWith(prefix, System.StringComparison.Ordinal));
+        return UnsafeHttpMethodPrefixes.Any(prefix => methodName.StartsWith(prefix, System.StringComparison.Ordinal)) ||
+            (methodName is "Send" or "SendAsync" &&
+                invocation.ArgumentList.Arguments.Count > 0 &&
+                RequestExpressionUsesUnsafeHttpMethod(invocation.ArgumentList.Arguments[0].Expression, invocation));
+    }
+
+    private static bool RequestExpressionUsesUnsafeHttpMethod(ExpressionSyntax expression, SyntaxNode context)
+    {
+        expression = UnwrapParentheses(expression);
+
+        return expression switch
+        {
+            ObjectCreationExpressionSyntax objectCreation => HttpRequestCreationUsesUnsafeMethod(objectCreation),
+            ImplicitObjectCreationExpressionSyntax implicitObjectCreation => HttpRequestCreationUsesUnsafeMethod(implicitObjectCreation),
+            IdentifierNameSyntax identifier => LocalRequestVariableUsesUnsafeMethod(identifier, context),
+            _ => false
+        };
+    }
+
+    private static bool HttpRequestCreationUsesUnsafeMethod(BaseObjectCreationExpressionSyntax objectCreation)
+    {
+        return objectCreation.ArgumentList?.Arguments
+            .Select(argument => UnwrapParentheses(argument.Expression))
+            .Any(IsUnsafeHttpMethodExpression) == true ||
+            objectCreation.Initializer?.Expressions
+                .OfType<AssignmentExpressionSyntax>()
+                .Any(assignment => IsMethodMember(assignment.Left) &&
+                    IsUnsafeHttpMethodExpression(UnwrapParentheses(assignment.Right))) == true;
+    }
+
+    private static bool LocalRequestVariableUsesUnsafeMethod(IdentifierNameSyntax identifier, SyntaxNode context)
+    {
+        var containingBlock = context.FirstAncestorOrSelf<BlockSyntax>();
+        if (containingBlock is null)
+        {
+            return false;
+        }
+
+        return containingBlock
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Where(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+                variable.SpanStart < context.SpanStart &&
+                variable.Initializer is not null)
+            .Any(variable => RequestExpressionUsesUnsafeHttpMethod(variable.Initializer!.Value, variable));
+    }
+
+    private static bool IsMethodMember(ExpressionSyntax expression)
+    {
+        expression = UnwrapParentheses(expression);
+
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "Method",
+            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText == "Method",
+            _ => false
+        };
+    }
+
+    private static bool IsUnsafeHttpMethodExpression(ExpressionSyntax expression)
+    {
+        expression = UnwrapParentheses(expression);
+
+        return expression switch
+        {
+            MemberAccessExpressionSyntax memberAccess when
+                memberAccess.Expression.ToString() == "HttpMethod" =>
+                UnsafeHttpMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal),
+            ObjectCreationExpressionSyntax objectCreation when objectCreation.Type.ToString() == "HttpMethod" =>
+                objectCreation.ArgumentList?.Arguments.Count > 0 &&
+                TryGetStringLiteral(objectCreation.ArgumentList.Arguments[0].Expression) is { } method &&
+                UnsafeHttpMethodNames.Contains(method, System.StringComparer.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
+
+    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    {
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
+        return expression;
     }
 
     private static bool IsCreateClientInvocation(InvocationExpressionSyntax invocation, string clientName)
