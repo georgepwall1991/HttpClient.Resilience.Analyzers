@@ -19,7 +19,7 @@ This project currently implements every MVP diagnostic ID from the starter docum
 
 ## Current Limitations
 
-- Cross-file DI graph analysis is intentionally lightweight; it matches direct registration calls across syntax trees but does not expand arbitrary custom wrapper semantics beyond visible calls.
+- Cross-file DI graph analysis is intentionally lightweight; it matches direct `IServiceCollection`-shaped registration calls across syntax trees but does not expand arbitrary custom wrapper semantics beyond visible calls.
 - `HCR041` models visible typed-client and named-client call sites across syntax trees, but it does not trace client names through variables or configuration.
 - `HCR060` uses local ownership heuristics rather than full control-flow analysis.
 - `HCR080` is intentionally suggestion-level and heuristic.

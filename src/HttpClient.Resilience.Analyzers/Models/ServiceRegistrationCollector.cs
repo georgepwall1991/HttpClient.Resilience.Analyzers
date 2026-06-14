@@ -40,13 +40,18 @@ internal static class ServiceRegistrationCollector
         if (invocation.Expression is not MemberAccessExpressionSyntax
             {
                 Name: GenericNameSyntax genericName
-            })
+            } memberAccess)
         {
             return null;
         }
 
         var kind = TryGetKind(genericName.Identifier.ValueText);
         if (kind is null || genericName.TypeArgumentList.Arguments.Count is < 1 or > 2)
+        {
+            return null;
+        }
+
+        if (!IsLikelyServiceCollectionReceiver(memberAccess.Expression))
         {
             return null;
         }
@@ -74,5 +79,21 @@ internal static class ServiceRegistrationCollector
             "AddTransient" => ServiceRegistrationKind.Transient,
             _ => null
         };
+    }
+
+    private static bool IsLikelyServiceCollectionReceiver(ExpressionSyntax receiver)
+    {
+        return receiver switch
+        {
+            IdentifierNameSyntax identifier => IsServiceCollectionVariableName(identifier.Identifier.ValueText),
+            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText == "Services",
+            _ => false
+        };
+    }
+
+    private static bool IsServiceCollectionVariableName(string name)
+    {
+        return name == "services" ||
+            name == "serviceCollection";
     }
 }

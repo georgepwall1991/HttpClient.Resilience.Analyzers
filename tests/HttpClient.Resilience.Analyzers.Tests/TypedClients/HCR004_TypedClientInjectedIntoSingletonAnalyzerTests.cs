@@ -257,4 +257,37 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
     }
+
+    [Fact]
+    public async Task DoesNotReport_WhenLookalikeRegistrationsAreNotIServiceCollection()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(CustomBuilder builder)
+                {
+                    builder.AddHttpClient<PaymentsClient>();
+                    builder.AddSingleton<PaymentJob>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentJob(PaymentsClient paymentsClient)
+            {
+            }
+
+            public sealed class CustomBuilder
+            {
+                public CustomBuilder AddHttpClient<TClient>() => this;
+                public CustomBuilder AddSingleton<TService>() => this;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
 }

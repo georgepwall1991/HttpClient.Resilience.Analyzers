@@ -199,4 +199,44 @@ public sealed class HCR003_CachedFactoryClientAnalyzerTests
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticIds.HCR003, diagnostic.Id);
     }
+
+    [Fact]
+    public async Task DoesNotReport_WhenLookalikeSingletonRegistrationIsNotIServiceCollection()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(CustomBuilder builder)
+                {
+                    builder.AddSingleton<ClientRunner>();
+                }
+            }
+
+            public sealed class ClientRunner
+            {
+                private HttpClient _client = null!;
+
+                public ClientRunner(IHttpClientFactory factory)
+                {
+                    _client = factory.CreateClient("github");
+                }
+            }
+
+            public sealed class CustomBuilder
+            {
+                public CustomBuilder AddSingleton<TService>() => this;
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
 }
