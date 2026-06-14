@@ -39,7 +39,7 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             SyntaxKind.VariableDeclarator);
     }
 
-    private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context, ISet<string> singletonTypes)
+    private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context, IReadOnlyCollection<string> singletonTypes)
     {
         var assignment = (AssignmentExpressionSyntax)context.Node;
         if (!IsCreateClientInvocation(assignment.Right, context.SemanticModel, context.CancellationToken))
@@ -63,7 +63,7 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             assignment.Left.GetLocation()));
     }
 
-    private static void AnalyzeFieldInitializer(SyntaxNodeAnalysisContext context, ISet<string> singletonTypes)
+    private static void AnalyzeFieldInitializer(SyntaxNodeAnalysisContext context, IReadOnlyCollection<string> singletonTypes)
     {
         var variable = (VariableDeclaratorSyntax)context.Node;
         if (variable.Parent?.Parent is not FieldDeclarationSyntax ||
@@ -169,26 +169,43 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             });
     }
 
-    private static HashSet<string> GetKnownSingletonTypes(IEnumerable<SyntaxNode> roots)
+    private static IReadOnlyCollection<string> GetKnownSingletonTypes(IEnumerable<SyntaxNode> roots)
     {
-        return new HashSet<string>(
-            roots
-                .SelectMany(ServiceRegistrationCollector.Collect)
-                .Where(registration => registration.Kind == ServiceRegistrationKind.Singleton)
-                .SelectMany(registration => new[]
-                {
-                    registration.ServiceTypeName,
-                    registration.ImplementationTypeName
-                })
-                .Where(typeName => typeName is not null)
-                .SelectMany(typeName => TypeNameUtilities.GetComparableNames(typeName!)),
-            System.StringComparer.Ordinal);
+        return roots
+            .SelectMany(ServiceRegistrationCollector.Collect)
+            .Where(registration => registration.Kind == ServiceRegistrationKind.Singleton)
+            .SelectMany(registration => new[]
+            {
+                registration.ServiceTypeName,
+                registration.ImplementationTypeName
+            })
+            .Where(typeName => typeName is not null)
+            .Select(typeName => NormalizeTypeName(typeName!))
+            .ToArray();
     }
 
-    private static bool IsLongLivedField(IFieldSymbol field, ISet<string> singletonTypes)
+    private static bool IsLongLivedField(IFieldSymbol field, IReadOnlyCollection<string> singletonTypes)
     {
         return field.IsStatic ||
             field.ContainingType.Name.EndsWith("Singleton", System.StringComparison.Ordinal) ||
-            singletonTypes.Contains(field.ContainingType.Name);
+            singletonTypes.Any(typeName => MatchesContainingType(field.ContainingType, typeName));
+    }
+
+    private static bool MatchesContainingType(INamedTypeSymbol containingType, string registrationTypeName)
+    {
+        if (registrationTypeName.Contains("."))
+        {
+            return NormalizeTypeName(containingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)) == registrationTypeName;
+        }
+
+        return containingType.Name == TypeNameUtilities.ToSimpleName(registrationTypeName);
+    }
+
+    private static string NormalizeTypeName(string typeName)
+    {
+        typeName = typeName.Trim();
+        return typeName.StartsWith("global::", System.StringComparison.Ordinal)
+            ? typeName.Substring("global::".Length)
+            : typeName;
     }
 }
