@@ -37,6 +37,9 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
         context.RegisterSyntaxNodeAction(
             nodeContext => AnalyzeFieldInitializer(nodeContext, singletonTypes),
             SyntaxKind.VariableDeclarator);
+        context.RegisterSyntaxNodeAction(
+            nodeContext => AnalyzePropertyInitializer(nodeContext, singletonTypes),
+            SyntaxKind.PropertyDeclaration);
     }
 
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context, IReadOnlyCollection<string> singletonTypes)
@@ -48,12 +51,7 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
         }
 
         var assignedSymbol = context.SemanticModel.GetSymbolInfo(assignment.Left, context.CancellationToken).Symbol;
-        if (assignedSymbol is not IFieldSymbol field)
-        {
-            return;
-        }
-
-        if (!IsLongLivedField(field, singletonTypes))
+        if (!IsLongLivedMember(assignedSymbol, singletonTypes))
         {
             return;
         }
@@ -86,6 +84,30 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(
             DiagnosticDescriptors.HCR003,
             variable.Identifier.GetLocation()));
+    }
+
+    private static void AnalyzePropertyInitializer(SyntaxNodeAnalysisContext context, IReadOnlyCollection<string> singletonTypes)
+    {
+        var property = (PropertyDeclarationSyntax)context.Node;
+        if (property.Initializer is not { Value: { } initializer } ||
+            !IsCreateClientInvocation(initializer, context.SemanticModel, context.CancellationToken))
+        {
+            return;
+        }
+
+        if (context.SemanticModel.GetDeclaredSymbol(property, context.CancellationToken) is not IPropertySymbol propertySymbol)
+        {
+            return;
+        }
+
+        if (!IsLongLivedProperty(propertySymbol, singletonTypes))
+        {
+            return;
+        }
+
+        context.ReportDiagnostic(Diagnostic.Create(
+            DiagnosticDescriptors.HCR003,
+            property.Identifier.GetLocation()));
     }
 
     private static bool IsCreateClientInvocation(
@@ -216,6 +238,23 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
         return field.IsStatic ||
             field.ContainingType.Name.EndsWith("Singleton", System.StringComparison.Ordinal) ||
             singletonTypes.Any(typeName => MatchesContainingType(field.ContainingType, typeName));
+    }
+
+    private static bool IsLongLivedProperty(IPropertySymbol property, IReadOnlyCollection<string> singletonTypes)
+    {
+        return property.IsStatic ||
+            property.ContainingType.Name.EndsWith("Singleton", System.StringComparison.Ordinal) ||
+            singletonTypes.Any(typeName => MatchesContainingType(property.ContainingType, typeName));
+    }
+
+    private static bool IsLongLivedMember(ISymbol? symbol, IReadOnlyCollection<string> singletonTypes)
+    {
+        return symbol switch
+        {
+            IFieldSymbol field => IsLongLivedField(field, singletonTypes),
+            IPropertySymbol property => IsLongLivedProperty(property, singletonTypes),
+            _ => false
+        };
     }
 
     private static bool MatchesContainingType(INamedTypeSymbol containingType, string registrationTypeName)
