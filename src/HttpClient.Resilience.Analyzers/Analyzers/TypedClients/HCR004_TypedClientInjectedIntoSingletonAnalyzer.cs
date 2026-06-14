@@ -54,26 +54,55 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
 
     private static bool ConstructorConsumesTypedClient(IEnumerable<SyntaxNode> roots, string singletonTypeName, ISet<string> typedClients)
     {
-        var comparableSingletonTypeName = TypeNameUtilities.ToSimpleName(singletonTypeName);
-        var singletonClass = roots
+        var singletonClasses = roots
             .SelectMany(root => root.DescendantNodes().OfType<ClassDeclarationSyntax>())
-            .FirstOrDefault(type => type.Identifier.ValueText == comparableSingletonTypeName);
+            .Where(type => DeclaredTypeMatchesRegistration(type, singletonTypeName))
+            .ToArray();
 
-        if (singletonClass is null)
+        foreach (var singletonClass in singletonClasses)
         {
-            return false;
-        }
-
-        foreach (var parameter in GetConstructorParameters(singletonClass))
-        {
-            if (parameter.Type is not null &&
-                TypeNameUtilities.GetComparableNames(parameter.Type.ToString()).Any(typedClients.Contains))
+            foreach (var parameter in GetConstructorParameters(singletonClass))
             {
-                return true;
+                if (parameter.Type is not null &&
+                    TypeNameUtilities.GetComparableNames(parameter.Type.ToString()).Any(typedClients.Contains))
+                {
+                    return true;
+                }
             }
         }
 
         return false;
+    }
+
+    private static bool DeclaredTypeMatchesRegistration(ClassDeclarationSyntax classDeclaration, string registrationTypeName)
+    {
+        registrationTypeName = registrationTypeName.Trim();
+        if (registrationTypeName.StartsWith("global::", System.StringComparison.Ordinal))
+        {
+            registrationTypeName = registrationTypeName.Substring("global::".Length);
+        }
+
+        if (registrationTypeName.Contains("."))
+        {
+            return GetQualifiedClassName(classDeclaration) == registrationTypeName;
+        }
+
+        return classDeclaration.Identifier.ValueText == registrationTypeName;
+    }
+
+    private static string GetQualifiedClassName(ClassDeclarationSyntax classDeclaration)
+    {
+        var namespaceName = string.Join(
+            ".",
+            classDeclaration
+                .Ancestors()
+                .OfType<BaseNamespaceDeclarationSyntax>()
+                .Reverse()
+                .Select(ns => ns.Name.ToString()));
+
+        return string.IsNullOrEmpty(namespaceName)
+            ? classDeclaration.Identifier.ValueText
+            : namespaceName + "." + classDeclaration.Identifier.ValueText;
     }
 
     private static IEnumerable<ParameterSyntax> GetConstructorParameters(ClassDeclarationSyntax classDeclaration)

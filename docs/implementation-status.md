@@ -9,7 +9,7 @@ This project currently implements every MVP diagnostic ID from the starter docum
 | `HCR001` | Yes | Partial | High-confidence `new HttpClient()` detection in request-path types, loops, `using` ownership patterns, and top-level loop/using statements; code fix uses an existing method, local function, or primary-constructor `IHttpClientFactory` parameter when one is already in scope. |
 | `HCR002` | Yes | Yes | Static or singleton-owned manual client without `PooledConnectionLifetime`, including recognition for configured handler fields and qualified singleton registrations; code fix is limited to safe parameterless client initializers. |
 | `HCR003` | Yes | No | Factory-created clients cached through assignments or initializers into static fields or fields on known singleton services across the compilation, with `IHttpClientFactory` receiver validation and qualified singleton registrations. |
-| `HCR004` | Yes | Guide | Compilation-wide registration model for typed clients injected into singletons, including visible qualified type names. |
+| `HCR004` | Yes | Guide | Compilation-wide registration model for typed clients injected into singletons, including namespace-aware matching for visible qualified singleton and typed-client type names. |
 | `HCR005` | Yes | Yes | Duplicate typed-client registrations across the compilation, including visible qualified type names. |
 | `HCR020` | Yes | Guide | High-confidence request-scoped and known scoped service constructor dependencies in handlers, including visible qualified and nullable scoped service names. |
 | `HCR040` | Yes | Yes | Duplicate standard resilience handlers and same-name custom resilience handlers in one fluent `AddHttpClient`/`IHttpClientBuilder` chain, with lookalike custom builders skipped. |

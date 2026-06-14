@@ -227,6 +227,58 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenQualifiedSingletonRegistrationTargetsDifferentSameNamedType()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<Clients.PaymentsClient>();
+                    services.AddSingleton<Jobs.PaymentJob>();
+                }
+            }
+
+            namespace Clients
+            {
+                public sealed class PaymentsClient
+                {
+                }
+            }
+
+            namespace Other
+            {
+                using Clients;
+
+                public sealed class PaymentJob(PaymentsClient paymentsClient)
+                {
+                }
+            }
+
+            namespace Jobs
+            {
+                public sealed class PaymentJob
+                {
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_InTraditionalStartupConfigureServices()
     {
         const string source = """
