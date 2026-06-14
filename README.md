@@ -39,7 +39,7 @@ See [releasing](docs/releasing.md) for the guarded NuGet publish workflow.
 
 Implemented diagnostic slices:
 
-- `HCR001` for high-confidence `new HttpClient()` usage in request-path types, loops, `using` ownership patterns, and top-level loop/using statements, with resolved custom `HttpClient` types and obvious test contexts skipped plus a partial code fix when an `IHttpClientFactory` method, local-function, or primary-constructor parameter is already in scope.
+- `HCR001` for high-confidence `new HttpClient()` usage in request-path types, Minimal API endpoint lambdas, loops, `using` ownership patterns, and top-level loop/using statements, with resolved custom `HttpClient` types and obvious test contexts skipped plus a partial code fix when an `IHttpClientFactory` method, local-function, or primary-constructor parameter is already in scope.
 - `HCR002` for static or singleton-owned manual `HttpClient` fields without `PooledConnectionLifetime`, with resolved custom client types skipped, configured-handler and namespace-aware qualified-registration recognition, plus a safe code fix for parameterless client initializers.
 - `HCR003` for `IHttpClientFactory` clients cached through assignments or initializers into static fields or known singleton fields, including namespace-aware factory receiver validation and qualified singleton registrations.
 - `HCR004` for typed clients injected into singleton services, including visible `IServiceCollection` receiver validation and namespace-aware qualified registration matching.

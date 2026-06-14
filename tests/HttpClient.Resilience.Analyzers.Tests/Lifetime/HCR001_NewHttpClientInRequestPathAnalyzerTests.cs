@@ -87,12 +87,68 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenMinimalApiEndpointCreatesHttpClient()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            var app = WebApplication.Create();
+
+            app.MapPost("/payments", () =>
+            {
+                return new HttpClient();
+            });
+
+            public sealed class WebApplication
+            {
+                public static WebApplication Create() => new();
+                public void MapPost(string pattern, Func<HttpClient> handler)
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenPlainTopLevelHttpClientHasNoRequestPathEvidence()
     {
         const string source = """
             using System.Net.Http;
 
             var client = new HttpClient();
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenCustomMapGetReceiverCreatesHttpClient()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            var mapper = new CustomMapper();
+
+            mapper.MapGet("client", () =>
+            {
+                return new HttpClient();
+            });
+
+            public sealed class CustomMapper
+            {
+                public void MapGet(string name, Func<HttpClient> factory)
+                {
+                }
+            }
             """;
 
         var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);

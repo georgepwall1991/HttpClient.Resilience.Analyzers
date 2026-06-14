@@ -6,7 +6,7 @@ This project currently implements every MVP diagnostic ID from the starter docum
 
 | Rule | Analyzer | Code fix | Notes |
 |---|---:|---:|---|
-| `HCR001` | Yes | Partial | High-confidence `new HttpClient()` detection in request-path types, loops, `using` ownership patterns, and top-level loop/using statements, with resolved custom `HttpClient` types and obvious test contexts skipped; code fix uses an existing method, local function, or primary-constructor `IHttpClientFactory` parameter when one is already in scope. |
+| `HCR001` | Yes | Partial | High-confidence `new HttpClient()` detection in request-path types, Minimal API endpoint lambdas, loops, `using` ownership patterns, and top-level loop/using statements, with resolved custom `HttpClient` types and obvious test contexts skipped; code fix uses an existing method, local function, or primary-constructor `IHttpClientFactory` parameter when one is already in scope. |
 | `HCR002` | Yes | Yes | Static or singleton-owned manual client without `PooledConnectionLifetime`, including resolved custom client filtering, recognition for configured handler fields, and namespace-aware qualified singleton registrations; code fix is limited to safe parameterless client initializers. |
 | `HCR003` | Yes | No | Factory-created clients cached through assignments or initializers into static fields or fields on known singleton services across the compilation, with namespace-aware `IHttpClientFactory` receiver validation and qualified singleton registrations. |
 | `HCR004` | Yes | Guide | Compilation-wide registration model for typed clients injected into singletons, including visible `IServiceCollection` receiver validation and namespace-aware matching for visible qualified singleton and typed-client type names. |

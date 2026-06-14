@@ -35,6 +35,25 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
         "DataTestMethod"
     };
 
+    private static readonly string[] MinimalApiMapMethodNames =
+    {
+        "Map",
+        "MapDelete",
+        "MapGet",
+        "MapMethods",
+        "MapPatch",
+        "MapPost",
+        "MapPut"
+    };
+
+    private static readonly string[] MinimalApiReceiverNames =
+    {
+        "app",
+        "endpoints",
+        "routeBuilder",
+        "routes"
+    };
+
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
         ImmutableArray.Create(DiagnosticDescriptors.HCR001);
 
@@ -77,6 +96,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
     {
         return IsInsideLoop(node) ||
             IsDisposedInUsing(node) ||
+            IsInsideMinimalApiEndpoint(node) ||
             IsInsideLikelyRequestPathType(node);
     }
 
@@ -115,6 +135,71 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
     {
         return node.FirstAncestorOrSelf<UsingStatementSyntax>() is not null ||
             node.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>()?.UsingKeyword.IsKind(SyntaxKind.UsingKeyword) == true;
+    }
+
+    private static bool IsInsideMinimalApiEndpoint(SyntaxNode node)
+    {
+        var lambda = node.FirstAncestorOrSelf<AnonymousFunctionExpressionSyntax>();
+        if (lambda?.Parent is not ArgumentSyntax argument ||
+            argument.Parent?.Parent is not InvocationExpressionSyntax invocation ||
+            invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+            !MinimalApiMapMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal))
+        {
+            return false;
+        }
+
+        return MinimalApiReceiverLooksLikeEndpointBuilder(memberAccess.Expression);
+    }
+
+    private static bool MinimalApiReceiverLooksLikeEndpointBuilder(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => MinimalApiReceiverNames.Contains(
+                    identifier.Identifier.ValueText,
+                    System.StringComparer.Ordinal) ||
+                VisibleIdentifierDeclarationType(identifier) is { } type &&
+                IsEndpointBuilderTypeName(type),
+            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText is "Endpoints",
+            _ => false
+        };
+    }
+
+    private static TypeSyntax? VisibleIdentifierDeclarationType(IdentifierNameSyntax identifier)
+    {
+        return identifier
+            .Ancestors()
+            .OfType<BaseMethodDeclarationSyntax>()
+            .SelectMany(method => method.ParameterList.Parameters)
+            .FirstOrDefault(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText)
+            ?.Type ??
+            identifier
+                .FirstAncestorOrSelf<BlockSyntax>()?
+                .DescendantNodes()
+                .OfType<VariableDeclaratorSyntax>()
+                .Where(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+                    variable.SpanStart < identifier.SpanStart)
+                .Select(variable => variable.Parent)
+                .OfType<VariableDeclarationSyntax>()
+                .Select(declaration => declaration.Type)
+                .FirstOrDefault();
+    }
+
+    private static bool IsEndpointBuilderTypeName(TypeSyntax type)
+    {
+        return type switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText is "WebApplication" or "IEndpointRouteBuilder",
+            QualifiedNameSyntax qualified => qualified.ToString() is
+                "Microsoft.AspNetCore.Builder.WebApplication" or
+                "global::Microsoft.AspNetCore.Builder.WebApplication" or
+                "Microsoft.AspNetCore.Routing.IEndpointRouteBuilder" or
+                "global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder",
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() is
+                "global::Microsoft.AspNetCore.Builder.WebApplication" or
+                "global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder",
+            _ => false
+        };
     }
 
     private static bool IsInsideLikelyRequestPathType(SyntaxNode node)
