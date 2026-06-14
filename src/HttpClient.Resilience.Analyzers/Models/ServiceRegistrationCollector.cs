@@ -74,7 +74,7 @@ internal static class ServiceRegistrationCollector
         var serviceType = genericName.TypeArgumentList.Arguments[0].ToString();
         var implementationType = genericName.TypeArgumentList.Arguments.Count == 2
             ? genericName.TypeArgumentList.Arguments[1].ToString()
-            : null;
+            : TryGetConstructedImplementationType(invocation.ArgumentList.Arguments);
 
         return new ServiceRegistrationModel(
             kind.Value,
@@ -97,10 +97,11 @@ internal static class ServiceRegistrationCollector
             return null;
         }
 
-        var implementationType = invocation.ArgumentList.Arguments.Count == 2 &&
-            TryGetTypeofArgument(invocation.ArgumentList.Arguments[1], out var secondType)
+        var implementationType = invocation.ArgumentList.Arguments.Count == 2
+            ? TryGetTypeofArgument(invocation.ArgumentList.Arguments[1], out var secondType)
                 ? secondType
-                : null;
+                : TryGetConstructedImplementationType(invocation.ArgumentList.Arguments[1])
+            : null;
 
         if (invocation.ArgumentList.Arguments.Count == 2 &&
             implementationType is null &&
@@ -137,6 +138,42 @@ internal static class ServiceRegistrationCollector
             BaseObjectCreationExpressionSyntax or
             IdentifierNameSyntax or
             MemberAccessExpressionSyntax;
+    }
+
+    private static string? TryGetConstructedImplementationType(SeparatedSyntaxList<ArgumentSyntax> arguments)
+    {
+        return arguments
+            .Select(TryGetConstructedImplementationType)
+            .FirstOrDefault(typeName => typeName is not null);
+    }
+
+    private static string? TryGetConstructedImplementationType(ArgumentSyntax argument)
+    {
+        return TryGetConstructedImplementationType(argument.Expression);
+    }
+
+    private static string? TryGetConstructedImplementationType(SyntaxNode node)
+    {
+        return node switch
+        {
+            ObjectCreationExpressionSyntax objectCreation => objectCreation.Type.ToString(),
+            ParenthesizedExpressionSyntax parenthesized => TryGetConstructedImplementationType(parenthesized.Expression),
+            LambdaExpressionSyntax lambda => TryGetConstructedImplementationType(lambda.Body),
+            AnonymousMethodExpressionSyntax anonymousMethod => TryGetConstructedImplementationType(anonymousMethod.Block),
+            BlockSyntax block => TryGetConstructedImplementationType(block),
+            _ => null
+        };
+    }
+
+    private static string? TryGetConstructedImplementationType(BlockSyntax block)
+    {
+        return block
+            .Statements
+            .OfType<ReturnStatementSyntax>()
+            .Select(returnStatement => returnStatement.Expression)
+            .OfType<ExpressionSyntax>()
+            .Select(TryGetConstructedImplementationType)
+            .FirstOrDefault(typeName => typeName is not null);
     }
 
     private static ServiceRegistrationKind? TryGetKind(string methodName)

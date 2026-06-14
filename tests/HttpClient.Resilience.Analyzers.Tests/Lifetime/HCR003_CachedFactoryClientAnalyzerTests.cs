@@ -518,6 +518,116 @@ public sealed class HCR003_CachedFactoryClientAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenSingletonFactoryConstructsImplementationThatCachesFactoryClient()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton<IClientRunner>(sp => new ClientRunner(sp.GetRequiredService<IHttpClientFactory>()));
+                }
+            }
+
+            public interface IClientRunner
+            {
+            }
+
+            public sealed class ClientRunner : IClientRunner
+            {
+                private HttpClient _client = null!;
+
+                public ClientRunner(IHttpClientFactory factory)
+                {
+                    _client = factory.CreateClient("github");
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services, Func<IServiceProvider, TService> factory) => services;
+            }
+
+            public static class ServiceProviderExtensions
+            {
+                public static TService GetRequiredService<TService>(this IServiceProvider serviceProvider) => throw new NotImplementedException();
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR003, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenTypeofSingletonFactoryConstructsImplementationThatCachesFactoryClient()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton(typeof(IClientRunner), sp => new ClientRunner(sp.GetRequiredService<IHttpClientFactory>()));
+                }
+            }
+
+            public interface IClientRunner
+            {
+            }
+
+            public sealed class ClientRunner : IClientRunner
+            {
+                private HttpClient _client = null!;
+
+                public ClientRunner(IHttpClientFactory factory)
+                {
+                    _client = factory.CreateClient("github");
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddSingleton(this IServiceCollection services, Type serviceType, Func<IServiceProvider, object> factory) => services;
+            }
+
+            public static class ServiceProviderExtensions
+            {
+                public static TService GetRequiredService<TService>(this IServiceProvider serviceProvider) => throw new NotImplementedException();
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR003, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenSingletonRegistrationAndFactoryCacheAreInDifferentFiles()
     {
         const string registrations = """
