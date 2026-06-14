@@ -97,7 +97,12 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context, IReadOnlyCollection<string> singletonTypes)
     {
         var assignment = (AssignmentExpressionSyntax)context.Node;
-        if (UnwrapParentheses(assignment.Right) is not BaseObjectCreationExpressionSyntax creation)
+        if (!TryGetHttpClientCreationExpression(
+                assignment.Right,
+                assignment,
+                context.SemanticModel,
+                context.CancellationToken,
+                out var creation))
         {
             return;
         }
@@ -116,6 +121,98 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         context.ReportDiagnostic(Diagnostic.Create(
             DiagnosticDescriptors.HCR002,
             assignment.Left.GetLocation()));
+    }
+
+    private static bool TryGetHttpClientCreationExpression(
+        ExpressionSyntax expression,
+        SyntaxNode context,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        out BaseObjectCreationExpressionSyntax creation)
+    {
+        expression = UnwrapParentheses(expression);
+
+        if (expression is BaseObjectCreationExpressionSyntax directCreation)
+        {
+            creation = directCreation;
+            return true;
+        }
+
+        if (expression is IdentifierNameSyntax identifier &&
+            TryGetLocalHttpClientCreation(identifier, context, semanticModel, cancellationToken, out creation))
+        {
+            return true;
+        }
+
+        creation = null!;
+        return false;
+    }
+
+    private static bool TryGetLocalHttpClientCreation(
+        IdentifierNameSyntax identifier,
+        SyntaxNode context,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        out BaseObjectCreationExpressionSyntax creation)
+    {
+        creation = null!;
+
+        var containingBlock = context.FirstAncestorOrSelf<BlockSyntax>();
+        if (containingBlock is null)
+        {
+            return false;
+        }
+
+        var referencedSymbol = semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol;
+        if (referencedSymbol is not ILocalSymbol)
+        {
+            return false;
+        }
+
+        var variable = containingBlock
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .FirstOrDefault(candidate =>
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetDeclaredSymbol(candidate, cancellationToken),
+                    referencedSymbol) &&
+                candidate.SpanStart < context.SpanStart &&
+                candidate.Initializer is not null &&
+                !LocalIsReassignedBetweenDeclarationAndUse(
+                    containingBlock,
+                    candidate,
+                    context,
+                    semanticModel,
+                    cancellationToken));
+
+        if (variable?.Initializer?.Value is not { } initializer ||
+            UnwrapParentheses(initializer) is not BaseObjectCreationExpressionSyntax localCreation)
+        {
+            return false;
+        }
+
+        creation = localCreation;
+        return true;
+    }
+
+    private static bool LocalIsReassignedBetweenDeclarationAndUse(
+        BlockSyntax containingBlock,
+        VariableDeclaratorSyntax variable,
+        SyntaxNode context,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var localSymbol = semanticModel.GetDeclaredSymbol(variable, cancellationToken);
+
+        return containingBlock
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => assignment.SpanStart > variable.SpanStart &&
+                assignment.SpanStart < context.SpanStart &&
+                assignment.Left is IdentifierNameSyntax identifier &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol,
+                    localSymbol));
     }
 
     private static bool AssignmentTargetsLongLivedHttpClientMember(
