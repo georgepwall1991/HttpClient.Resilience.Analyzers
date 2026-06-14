@@ -110,7 +110,7 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
                     registration.ImplementationTypeName
                 })
                 .Where(typeName => typeName is not null)
-                .Select(typeName => typeName!),
+                .SelectMany(typeName => TypeNameUtilities.GetComparableNames(typeName!)),
             System.StringComparer.Ordinal);
     }
 

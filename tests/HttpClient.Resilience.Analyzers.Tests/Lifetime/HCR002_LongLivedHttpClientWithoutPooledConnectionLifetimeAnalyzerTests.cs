@@ -123,6 +123,44 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenQualifiedSingletonOwnsInstanceHttpClientField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton<Clients.GitHubClient>();
+                }
+            }
+
+            namespace Clients
+            {
+                public sealed class GitHubClient
+                {
+                    private readonly HttpClient _client = new();
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR002, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenRegisteredSingletonOwnsConfiguredInstanceHttpClientField()
     {
         const string source = """
