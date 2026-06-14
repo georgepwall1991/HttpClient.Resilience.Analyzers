@@ -139,6 +139,114 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenDelegatingHandlerCapturesScopedServiceFactory()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<IUserContext, UserContext>();
+                }
+            }
+
+            public sealed class UserHeaderHandler(Func<IUserContext> userContextFactory) : DelegatingHandler
+            {
+            }
+
+            public interface IUserContext
+            {
+            }
+
+            public sealed class UserContext : IUserContext
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddScoped<TService, TImplementation>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenDelegatingHandlerCapturesLazyRequestScopedService()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public sealed class UserHeaderHandler(Lazy<IHttpContextAccessor> accessor) : DelegatingHandler
+            {
+            }
+
+            public interface IHttpContextAccessor
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenDelegatingHandlerCapturesScopedServiceCollection()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<IUserContext, UserContext>();
+                }
+            }
+
+            public sealed class UserHeaderHandler(IEnumerable<IUserContext> userContexts) : DelegatingHandler
+            {
+            }
+
+            public interface IUserContext
+            {
+            }
+
+            public sealed class UserContext : IUserContext
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddScoped<TService, TImplementation>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenScopedRegistrationUsesQualifiedTypeName()
     {
         const string source = """
@@ -229,6 +337,54 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenQualifiedCustomWrapperContainsScopedServiceName()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<IUserContext, UserContext>();
+                }
+            }
+
+            public sealed class UserHeaderHandler(Custom.Lazy<IUserContext> userContext) : DelegatingHandler
+            {
+            }
+
+            public interface IUserContext
+            {
+            }
+
+            public sealed class UserContext : IUserContext
+            {
+            }
+
+            namespace Custom
+            {
+                public sealed class Lazy<T>
+                {
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddScoped<TService, TImplementation>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
     }
 
     [Fact]

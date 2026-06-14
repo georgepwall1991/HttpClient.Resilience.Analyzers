@@ -192,6 +192,11 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
     {
         type = UnwrapNullableType(type);
 
+        if (TryGetRequestScopedWrapperArgument(type, out var wrappedType))
+        {
+            return IsRequestScopedType(wrappedType, scopedTypes);
+        }
+
         if (TypeIsQualified(type))
         {
             var qualifiedTypeName = NormalizeTypeName(type.ToString());
@@ -207,6 +212,47 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
 
         return TypeNameUtilities.GetComparableNames(simpleTypeName)
             .Any(scopedTypes.Contains);
+    }
+
+    private static bool TryGetRequestScopedWrapperArgument(TypeSyntax type, out TypeSyntax wrappedType)
+    {
+        switch (type)
+        {
+            case GenericNameSyntax genericName when IsRequestScopedWrapperName(genericName.Identifier.ValueText) &&
+                genericName.TypeArgumentList.Arguments.Count == 1:
+                wrappedType = genericName.TypeArgumentList.Arguments[0];
+                return true;
+            case QualifiedNameSyntax { Right: GenericNameSyntax genericName } qualified when
+                IsQualifiedRequestScopedWrapperName(qualified.Left.ToString(), genericName.Identifier.ValueText) &&
+                genericName.TypeArgumentList.Arguments.Count == 1:
+                wrappedType = genericName.TypeArgumentList.Arguments[0];
+                return true;
+            case AliasQualifiedNameSyntax { Alias.Identifier.ValueText: "global", Name: GenericNameSyntax genericName } aliasQualified when
+                IsQualifiedRequestScopedWrapperName("global::" + aliasQualified.Name.Identifier.ValueText, genericName.Identifier.ValueText) &&
+                genericName.TypeArgumentList.Arguments.Count == 1:
+                wrappedType = genericName.TypeArgumentList.Arguments[0];
+                return true;
+            default:
+                wrappedType = type;
+                return false;
+        }
+    }
+
+    private static bool IsRequestScopedWrapperName(string typeName)
+    {
+        return typeName is "Func" or "Lazy" or "IEnumerable";
+    }
+
+    private static bool IsQualifiedRequestScopedWrapperName(string qualifier, string typeName)
+    {
+        qualifier = NormalizeTypeName(qualifier);
+
+        return typeName switch
+        {
+            "Func" or "Lazy" => qualifier == "System",
+            "IEnumerable" => qualifier == "System.Collections.Generic",
+            _ => false
+        };
     }
 
     private static TypeSyntax UnwrapNullableType(TypeSyntax type)
