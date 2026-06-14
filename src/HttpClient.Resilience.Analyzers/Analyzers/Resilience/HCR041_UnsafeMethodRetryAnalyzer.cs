@@ -71,7 +71,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        var typedClient = FindTypedClientInChain(invocation, context.SemanticModel, context.CancellationToken);
+        var typedClient = FindTypedClientImplementationInChain(invocation, context.SemanticModel, context.CancellationToken);
 
         if (typedClient is not null && TypedClientSendsUnsafeHttpMethod(roots, typedClient))
         {
@@ -149,7 +149,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             !httpMethods.Any(method => UnsafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal));
     }
 
-    private static string? FindTypedClientInChain(
+    private static string? FindTypedClientImplementationInChain(
         InvocationExpressionSyntax invocation,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
@@ -163,12 +163,13 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                     Name: GenericNameSyntax
                     {
                         Identifier.ValueText: "AddHttpClient",
-                        TypeArgumentList.Arguments.Count: 1
+                        TypeArgumentList.Arguments.Count: >= 1 and <= 2
                     } genericName
                 } addHttpClientAccess &&
                 IsServiceCollectionReceiver(addHttpClientAccess.Expression, semanticModel, cancellationToken))
             {
-                return genericName.TypeArgumentList.Arguments[0].ToString();
+                var implementationTypeIndex = genericName.TypeArgumentList.Arguments.Count == 2 ? 1 : 0;
+                return genericName.TypeArgumentList.Arguments[implementationTypeIndex].ToString();
             }
 
             if (currentInvocation.Expression is not MemberAccessExpressionSyntax memberAccess)
