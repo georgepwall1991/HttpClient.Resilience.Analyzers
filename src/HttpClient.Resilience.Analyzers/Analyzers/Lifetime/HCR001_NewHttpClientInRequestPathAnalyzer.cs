@@ -153,16 +153,42 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
 
     private static bool MinimalApiReceiverLooksLikeEndpointBuilder(ExpressionSyntax expression)
     {
+        expression = UnwrapParentheses(expression);
+
         return expression switch
         {
             IdentifierNameSyntax identifier => MinimalApiReceiverNames.Contains(
                     identifier.Identifier.ValueText,
                     System.StringComparer.Ordinal) ||
                 VisibleIdentifierDeclarationType(identifier) is { } type &&
-                IsEndpointBuilderTypeName(type),
+                IsEndpointBuilderTypeName(type) ||
+                VisibleIdentifierInitializerLooksLikeEndpointBuilder(identifier),
             MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText is "Endpoints",
+            InvocationExpressionSyntax invocation => InvocationReturnsEndpointBuilder(invocation),
             _ => false
         };
+    }
+
+    private static bool InvocationReturnsEndpointBuilder(InvocationExpressionSyntax invocation)
+    {
+        return invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
+            memberAccess.Name.Identifier.ValueText == "MapGroup" &&
+            MinimalApiReceiverLooksLikeEndpointBuilder(memberAccess.Expression);
+    }
+
+    private static bool VisibleIdentifierInitializerLooksLikeEndpointBuilder(IdentifierNameSyntax identifier)
+    {
+        var scope = identifier.FirstAncestorOrSelf<BlockSyntax>() as SyntaxNode ??
+            identifier.SyntaxTree.GetRoot();
+
+        return scope
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Where(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+                variable.SpanStart < identifier.SpanStart)
+            .Select(variable => variable.Initializer?.Value)
+            .OfType<InvocationExpressionSyntax>()
+            .Any(InvocationReturnsEndpointBuilder);
     }
 
     private static TypeSyntax? VisibleIdentifierDeclarationType(IdentifierNameSyntax identifier)
@@ -200,6 +226,16 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
                 "global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder",
             _ => false
         };
+    }
+
+    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    {
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
+        return expression;
     }
 
     private static bool IsInsideLikelyRequestPathType(SyntaxNode node)
