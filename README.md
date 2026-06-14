@@ -13,7 +13,7 @@ Compile-time safety for `.NET` `HttpClient`, `IHttpClientFactory`, typed clients
 - Typed clients injected into singleton services.
 - Duplicate typed client registrations.
 - `DelegatingHandler` implementations that capture scoped request data.
-- Stacked resilience handlers.
+- Duplicate resilience handlers.
 - Unsafe HTTP methods retried without explicit idempotency configuration.
 - `ResponseHeadersRead` responses that are not disposed.
 - Obvious unbounded outbound HTTP fan-out.
@@ -38,7 +38,7 @@ See [implementation status](docs/implementation-status.md) for current analyzer 
 
 Implemented diagnostic slices:
 
-- `HCR001` for high-confidence method-local `new HttpClient()` usage, with a partial code fix when `IHttpClientFactory` is already in scope.
+- `HCR001` for high-confidence `new HttpClient()` usage in request-path types, loops, `using` ownership patterns, and top-level loop/using statements, with a partial code fix when `IHttpClientFactory` is already in scope.
 - `HCR002` for static manual `HttpClient` fields without `PooledConnectionLifetime`, with a code fix.
 - `HCR003` for factory-created clients cached into static fields or known singleton fields.
 - `HCR004` for typed clients injected into singleton services.
@@ -52,17 +52,35 @@ Implemented diagnostic slices:
 ## Example
 
 ```csharp
-var response = await client.SendAsync(
-    request,
-    HttpCompletionOption.ResponseHeadersRead,
-    cancellationToken);
+services.AddHttpClient<PaymentsClient>()
+    .AddStandardResilienceHandler();
+
+public sealed class PaymentsClient(HttpClient httpClient)
+{
+    public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+    {
+        return httpClient.PostAsync("/payments", null, cancellationToken);
+    }
+}
 ```
 
-`HCR060` warns because a response opened with `ResponseHeadersRead` should be disposed by the caller that owns it.
+`HCR041` warns because the standard resilience pipeline can retry unsafe HTTP methods such as `POST`, `PUT`, `PATCH`, and `DELETE` unless configured otherwise.
 
 ```csharp
-using var response = await client.SendAsync(
-    request,
-    HttpCompletionOption.ResponseHeadersRead,
-    cancellationToken);
+services.AddHttpClient<PaymentsClient>()
+    .AddStandardResilienceHandler(options =>
+    {
+        options.Retry.DisableForUnsafeHttpMethods();
+    });
 ```
+
+## Adoption Profiles
+
+The package includes `.editorconfig` profiles under `profiles/`:
+
+- `default.editorconfig` keeps the production-safety rules at their intended defaults.
+- `brownfield-adoption.editorconfig` lowers most rules while teams triage an existing codebase.
+- `strict-ci.editorconfig` promotes MVP warnings to errors for CI gates.
+- `library-author.editorconfig` is stricter about streaming response ownership.
+
+See [adoption](docs/adoption.md), [configuration](docs/configuration.md), and the [false-positive policy](docs/false-positive-policy.md) for rollout guidance.
