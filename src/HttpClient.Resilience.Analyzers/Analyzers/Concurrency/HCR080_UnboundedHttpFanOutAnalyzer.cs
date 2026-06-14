@@ -245,6 +245,8 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
 
     private static bool ReceiverMemberUsesConnectionLimitedHandler(IdentifierNameSyntax receiver)
     {
+        var typeMemberHandlers = GetTypeMemberHandlerDeclarations(receiver);
+
         return receiver.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
             .Members
             .Any(member => member switch
@@ -253,13 +255,22 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
                     field.Declaration.Variables.Any(variable =>
                         variable.Identifier.ValueText == receiver.Identifier.ValueText &&
                         variable.Initializer?.Value is { } value &&
-                        IsConnectionLimitedHttpClientCreation(value, field.Declaration.Variables.ToArray())),
+                        IsConnectionLimitedHttpClientCreation(value, typeMemberHandlers)),
                 PropertyDeclarationSyntax property => HttpClientSymbols.IsHttpClientName(property.Type) &&
                     property.Identifier.ValueText == receiver.Identifier.ValueText &&
                     property.Initializer?.Value is { } value &&
-                    IsConnectionLimitedHttpClientCreation(value, System.Array.Empty<VariableDeclaratorSyntax>()),
+                    IsConnectionLimitedHttpClientCreation(value, typeMemberHandlers),
                 _ => false
             }) == true;
+    }
+
+    private static IReadOnlyCollection<VariableDeclaratorSyntax> GetTypeMemberHandlerDeclarations(SyntaxNode node)
+    {
+        return node.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
+            .Members
+            .OfType<FieldDeclarationSyntax>()
+            .SelectMany(field => field.Declaration.Variables)
+            .ToArray() ?? System.Array.Empty<VariableDeclaratorSyntax>();
     }
 
     private static bool IsConnectionLimitedHttpClientCreation(
@@ -304,14 +315,19 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             .FirstOrDefault(declaration => declaration.Identifier.ValueText == identifier.Identifier.ValueText);
 
         return handlerDeclaration?.Initializer?.Value is BaseObjectCreationExpressionSyntax handlerCreation &&
-            IsSocketsHttpHandlerCreation(handlerCreation) &&
+            IsSocketsHttpHandlerCreation(handlerCreation, handlerDeclaration) &&
             HasMaxConnectionsPerServerInitializer(handlerCreation);
     }
 
-    private static bool IsSocketsHttpHandlerCreation(BaseObjectCreationExpressionSyntax creation)
+    private static bool IsSocketsHttpHandlerCreation(
+        BaseObjectCreationExpressionSyntax creation,
+        VariableDeclaratorSyntax? variable = null)
     {
         return creation is ObjectCreationExpressionSyntax objectCreation &&
-            objectCreation.Type.ToString().EndsWith("SocketsHttpHandler", System.StringComparison.Ordinal);
+            objectCreation.Type.ToString().EndsWith("SocketsHttpHandler", System.StringComparison.Ordinal) ||
+            creation is ImplicitObjectCreationExpressionSyntax &&
+            variable?.Parent is VariableDeclarationSyntax declaration &&
+            declaration.Type.ToString().EndsWith("SocketsHttpHandler", System.StringComparison.Ordinal);
     }
 
     private static bool HasMaxConnectionsPerServerInitializer(BaseObjectCreationExpressionSyntax creation)
