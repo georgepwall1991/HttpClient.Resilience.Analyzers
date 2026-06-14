@@ -272,6 +272,86 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenDuplicateRegistrationFactoryConstructsTypedClient()
+    {
+        const string source = """
+            using System;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddTransient<IPaymentsClient>(sp => new PaymentsClient());
+                }
+            }
+
+            public interface IPaymentsClient
+            {
+            }
+
+            public sealed class PaymentsClient : IPaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services, Func<IServiceProvider, TService> factory) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR005, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenDuplicateRegistrationTwoGenericFactoryConstructsTypedClient()
+    {
+        const string source = """
+            using System;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<IPaymentsClient, PaymentsClient>();
+                    services.AddTransient<IPaymentsClient>(sp => new PaymentsClient());
+                }
+            }
+
+            public interface IPaymentsClient
+            {
+            }
+
+            public sealed class PaymentsClient : IPaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TService, TImplementation>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services, Func<IServiceProvider, TService> factory) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR005, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenDuplicateRegistrationUsesQualifiedTypeName()
     {
         const string source = """
