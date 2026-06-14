@@ -7,7 +7,7 @@ Most .NET services use `HttpClient`, but many production issues come from patter
 ## What It Catches
 
 - Per-request `new HttpClient()` usage.
-- Static/manual clients without `SocketsHttpHandler.PooledConnectionLifetime`.
+- Static or singleton-owned manual clients without `SocketsHttpHandler.PooledConnectionLifetime`.
 - Factory-created clients cached in static fields or known singleton services.
 - Typed clients injected into singleton services.
 - Duplicate typed-client service registrations.

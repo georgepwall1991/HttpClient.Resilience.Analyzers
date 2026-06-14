@@ -1,7 +1,9 @@
 using System.Collections.Immutable;
+using System.Collections.Generic;
 using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.KnownSymbols;
+using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -19,14 +21,22 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterSyntaxNodeAction(AnalyzeFieldDeclaration, SyntaxKind.FieldDeclaration);
+        context.RegisterCompilationStartAction(AnalyzeCompilation);
     }
 
-    private static void AnalyzeFieldDeclaration(SyntaxNodeAnalysisContext context)
+    private static void AnalyzeCompilation(CompilationStartAnalysisContext context)
+    {
+        var singletonTypes = GetKnownSingletonTypes(context.Compilation, context.CancellationToken);
+
+        context.RegisterSyntaxNodeAction(
+            nodeContext => AnalyzeFieldDeclaration(nodeContext, singletonTypes),
+            SyntaxKind.FieldDeclaration);
+    }
+
+    private static void AnalyzeFieldDeclaration(SyntaxNodeAnalysisContext context, ISet<string> singletonTypes)
     {
         var field = (FieldDeclarationSyntax)context.Node;
-
-        if (!field.Modifiers.Any(SyntaxKind.StaticKeyword))
+        if (!IsLongLivedField(field, singletonTypes))
         {
             return;
         }
@@ -52,6 +62,31 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
                 DiagnosticDescriptors.HCR002,
                 variable.Identifier.GetLocation()));
         }
+    }
+
+    private static HashSet<string> GetKnownSingletonTypes(Compilation compilation, System.Threading.CancellationToken cancellationToken)
+    {
+        return new HashSet<string>(
+            compilation.SyntaxTrees
+                .Select(tree => tree.GetRoot(cancellationToken))
+                .SelectMany(ServiceRegistrationCollector.Collect)
+                .Where(registration => registration.Kind == ServiceRegistrationKind.Singleton)
+                .SelectMany(registration => new[]
+                {
+                    registration.ServiceTypeName,
+                    registration.ImplementationTypeName
+                })
+                .Where(typeName => typeName is not null)
+                .Select(typeName => typeName!),
+            System.StringComparer.Ordinal);
+    }
+
+    private static bool IsLongLivedField(FieldDeclarationSyntax field, ISet<string> singletonTypes)
+    {
+        return field.Modifiers.Any(SyntaxKind.StaticKeyword) ||
+            field.FirstAncestorOrSelf<TypeDeclarationSyntax>() is { } containingType &&
+            (containingType.Identifier.ValueText.EndsWith("Singleton", System.StringComparison.Ordinal) ||
+                singletonTypes.Contains(containingType.Identifier.ValueText));
     }
 
     private static bool HasPooledConnectionLifetime(

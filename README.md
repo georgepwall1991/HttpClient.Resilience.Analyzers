@@ -8,7 +8,7 @@ Compile-time safety for `.NET` `HttpClient`, `IHttpClientFactory`, typed clients
 ## What It Catches
 
 - `HttpClient` created and disposed per request.
-- Static/manual `HttpClient` instances without connection lifetime configuration.
+- Static or singleton-owned manual `HttpClient` instances without connection lifetime configuration.
 - Factory-created clients cached in singleton services.
 - Typed clients injected into singleton services.
 - Duplicate typed client registrations.
@@ -39,7 +39,7 @@ See [implementation status](docs/implementation-status.md) for current analyzer 
 Implemented diagnostic slices:
 
 - `HCR001` for high-confidence `new HttpClient()` usage in request-path types, loops, `using` ownership patterns, and top-level loop/using statements, with a partial code fix when `IHttpClientFactory` is already in scope.
-- `HCR002` for static manual `HttpClient` fields without `PooledConnectionLifetime`, with a code fix.
+- `HCR002` for static or singleton-owned manual `HttpClient` fields without `PooledConnectionLifetime`, with a code fix.
 - `HCR003` for factory-created clients cached into static fields or known singleton fields.
 - `HCR004` for typed clients injected into singleton services.
 - `HCR005` for duplicate typed-client service registrations, with a code fix.
