@@ -113,17 +113,43 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
 
     private static bool IsRequestScopedType(TypeSyntax type, ISet<string> scopedTypes)
     {
-        var typeName = type switch
+        type = UnwrapNullableType(type);
+
+        var simpleTypeName = GetSimpleTypeName(type);
+        if (RequestScopedTypeNames.Contains(simpleTypeName, System.StringComparer.Ordinal))
+        {
+            return true;
+        }
+
+        if (TypeIsQualified(type))
+        {
+            return scopedTypes.Contains(type.ToString());
+        }
+
+        return TypeNameUtilities.GetComparableNames(simpleTypeName)
+            .Any(scopedTypes.Contains);
+    }
+
+    private static TypeSyntax UnwrapNullableType(TypeSyntax type)
+    {
+        return type is NullableTypeSyntax nullable
+            ? nullable.ElementType
+            : type;
+    }
+
+    private static string GetSimpleTypeName(TypeSyntax type)
+    {
+        return type switch
         {
             IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
             QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText,
             AliasQualifiedNameSyntax aliasQualified => aliasQualified.Name.Identifier.ValueText,
-            NullableTypeSyntax nullable => nullable.ElementType.ToString(),
             _ => type.ToString()
         };
+    }
 
-        return TypeNameUtilities.GetComparableNames(typeName)
-            .Any(candidate => RequestScopedTypeNames.Contains(candidate, System.StringComparer.Ordinal) ||
-                scopedTypes.Contains(candidate));
+    private static bool TypeIsQualified(TypeSyntax type)
+    {
+        return type is QualifiedNameSyntax or AliasQualifiedNameSyntax;
     }
 }
