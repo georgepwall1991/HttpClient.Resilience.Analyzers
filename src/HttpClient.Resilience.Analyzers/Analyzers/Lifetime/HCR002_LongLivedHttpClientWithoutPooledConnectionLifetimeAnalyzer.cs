@@ -323,6 +323,7 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         {
             IFieldSymbol field => SymbolInitializerHasPooledConnectionLifetime(field, semanticModel, cancellationToken),
             ILocalSymbol local => SymbolInitializerHasPooledConnectionLifetime(local, semanticModel, cancellationToken),
+            IPropertySymbol property => PropertyInitializerHasPooledConnectionLifetime(property, semanticModel, cancellationToken),
             _ => false
         };
     }
@@ -336,6 +337,18 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             .Select(reference => reference.GetSyntax(cancellationToken))
             .OfType<VariableDeclaratorSyntax>()
             .Any(variable => variable.Initializer?.Value is BaseObjectCreationExpressionSyntax handlerCreation &&
+                IsConfiguredSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken));
+    }
+
+    private static bool PropertyInitializerHasPooledConnectionLifetime(
+        IPropertySymbol property,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return property.DeclaringSyntaxReferences
+            .Select(reference => reference.GetSyntax(cancellationToken))
+            .OfType<PropertyDeclarationSyntax>()
+            .Any(propertyDeclaration => propertyDeclaration.Initializer?.Value is BaseObjectCreationExpressionSyntax handlerCreation &&
                 IsConfiguredSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken));
     }
 
