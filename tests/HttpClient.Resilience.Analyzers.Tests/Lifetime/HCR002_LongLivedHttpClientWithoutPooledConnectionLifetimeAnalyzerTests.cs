@@ -48,6 +48,29 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenStaticHttpClientUsesConfiguredHandlerField()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static readonly SocketsHttpHandler Handler = new()
+                {
+                    PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+                };
+
+                private static readonly HttpClient Client = new(Handler);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenHttpClientFieldIsNotStatic()
     {
         const string source = """
@@ -121,6 +144,46 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
                     {
                         PooledConnectionLifetime = TimeSpan.FromMinutes(2)
                     });
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenRegisteredSingletonUsesConfiguredHandlerField()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton<GitHubClient>();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+                private static readonly SocketsHttpHandler Handler = new()
+                {
+                    PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+                };
+
+                private readonly HttpClient _client = new(Handler);
             }
 
             public interface IServiceCollection

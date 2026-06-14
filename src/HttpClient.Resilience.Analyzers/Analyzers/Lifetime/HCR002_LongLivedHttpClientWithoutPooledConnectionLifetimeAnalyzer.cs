@@ -99,27 +99,74 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             return false;
         }
 
-        foreach (var argument in creation.ArgumentList.Arguments)
+        return creation.ArgumentList.Arguments
+            .Any(argument => HandlerExpressionHasPooledConnectionLifetime(
+                UnwrapParentheses(argument.Expression),
+                semanticModel,
+                cancellationToken));
+    }
+
+    private static bool HandlerExpressionHasPooledConnectionLifetime(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (expression is BaseObjectCreationExpressionSyntax handlerCreation)
         {
-            if (argument.Expression is not BaseObjectCreationExpressionSyntax handlerCreation)
-            {
-                continue;
-            }
-
-            if (!IsSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken))
-            {
-                continue;
-            }
-
-            if (handlerCreation.Initializer?.Expressions
-                    .OfType<AssignmentExpressionSyntax>()
-                    .Any(assignment => assignment.Left is IdentifierNameSyntax { Identifier.ValueText: "PooledConnectionLifetime" }) == true)
-            {
-                return true;
-            }
+            return IsConfiguredSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken);
         }
 
-        return false;
+        return semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
+        {
+            IFieldSymbol field => SymbolInitializerHasPooledConnectionLifetime(field, semanticModel, cancellationToken),
+            ILocalSymbol local => SymbolInitializerHasPooledConnectionLifetime(local, semanticModel, cancellationToken),
+            _ => false
+        };
+    }
+
+    private static bool SymbolInitializerHasPooledConnectionLifetime(
+        ISymbol symbol,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return symbol.DeclaringSyntaxReferences
+            .Select(reference => reference.GetSyntax(cancellationToken))
+            .OfType<VariableDeclaratorSyntax>()
+            .Any(variable => variable.Initializer?.Value is BaseObjectCreationExpressionSyntax handlerCreation &&
+                IsConfiguredSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken));
+    }
+
+    private static bool IsConfiguredSocketsHttpHandlerCreation(
+        BaseObjectCreationExpressionSyntax handlerCreation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return IsSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken) &&
+            handlerCreation.Initializer?.Expressions
+                .OfType<AssignmentExpressionSyntax>()
+                .Any(assignment => IsPooledConnectionLifetimeMember(assignment.Left)) == true;
+    }
+
+    private static bool IsPooledConnectionLifetimeMember(ExpressionSyntax expression)
+    {
+        expression = UnwrapParentheses(expression);
+
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "PooledConnectionLifetime",
+            MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText == "PooledConnectionLifetime",
+            _ => false
+        };
+    }
+
+    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    {
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
+        return expression;
     }
 
     private static bool IsHttpClientFieldCreation(
