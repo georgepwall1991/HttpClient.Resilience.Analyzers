@@ -81,8 +81,7 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
             } genericName
         } &&
         IsServiceProviderFactoryParameter(receiver, containingLambda) &&
-        TypeNameUtilities.GetComparableNames(UnwrapNullableType(genericName.TypeArgumentList.Arguments[0]).ToString())
-            .Any(typedClients.Contains);
+        TypeMatchesTypedClient(genericName.TypeArgumentList.Arguments[0], typedClients);
     }
 
     private static bool IsServiceProviderFactoryParameter(
@@ -139,7 +138,7 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
             foreach (var parameter in GetConstructorParameters(singletonClass))
             {
                 if (parameter.Type is not null &&
-                    TypeNameUtilities.GetComparableNames(UnwrapNullableType(parameter.Type).ToString()).Any(typedClients.Contains))
+                    TypeMatchesTypedClient(parameter.Type, typedClients))
                 {
                     return true;
                 }
@@ -147,6 +146,67 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
         }
 
         return false;
+    }
+
+    private static bool TypeMatchesTypedClient(TypeSyntax type, ISet<string> typedClients)
+    {
+        type = UnwrapNullableType(type);
+
+        if (TryGetTypedClientWrapperArgument(type, out var wrappedType))
+        {
+            return TypeMatchesTypedClient(wrappedType, typedClients);
+        }
+
+        return TypeNameUtilities.GetComparableNames(type.ToString()).Any(typedClients.Contains);
+    }
+
+    private static bool TryGetTypedClientWrapperArgument(TypeSyntax type, out TypeSyntax wrappedType)
+    {
+        switch (type)
+        {
+            case GenericNameSyntax genericName when IsTypedClientWrapperName(genericName.Identifier.ValueText) &&
+                genericName.TypeArgumentList.Arguments.Count == 1:
+                wrappedType = genericName.TypeArgumentList.Arguments[0];
+                return true;
+            case QualifiedNameSyntax { Right: GenericNameSyntax genericName } qualified when
+                IsQualifiedTypedClientWrapperName(qualified.Left.ToString(), genericName.Identifier.ValueText) &&
+                genericName.TypeArgumentList.Arguments.Count == 1:
+                wrappedType = genericName.TypeArgumentList.Arguments[0];
+                return true;
+            case AliasQualifiedNameSyntax { Alias.Identifier.ValueText: "global", Name: GenericNameSyntax genericName } aliasQualified when
+                IsQualifiedTypedClientWrapperName("global::" + aliasQualified.Name.Identifier.ValueText, genericName.Identifier.ValueText) &&
+                genericName.TypeArgumentList.Arguments.Count == 1:
+                wrappedType = genericName.TypeArgumentList.Arguments[0];
+                return true;
+            default:
+                wrappedType = type;
+                return false;
+        }
+    }
+
+    private static bool IsTypedClientWrapperName(string typeName)
+    {
+        return typeName is "Func" or "Lazy" or "IEnumerable";
+    }
+
+    private static bool IsQualifiedTypedClientWrapperName(string qualifier, string typeName)
+    {
+        qualifier = NormalizeTypeName(qualifier);
+
+        return typeName switch
+        {
+            "Func" or "Lazy" => qualifier == "System",
+            "IEnumerable" => qualifier == "System.Collections.Generic",
+            _ => false
+        };
+    }
+
+    private static string NormalizeTypeName(string typeName)
+    {
+        typeName = typeName.Trim();
+        return typeName.StartsWith("global::", System.StringComparison.Ordinal)
+            ? typeName.Substring("global::".Length)
+            : typeName;
     }
 
     private static TypeSyntax UnwrapNullableType(TypeSyntax type)
