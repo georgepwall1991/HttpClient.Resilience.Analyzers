@@ -247,6 +247,58 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenSameNamedCustomResilienceHandlerNameUsesConstant()
+    {
+        const string source = """
+            public static class PipelineNames
+            {
+                public const string GitHub = "github";
+            }
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<GitHubClient>()
+                        .AddResilienceHandler(PipelineNames.GitHub, builder => { })
+                        .AddResilienceHandler(PipelineNames.GitHub, builder => { });
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services)
+                {
+                    return null!;
+                }
+
+                public static IHttpClientBuilder AddResilienceHandler(this IHttpClientBuilder builder, string name, System.Action<object> configure)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR040, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenDifferentNamedCustomResilienceHandlersAreUsed()
     {
         const string source = """
@@ -258,6 +310,58 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
                         .AddHttpClient<GitHubClient>()
                         .AddResilienceHandler("read", builder => { })
                         .AddResilienceHandler("write", builder => { });
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services)
+                {
+                    return null!;
+                }
+
+                public static IHttpClientBuilder AddResilienceHandler(this IHttpClientBuilder builder, string name, System.Action<object> configure)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenCustomResilienceHandlerConstantsAreDifferent()
+    {
+        const string source = """
+            public static class PipelineNames
+            {
+                public const string Read = "read";
+                public const string Write = "write";
+            }
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<GitHubClient>()
+                        .AddResilienceHandler(PipelineNames.Read, builder => { })
+                        .AddResilienceHandler(PipelineNames.Write, builder => { });
                 }
             }
 

@@ -48,7 +48,7 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
 
         return IsAddStandardResilienceHandlerInvocation(invocation) &&
             CountStandardResilienceHandlersInChain(invocation) > 1 ||
-            IsDuplicateNamedResilienceHandlerInChain(invocation);
+            IsDuplicateNamedResilienceHandlerInChain(invocation, semanticModel, cancellationToken);
     }
 
     private static int CountStandardResilienceHandlersInChain(ExpressionSyntax expression)
@@ -83,15 +83,22 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
         };
     }
 
-    private static bool IsDuplicateNamedResilienceHandlerInChain(InvocationExpressionSyntax invocation)
+    private static bool IsDuplicateNamedResilienceHandlerInChain(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
-        if (!TryGetAddResilienceHandlerName(invocation, out var handlerName))
+        if (!TryGetAddResilienceHandlerName(invocation, semanticModel, cancellationToken, out var handlerName))
         {
             return false;
         }
 
         return GetInvocationChain(invocation)
-            .Count(candidate => TryGetAddResilienceHandlerName(candidate, out var candidateName) &&
+            .Count(candidate => TryGetAddResilienceHandlerName(
+                    candidate,
+                    semanticModel,
+                    cancellationToken,
+                    out var candidateName) &&
                 candidateName == handlerName) > 1;
     }
 
@@ -112,7 +119,11 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
         }
     }
 
-    private static bool TryGetAddResilienceHandlerName(InvocationExpressionSyntax invocation, out string? handlerName)
+    private static bool TryGetAddResilienceHandlerName(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        out string? handlerName)
     {
         handlerName = null;
 
@@ -120,15 +131,35 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
             {
                 Name.Identifier.ValueText: "AddResilienceHandler"
             } ||
-            invocation.ArgumentList.Arguments.Count == 0 ||
-            invocation.ArgumentList.Arguments[0].Expression is not LiteralExpressionSyntax literal ||
-            !literal.IsKind(SyntaxKind.StringLiteralExpression))
+            invocation.ArgumentList.Arguments.Count == 0)
         {
             return false;
         }
 
-        handlerName = literal.Token.ValueText;
-        return true;
+        handlerName = TryGetStringConstant(
+            invocation.ArgumentList.Arguments[0].Expression,
+            semanticModel,
+            cancellationToken);
+        return handlerName is not null;
+    }
+
+    private static string? TryGetStringConstant(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        expression = UnwrapParentheses(expression);
+
+        if (expression is LiteralExpressionSyntax literal &&
+            literal.IsKind(SyntaxKind.StringLiteralExpression))
+        {
+            return literal.Token.ValueText;
+        }
+
+        var constant = semanticModel.GetConstantValue(expression, cancellationToken);
+        return constant.HasValue && constant.Value is string value
+            ? value
+            : null;
     }
 
     private static bool ChainLooksLikeHttpClientBuilder(
@@ -228,5 +259,15 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
             AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() == "global::Microsoft.Extensions.DependencyInjection.IHttpClientBuilder",
             _ => false
         };
+    }
+
+    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    {
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
+        return expression;
     }
 }
