@@ -86,7 +86,7 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
                     registration.ImplementationTypeName
                 })
                 .Where(typeName => typeName is not null)
-                .Select(typeName => typeName!),
+                .SelectMany(typeName => TypeNameUtilities.GetComparableNames(typeName!)),
             System.StringComparer.Ordinal);
     }
 
@@ -122,7 +122,8 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
             _ => type.ToString()
         };
 
-        return RequestScopedTypeNames.Contains(typeName, System.StringComparer.Ordinal) ||
-            scopedTypes.Contains(typeName);
+        return TypeNameUtilities.GetComparableNames(typeName)
+            .Any(candidate => RequestScopedTypeNames.Contains(candidate, System.StringComparer.Ordinal) ||
+                scopedTypes.Contains(candidate));
     }
 }

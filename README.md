@@ -43,7 +43,7 @@ Implemented diagnostic slices:
 - `HCR003` for factory-created clients cached through assignments or initializers into static fields or known singleton fields.
 - `HCR004` for typed clients injected into singleton services, including qualified registration names.
 - `HCR005` for duplicate typed-client service registrations, including qualified registration names, with a code fix.
-- `HCR020` for request-scoped data and known scoped services captured by `DelegatingHandler` constructors.
+- `HCR020` for request-scoped data and known scoped services captured by `DelegatingHandler` constructors, including qualified scoped service names.
 - `HCR040` for duplicate `AddStandardResilienceHandler()` calls or same-name custom resilience handlers in one fluent chain, with a code fix.
 - `HCR041` for standard resilience handlers paired with visible unsafe typed-client or named-client calls across the compilation, including unsafe `HttpRequestMessage` `Send`/`SendAsync` shapes, with retry-guard detection and a code fix.
 - `HCR060` for undisposed `ResponseHeadersRead` HTTP responses, including a simple code fix.

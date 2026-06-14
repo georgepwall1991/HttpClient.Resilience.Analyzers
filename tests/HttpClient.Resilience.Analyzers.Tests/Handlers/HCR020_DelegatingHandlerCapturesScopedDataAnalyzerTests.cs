@@ -90,6 +90,99 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenScopedRegistrationUsesQualifiedTypeName()
+    {
+        const string source = """
+            using Contexts;
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<Contexts.IUserContext, Contexts.UserContext>();
+                }
+            }
+
+            public sealed class UserHeaderHandler(IUserContext userContext) : DelegatingHandler
+            {
+            }
+
+            namespace Contexts
+            {
+                public interface IUserContext
+                {
+                }
+
+                public sealed class UserContext : IUserContext
+                {
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddScoped<TService, TImplementation>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenNullableQualifiedScopedServiceIsCaptured()
+    {
+        const string source = """
+            #nullable enable
+
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<Contexts.IUserContext, Contexts.UserContext>();
+                }
+            }
+
+            public sealed class UserHeaderHandler(Contexts.IUserContext? userContext) : DelegatingHandler
+            {
+            }
+
+            namespace Contexts
+            {
+                public interface IUserContext
+                {
+                }
+
+                public sealed class UserContext : IUserContext
+                {
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddScoped<TService, TImplementation>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenDelegatingHandlerCapturesKnownTransientService()
     {
         const string source = """
