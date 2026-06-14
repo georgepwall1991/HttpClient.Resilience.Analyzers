@@ -35,6 +35,35 @@ public sealed class HCR003_CachedFactoryClientAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenFactoryClientLocalIsAssignedToStaticField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ClientCache
+            {
+                private static HttpClient _client = null!;
+
+                public static void Initialize(IHttpClientFactory factory)
+                {
+                    var client = factory.CreateClient("github");
+                    _client = client;
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR003, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenFactoryClientIsInitializedIntoStaticField()
     {
         const string source = """
@@ -230,6 +259,81 @@ public sealed class HCR003_CachedFactoryClientAnalyzerTests
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticIds.HCR003, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenFactoryClientLocalIsAssignedToFieldOnRegisteredSingleton()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton<ClientRunner>();
+                }
+            }
+
+            public sealed class ClientRunner
+            {
+                private HttpClient _client = null!;
+
+                public ClientRunner(IHttpClientFactory factory)
+                {
+                    var client = factory.CreateClient("github");
+                    _client = client;
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR003, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenFactoryClientLocalIsReassignedBeforeLongLivedAssignment()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ClientCache
+            {
+                private static HttpClient _client = null!;
+
+                public static void Initialize(IHttpClientFactory factory, HttpClient replacement)
+                {
+                    var client = factory.CreateClient("github");
+                    client = replacement;
+                    _client = client;
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
     }
 
     [Fact]

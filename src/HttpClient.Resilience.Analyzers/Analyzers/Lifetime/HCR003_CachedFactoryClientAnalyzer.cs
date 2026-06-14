@@ -45,7 +45,7 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context, IReadOnlyCollection<string> singletonTypes)
     {
         var assignment = (AssignmentExpressionSyntax)context.Node;
-        if (!IsCreateClientInvocation(assignment.Right, context.SemanticModel, context.CancellationToken))
+        if (!ExpressionCreatesFactoryClient(assignment.Right, assignment, context.SemanticModel, context.CancellationToken))
         {
             return;
         }
@@ -110,11 +110,84 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             property.Identifier.GetLocation()));
     }
 
+    private static bool ExpressionCreatesFactoryClient(
+        ExpressionSyntax expression,
+        SyntaxNode context,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        expression = UnwrapParentheses(expression);
+
+        return IsCreateClientInvocation(expression, semanticModel, cancellationToken) ||
+            expression is IdentifierNameSyntax identifier &&
+            LocalVariableCreatesFactoryClient(identifier, context, semanticModel, cancellationToken);
+    }
+
+    private static bool LocalVariableCreatesFactoryClient(
+        IdentifierNameSyntax identifier,
+        SyntaxNode context,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var containingBlock = context.FirstAncestorOrSelf<BlockSyntax>();
+        if (containingBlock is null)
+        {
+            return false;
+        }
+
+        var referencedSymbol = semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol;
+        if (referencedSymbol is not ILocalSymbol)
+        {
+            return false;
+        }
+
+        return containingBlock
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Where(variable => SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetDeclaredSymbol(variable, cancellationToken),
+                    referencedSymbol) &&
+                variable.SpanStart < context.SpanStart &&
+                variable.Initializer is not null &&
+                !LocalIsReassignedBetweenDeclarationAndUse(
+                    containingBlock,
+                    variable,
+                    context,
+                    semanticModel,
+                    cancellationToken))
+            .Any(variable => IsCreateClientInvocation(
+                variable.Initializer!.Value,
+                semanticModel,
+                cancellationToken));
+    }
+
+    private static bool LocalIsReassignedBetweenDeclarationAndUse(
+        BlockSyntax containingBlock,
+        VariableDeclaratorSyntax variable,
+        SyntaxNode context,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var localSymbol = semanticModel.GetDeclaredSymbol(variable, cancellationToken);
+
+        return containingBlock
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => assignment.SpanStart > variable.SpanStart &&
+                assignment.SpanStart < context.SpanStart &&
+                assignment.Left is IdentifierNameSyntax identifier &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol,
+                    localSymbol));
+    }
+
     private static bool IsCreateClientInvocation(
         ExpressionSyntax expression,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
+        expression = UnwrapParentheses(expression);
+
         return expression is InvocationExpressionSyntax
         {
             Expression: MemberAccessExpressionSyntax
@@ -216,6 +289,16 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() == "global::System.Net.Http.IHttpClientFactory",
             _ => false
         };
+    }
+
+    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    {
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
+        return expression;
     }
 
     private static IReadOnlyCollection<string> GetKnownSingletonTypes(IEnumerable<SyntaxNode> roots)
