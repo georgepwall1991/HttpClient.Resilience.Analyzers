@@ -15,7 +15,7 @@ This project currently implements every MVP diagnostic ID from the starter docum
 | `HCR040` | Yes | Yes | Duplicate standard resilience handlers and same-name custom resilience handlers in one fluent `AddHttpClient`/`IHttpClientBuilder` chain, with namespace-aware lookalike custom builders skipped. |
 | `HCR041` | Yes | Yes | Standard resilience handlers with visible unsafe typed-client or named-client calls across the compilation, including service-collection chain validation, namespace-aware qualified typed-client names, and unsafe `HttpRequestMessage` `Send`/`SendAsync` shapes; validates namespace-aware typed-client `HttpClient` and named-client factory receivers, and skips disabled retries and safe-method-only retry predicates. |
 | `HCR060` | Yes | Yes | Awaited `ResponseHeadersRead` HTTP response ownership and disposal, with resolved `HttpClient` receiver validation, task-local filtering, and returned response/wrapper transfer heuristics. |
-| `HCR080` | Yes | Guide | Obvious unbounded `Task.WhenAll` HTTP fan-out with BCL `Task` and resolved `HttpClient` receiver validation; skips visible semaphore gates, bounded `Parallel.ForEachAsync`, local `MaxConnectionsPerServer` clients, and resolved custom clients or lookalike async methods on non-HTTP clients. |
+| `HCR080` | Yes | Guide | Obvious unbounded `Task.WhenAll` HTTP fan-out with BCL `Task` and resolved `HttpClient` receiver validation; skips visible semaphore gates, bounded `Parallel.ForEachAsync`, local/member `MaxConnectionsPerServer` clients, and resolved custom clients or lookalike async methods on non-HTTP clients. |
 
 ## Current Limitations
 

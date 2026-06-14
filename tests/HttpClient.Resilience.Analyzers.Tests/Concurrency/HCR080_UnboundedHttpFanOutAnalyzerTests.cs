@@ -292,6 +292,91 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenHttpClientFieldUsesInlineConnectionLimitedHandler()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                private readonly HttpClient _client = new(new SocketsHttpHandler
+                {
+                    MaxConnectionsPerServer = 8
+                });
+
+                public Task SendAsync(IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(urls.Select(url => _client.GetAsync(url, cancellationToken)));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHttpClientPropertyUsesInlineConnectionLimitedHandler()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                private HttpClient Client { get; } = new HttpClient(new SocketsHttpHandler
+                {
+                    MaxConnectionsPerServer = 8
+                });
+
+                public Task SendAsync(IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(urls.Select(url => Client.GetAsync(url, cancellationToken)));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenHttpClientFieldDoesNotLimitConnections()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                private readonly HttpClient _client = new();
+
+                public Task SendAsync(IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(urls.Select(url => _client.GetAsync(url, cancellationToken)));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenParallelForEachAsyncUsesBoundedOptions()
     {
         const string source = """

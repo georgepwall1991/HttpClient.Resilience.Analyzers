@@ -234,8 +234,32 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         var clientDeclaration = declarations
             .FirstOrDefault(declaration => declaration.Identifier.ValueText == receiver.Identifier.ValueText);
 
-        return clientDeclaration?.Initializer?.Value is { } value &&
-            IsConnectionLimitedHttpClientCreation(value, declarations);
+        if (clientDeclaration?.Initializer?.Value is { } value &&
+            IsConnectionLimitedHttpClientCreation(value, declarations))
+        {
+            return true;
+        }
+
+        return ReceiverMemberUsesConnectionLimitedHandler(receiver);
+    }
+
+    private static bool ReceiverMemberUsesConnectionLimitedHandler(IdentifierNameSyntax receiver)
+    {
+        return receiver.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
+            .Members
+            .Any(member => member switch
+            {
+                FieldDeclarationSyntax field => HttpClientSymbols.IsHttpClientName(field.Declaration.Type) &&
+                    field.Declaration.Variables.Any(variable =>
+                        variable.Identifier.ValueText == receiver.Identifier.ValueText &&
+                        variable.Initializer?.Value is { } value &&
+                        IsConnectionLimitedHttpClientCreation(value, field.Declaration.Variables.ToArray())),
+                PropertyDeclarationSyntax property => HttpClientSymbols.IsHttpClientName(property.Type) &&
+                    property.Identifier.ValueText == receiver.Identifier.ValueText &&
+                    property.Initializer?.Value is { } value &&
+                    IsConnectionLimitedHttpClientCreation(value, System.Array.Empty<VariableDeclaratorSyntax>()),
+                _ => false
+            }) == true;
     }
 
     private static bool IsConnectionLimitedHttpClientCreation(
