@@ -258,15 +258,41 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
 
     private static bool IsExplicitlyDisposed(BlockSyntax containingBlock, string variableName)
     {
+        return IsDirectlyDisposedInBlock(containingBlock, variableName) ||
+            IsDisposedInFinally(containingBlock, variableName) ||
+            IsOwnedByUsingStatement(containingBlock, variableName);
+    }
+
+    private static bool IsDirectlyDisposedInBlock(BlockSyntax containingBlock, string variableName)
+    {
+        return containingBlock.Statements
+            .OfType<ExpressionStatementSyntax>()
+            .Any(statement => IsDisposeInvocation(statement.Expression, variableName));
+    }
+
+    private static bool IsDisposedInFinally(BlockSyntax containingBlock, string variableName)
+    {
         return containingBlock
             .DescendantNodes()
-            .OfType<InvocationExpressionSyntax>()
-            .Any(invocation => invocation.Expression is MemberAccessExpressionSyntax
+            .OfType<FinallyClauseSyntax>()
+            .Any(finallyClause => finallyClause.Block
+                .DescendantNodes()
+                .OfType<InvocationExpressionSyntax>()
+                .Any(invocation => IsDisposeInvocation(invocation, variableName)));
+    }
+
+    private static bool IsDisposeInvocation(ExpressionSyntax expression, string variableName)
+    {
+        expression = UnwrapParentheses(expression);
+
+        return expression is InvocationExpressionSyntax
+        {
+            Expression: MemberAccessExpressionSyntax
             {
                 Expression: IdentifierNameSyntax identifier,
                 Name.Identifier.ValueText: "Dispose"
-            } && identifier.Identifier.ValueText == variableName) ||
-            IsOwnedByUsingStatement(containingBlock, variableName);
+            }
+        } && identifier.Identifier.ValueText == variableName;
     }
 
     private static bool IsOwnedByUsingStatement(BlockSyntax containingBlock, string variableName)
