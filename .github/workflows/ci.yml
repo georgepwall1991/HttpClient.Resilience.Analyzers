@@ -35,6 +35,10 @@ jobs:
       - name: Build
         run: dotnet build HttpClient.Resilience.Analyzers.slnx --configuration Release --no-restore
 
+      - name: Validate repository metadata
+        shell: pwsh
+        run: ./scripts/Validate-Repository.ps1
+
       - name: Validate sample diagnostics
         shell: pwsh
         run: ./scripts/Validate-SampleDiagnostics.ps1 -NoRestore

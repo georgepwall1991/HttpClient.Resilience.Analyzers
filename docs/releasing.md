@@ -12,6 +12,7 @@ This repository has a guarded release workflow at `.github/workflows/release.yml
 dotnet restore HttpClient.Resilience.Analyzers.slnx
 dotnet format HttpClient.Resilience.Analyzers.slnx --verify-no-changes --exclude samples
 dotnet build HttpClient.Resilience.Analyzers.slnx --configuration Release --no-restore
+./scripts/Validate-Repository.ps1
 ./scripts/Validate-SampleDiagnostics.ps1 -NoRestore
 dotnet test HttpClient.Resilience.Analyzers.slnx --configuration Release --no-build --logger trx --results-directory artifacts\test-results
 dotnet pack src\HttpClient.Resilience.Analyzers.Package\HttpClient.Resilience.Analyzers.Package.csproj --configuration Release --no-build --output artifacts\packages
