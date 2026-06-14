@@ -38,7 +38,7 @@ See [implementation status](docs/implementation-status.md) for current analyzer 
 
 Implemented diagnostic slices:
 
-- `HCR001` for high-confidence `new HttpClient()` usage in request-path types, loops, `using` ownership patterns, and top-level loop/using statements, with a partial code fix when an `IHttpClientFactory` method, local-function, or primary-constructor parameter is already in scope.
+- `HCR001` for high-confidence `new HttpClient()` usage in request-path types, loops, `using` ownership patterns, and top-level loop/using statements, with obvious test contexts skipped and a partial code fix when an `IHttpClientFactory` method, local-function, or primary-constructor parameter is already in scope.
 - `HCR002` for static or singleton-owned manual `HttpClient` fields without `PooledConnectionLifetime`, with configured-handler and namespace-aware qualified-registration recognition plus a safe code fix for parameterless client initializers.
 - `HCR003` for `IHttpClientFactory` clients cached through assignments or initializers into static fields or known singleton fields, including receiver validation and namespace-aware qualified singleton registrations.
 - `HCR004` for typed clients injected into singleton services, including namespace-aware qualified registration matching.

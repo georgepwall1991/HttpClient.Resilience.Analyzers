@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.KnownSymbols;
 using Microsoft.CodeAnalysis;
@@ -20,6 +21,18 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
         "Service",
         "Repository",
         "Job"
+    };
+
+    private static readonly string[] TestAttributeNames =
+    {
+        "Fact",
+        "Theory",
+        "Test",
+        "TestCase",
+        "TestCaseSource",
+        "TestClass",
+        "TestMethod",
+        "DataTestMethod"
     };
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
@@ -45,7 +58,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
             return;
         }
 
-        if (IsInTestType(creation))
+        if (IsInTestContext(creation))
         {
             return;
         }
@@ -122,16 +135,47 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
         return false;
     }
 
-    private static bool IsInTestType(SyntaxNode node)
+    private static bool IsInTestContext(SyntaxNode node)
     {
         var type = node.FirstAncestorOrSelf<TypeDeclarationSyntax>();
-        if (type is null)
+        if (type is not null &&
+            (IsTestTypeName(type.Identifier.ValueText) || HasTestAttribute(type.AttributeLists)))
         {
-            return false;
+            return true;
         }
 
-        var name = type.Identifier.ValueText;
+        return node.FirstAncestorOrSelf<BaseMethodDeclarationSyntax>() is { } method &&
+            HasTestAttribute(method.AttributeLists);
+    }
+
+    private static bool IsTestTypeName(string name)
+    {
         return name.EndsWith("Test", System.StringComparison.Ordinal) ||
             name.EndsWith("Tests", System.StringComparison.Ordinal);
+    }
+
+    private static bool HasTestAttribute(SyntaxList<AttributeListSyntax> attributeLists)
+    {
+        return attributeLists
+            .SelectMany(attributeList => attributeList.Attributes)
+            .Any(attribute => IsTestAttributeName(attribute.Name));
+    }
+
+    private static bool IsTestAttributeName(NameSyntax name)
+    {
+        var text = name switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText,
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.Name.Identifier.ValueText,
+            _ => name.ToString()
+        };
+
+        if (text.EndsWith("Attribute", System.StringComparison.Ordinal))
+        {
+            text = text.Substring(0, text.Length - "Attribute".Length);
+        }
+
+        return TestAttributeNames.Contains(text, System.StringComparer.Ordinal);
     }
 }

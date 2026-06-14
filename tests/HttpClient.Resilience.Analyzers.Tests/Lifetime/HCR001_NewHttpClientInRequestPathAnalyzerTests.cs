@@ -141,6 +141,56 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenHttpClientIsCreatedInFactMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                [Fact]
+                public HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public sealed class FactAttribute : System.Attribute
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHttpClientIsCreatedInAttributedTestClass()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            [TestClass]
+            public sealed class PaymentsService
+            {
+                public HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public sealed class TestClassAttribute : System.Attribute
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task CodeFix_UsesExistingHttpClientFactoryParameter()
     {
         const string source = """
