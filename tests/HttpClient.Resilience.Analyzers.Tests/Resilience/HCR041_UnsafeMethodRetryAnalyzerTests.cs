@@ -105,6 +105,66 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenQualifiedTypedClientTargetsDifferentSameNamedType()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<Clients.PaymentsClient>()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            namespace Other
+            {
+                public sealed class PaymentsClient(HttpClient httpClient)
+                {
+                    public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                    {
+                        return httpClient.PostAsync("/payments", null, cancellationToken);
+                    }
+                }
+            }
+
+            namespace Clients
+            {
+                public sealed class PaymentsClient(HttpClient httpClient)
+                {
+                    public Task<HttpResponseMessage> GetAsync(CancellationToken cancellationToken)
+                    {
+                        return httpClient.GetAsync("/payments", cancellationToken);
+                    }
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenTypedClientCallsLookalikeUnsafeMethod()
     {
         const string source = """

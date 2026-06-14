@@ -204,15 +204,42 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
 
     private static bool TypedClientSendsUnsafeHttpMethod(IEnumerable<SyntaxNode> roots, string typedClient)
     {
-        var comparableTypedClientNames = new HashSet<string>(
-            TypeNameUtilities.GetComparableNames(typedClient),
-            System.StringComparer.Ordinal);
-
         return roots
             .SelectMany(root => root.DescendantNodes().OfType<ClassDeclarationSyntax>())
-            .Where(type => comparableTypedClientNames.Contains(type.Identifier.ValueText))
+            .Where(type => DeclaredTypeMatchesRegistration(type, typedClient))
             .SelectMany(type => type.DescendantNodes().OfType<InvocationExpressionSyntax>())
             .Any(IsUnsafeHttpClientCall);
+    }
+
+    private static bool DeclaredTypeMatchesRegistration(ClassDeclarationSyntax classDeclaration, string registrationTypeName)
+    {
+        registrationTypeName = registrationTypeName.Trim();
+        if (registrationTypeName.StartsWith("global::", System.StringComparison.Ordinal))
+        {
+            registrationTypeName = registrationTypeName.Substring("global::".Length);
+        }
+
+        if (registrationTypeName.Contains("."))
+        {
+            return GetQualifiedClassName(classDeclaration) == registrationTypeName;
+        }
+
+        return classDeclaration.Identifier.ValueText == TypeNameUtilities.ToSimpleName(registrationTypeName);
+    }
+
+    private static string GetQualifiedClassName(ClassDeclarationSyntax classDeclaration)
+    {
+        var namespaceName = string.Join(
+            ".",
+            classDeclaration
+                .Ancestors()
+                .OfType<BaseNamespaceDeclarationSyntax>()
+                .Reverse()
+                .Select(ns => ns.Name.ToString()));
+
+        return string.IsNullOrEmpty(namespaceName)
+            ? classDeclaration.Identifier.ValueText
+            : namespaceName + "." + classDeclaration.Identifier.ValueText;
     }
 
     private static bool NamedClientSendsUnsafeHttpMethod(IEnumerable<SyntaxNode> roots, string clientName)
