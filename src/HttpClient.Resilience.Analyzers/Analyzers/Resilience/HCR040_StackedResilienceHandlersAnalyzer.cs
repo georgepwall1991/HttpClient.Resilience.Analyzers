@@ -96,15 +96,81 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
             return false;
         }
 
-        var receiverText = memberAccess.Expression.ToString();
-
         return block
             .DescendantNodes()
             .OfType<InvocationExpressionSyntax>()
             .Where(candidate => candidate.SpanStart < invocation.SpanStart)
             .Any(candidate => candidate.Expression is MemberAccessExpressionSyntax candidateMemberAccess &&
                 candidateMemberAccess.Name.Identifier.ValueText == "AddStandardResilienceHandler" &&
-                candidateMemberAccess.Expression.ToString() == receiverText);
+                ReceiverMatches(
+                    memberAccess.Expression,
+                    candidateMemberAccess.Expression,
+                    semanticModel,
+                    cancellationToken) &&
+                !ReceiverIsReassignedBetweenInvocations(
+                    memberAccess.Expression,
+                    candidate,
+                    invocation,
+                    block,
+                    semanticModel,
+                    cancellationToken));
+    }
+
+    private static bool ReceiverMatches(
+        ExpressionSyntax receiver,
+        ExpressionSyntax candidateReceiver,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var receiverSymbol = GetReceiverSymbol(receiver, semanticModel, cancellationToken);
+        var candidateReceiverSymbol = GetReceiverSymbol(candidateReceiver, semanticModel, cancellationToken);
+
+        if (receiverSymbol is not null && candidateReceiverSymbol is not null)
+        {
+            return SymbolEqualityComparer.Default.Equals(receiverSymbol, candidateReceiverSymbol);
+        }
+
+        return receiver.ToString() == candidateReceiver.ToString();
+    }
+
+    private static bool ReceiverIsReassignedBetweenInvocations(
+        ExpressionSyntax receiver,
+        InvocationExpressionSyntax previousInvocation,
+        InvocationExpressionSyntax currentInvocation,
+        BlockSyntax block,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var receiverSymbol = GetReceiverSymbol(receiver, semanticModel, cancellationToken);
+        if (receiverSymbol is null)
+        {
+            return false;
+        }
+
+        return block
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => assignment.SpanStart > previousInvocation.SpanStart &&
+                assignment.SpanStart < currentInvocation.SpanStart &&
+                assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                SymbolEqualityComparer.Default.Equals(
+                    GetReceiverSymbol(assignment.Left, semanticModel, cancellationToken),
+                    receiverSymbol));
+    }
+
+    private static ISymbol? GetReceiverSymbol(
+        ExpressionSyntax receiver,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return semanticModel.GetSymbolInfo(receiver, cancellationToken).Symbol switch
+        {
+            ILocalSymbol local => local,
+            IParameterSymbol parameter => parameter,
+            IFieldSymbol field => field,
+            IPropertySymbol property => property,
+            _ => null
+        };
     }
 
     private static bool IsDuplicateNamedResilienceHandlerInChain(
@@ -234,10 +300,15 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
 
     private static bool SyntacticReceiverLooksLikeHttpClientBuilder(ExpressionSyntax expression)
     {
-        return expression is IdentifierNameSyntax identifier &&
-            (ParameterLooksLikeHttpClientBuilder(identifier) ||
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => ParameterLooksLikeHttpClientBuilder(identifier) ||
                 LocalLooksLikeHttpClientBuilder(identifier) ||
-                FieldOrPropertyLooksLikeHttpClientBuilder(identifier));
+                FieldOrPropertyLooksLikeHttpClientBuilder(identifier),
+            MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax, Name: IdentifierNameSyntax name } =>
+                FieldOrPropertyLooksLikeHttpClientBuilder(name),
+            _ => false
+        };
     }
 
     private static bool ParameterLooksLikeHttpClientBuilder(IdentifierNameSyntax identifier)

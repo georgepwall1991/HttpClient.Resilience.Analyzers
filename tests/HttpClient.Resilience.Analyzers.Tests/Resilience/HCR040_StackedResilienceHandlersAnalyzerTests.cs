@@ -246,6 +246,96 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenBuilderLocalIsReassignedBeforeSecondStandardHandler()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    IHttpClientBuilder builder = services.AddHttpClient<GitHubClient>();
+                    builder.AddStandardResilienceHandler();
+
+                    builder = services.AddHttpClient<PaymentsClient>();
+                    builder.AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services)
+                {
+                    return null!;
+                }
+
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenStandardHandlerIsRepeatedOnThisQualifiedBuilderField()
+    {
+        const string source = """
+            public sealed class Registrations
+            {
+                private readonly IHttpClientBuilder _builder;
+
+                public Registrations(IHttpClientBuilder builder)
+                {
+                    _builder = builder;
+                }
+
+                public void Configure()
+                {
+                    _builder.AddStandardResilienceHandler();
+                    this._builder.AddStandardResilienceHandler();
+                }
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR040, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenRepeatedStandardHandlerUsesCustomBuilderLocal()
     {
         const string source = """
