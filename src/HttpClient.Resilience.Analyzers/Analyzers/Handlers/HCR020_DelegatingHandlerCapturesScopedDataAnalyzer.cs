@@ -21,6 +21,14 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
         "ISession"
     };
 
+    private static readonly string[] QualifiedRequestScopedTypeNames =
+    {
+        "Microsoft.AspNetCore.Http.IHttpContextAccessor",
+        "Microsoft.AspNetCore.Http.HttpContext",
+        "Microsoft.AspNetCore.Http.ISession",
+        "System.Security.Claims.ClaimsPrincipal"
+    };
+
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
         ImmutableArray.Create(DiagnosticDescriptors.HCR020);
 
@@ -184,15 +192,17 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
     {
         type = UnwrapNullableType(type);
 
+        if (TypeIsQualified(type))
+        {
+            var qualifiedTypeName = NormalizeTypeName(type.ToString());
+            return QualifiedRequestScopedTypeNames.Contains(qualifiedTypeName, System.StringComparer.Ordinal) ||
+                scopedTypes.Contains(qualifiedTypeName);
+        }
+
         var simpleTypeName = GetSimpleTypeName(type);
         if (RequestScopedTypeNames.Contains(simpleTypeName, System.StringComparer.Ordinal))
         {
             return true;
-        }
-
-        if (TypeIsQualified(type))
-        {
-            return scopedTypes.Contains(type.ToString());
         }
 
         return TypeNameUtilities.GetComparableNames(simpleTypeName)

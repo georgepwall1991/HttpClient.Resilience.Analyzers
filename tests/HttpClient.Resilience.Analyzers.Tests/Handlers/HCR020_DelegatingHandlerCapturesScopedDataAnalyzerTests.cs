@@ -28,6 +28,30 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenDelegatingHandlerCapturesQualifiedHttpContextAccessor()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class UserHeaderHandler(Microsoft.AspNetCore.Http.IHttpContextAccessor accessor) : DelegatingHandler
+            {
+            }
+
+            namespace Microsoft.AspNetCore.Http
+            {
+                public interface IHttpContextAccessor
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenHandlerInheritsFromVisibleDelegatingHandlerBase()
     {
         const string source = """
@@ -322,6 +346,70 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
         var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
 
         Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenQualifiedRequestScopedTypeNameIsCustomLookalike()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class UserHeaderHandler(Custom.HttpContext context) : DelegatingHandler
+            {
+            }
+
+            namespace Custom
+            {
+                public sealed class HttpContext
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenQualifiedCustomLookalikeIsRegisteredScoped()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<Custom.HttpContext>();
+                }
+            }
+
+            public sealed class UserHeaderHandler(Custom.HttpContext context) : DelegatingHandler
+            {
+            }
+
+            namespace Custom
+            {
+                public sealed class HttpContext
+                {
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddScoped<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
     }
 
     [Fact]
