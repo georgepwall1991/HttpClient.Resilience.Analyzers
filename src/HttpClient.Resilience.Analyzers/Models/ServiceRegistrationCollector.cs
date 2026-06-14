@@ -24,11 +24,17 @@ internal static class ServiceRegistrationCollector
 
         foreach (var registration in registrations.Where(registration => registration.Kind == ServiceRegistrationKind.HttpClient))
         {
-            typeNames.Add(registration.ServiceTypeName);
+            foreach (var typeName in TypeNameUtilities.GetComparableNames(registration.ServiceTypeName))
+            {
+                typeNames.Add(typeName);
+            }
 
             if (registration.ImplementationTypeName is not null)
             {
-                typeNames.Add(registration.ImplementationTypeName);
+                foreach (var typeName in TypeNameUtilities.GetComparableNames(registration.ImplementationTypeName))
+                {
+                    typeNames.Add(typeName);
+                }
             }
         }
 

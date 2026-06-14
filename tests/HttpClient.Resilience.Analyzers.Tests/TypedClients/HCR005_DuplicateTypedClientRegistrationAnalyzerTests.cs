@@ -160,6 +160,45 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenDuplicateRegistrationUsesQualifiedTypeName()
+    {
+        const string source = """
+            using Clients;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<Clients.PaymentsClient>();
+                    services.AddTransient<PaymentsClient>();
+                }
+            }
+
+            namespace Clients
+            {
+                public sealed class PaymentsClient
+                {
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR005, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_InMinimalHostingStyleConfiguration()
     {
         const string source = """

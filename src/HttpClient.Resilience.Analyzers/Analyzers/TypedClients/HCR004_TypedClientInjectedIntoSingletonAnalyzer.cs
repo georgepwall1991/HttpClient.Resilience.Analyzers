@@ -54,9 +54,10 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
 
     private static bool ConstructorConsumesTypedClient(IEnumerable<SyntaxNode> roots, string singletonTypeName, ISet<string> typedClients)
     {
+        var comparableSingletonTypeName = TypeNameUtilities.ToSimpleName(singletonTypeName);
         var singletonClass = roots
             .SelectMany(root => root.DescendantNodes().OfType<ClassDeclarationSyntax>())
-            .FirstOrDefault(type => type.Identifier.ValueText == singletonTypeName);
+            .FirstOrDefault(type => type.Identifier.ValueText == comparableSingletonTypeName);
 
         if (singletonClass is null)
         {
@@ -65,7 +66,8 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
 
         foreach (var parameter in GetConstructorParameters(singletonClass))
         {
-            if (parameter.Type is not null && typedClients.Contains(parameter.Type.ToString()))
+            if (parameter.Type is not null &&
+                TypeNameUtilities.GetComparableNames(parameter.Type.ToString()).Any(typedClients.Contains))
             {
                 return true;
             }

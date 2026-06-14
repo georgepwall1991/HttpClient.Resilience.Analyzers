@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -32,7 +33,8 @@ internal sealed class ServiceRegistrationModel
 
     public bool MatchesAnyType(ISet<string> typeNames)
     {
-        return typeNames.Contains(ServiceTypeName) ||
-            (ImplementationTypeName is not null && typeNames.Contains(ImplementationTypeName));
+        return TypeNameUtilities.GetComparableNames(ServiceTypeName).Any(typeNames.Contains) ||
+            (ImplementationTypeName is not null &&
+                TypeNameUtilities.GetComparableNames(ImplementationTypeName).Any(typeNames.Contains));
     }
 }
