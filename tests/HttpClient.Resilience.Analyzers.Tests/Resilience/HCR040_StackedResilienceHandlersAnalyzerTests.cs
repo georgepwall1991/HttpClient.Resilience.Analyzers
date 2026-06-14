@@ -165,6 +165,41 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenQualifiedLookalikeBuilderNameIsNotMicrosoftBuilder()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static Custom.IHttpClientBuilder Configure(Custom.IHttpClientBuilder builder)
+                {
+                    return builder
+                        .AddStandardResilienceHandler()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            namespace Custom
+            {
+                public interface IHttpClientBuilder
+                {
+                }
+
+                public static class BuilderExtensions
+                {
+                    public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder)
+                    {
+                        return builder;
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenSameNamedCustomResilienceHandlerIsStacked()
     {
         const string source = """

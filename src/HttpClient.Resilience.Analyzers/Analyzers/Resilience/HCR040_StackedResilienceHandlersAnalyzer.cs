@@ -173,7 +173,8 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
     private static bool IsHttpClientBuilderType(ITypeSymbol? type)
     {
         return type is not null &&
-            type.Name == "IHttpClientBuilder";
+            type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::Microsoft.Extensions.DependencyInjection.IHttpClientBuilder";
     }
 
     private static bool SyntacticReceiverLooksLikeHttpClientBuilder(ExpressionSyntax expression)
@@ -222,8 +223,9 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
         return type switch
         {
             IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "IHttpClientBuilder",
-            QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText == "IHttpClientBuilder",
-            AliasQualifiedNameSyntax aliasQualified => aliasQualified.Name.Identifier.ValueText == "IHttpClientBuilder",
+            QualifiedNameSyntax qualified => qualified.ToString() == "Microsoft.Extensions.DependencyInjection.IHttpClientBuilder" ||
+                qualified.ToString() == "global::Microsoft.Extensions.DependencyInjection.IHttpClientBuilder",
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() == "global::Microsoft.Extensions.DependencyInjection.IHttpClientBuilder",
             _ => false
         };
     }
