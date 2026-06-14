@@ -206,6 +206,43 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenTaskWhenAllFanOutIsGatedByThisQualifiedSemaphoreField()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                private readonly SemaphoreSlim _semaphore = new(8);
+
+                public Task SendAsync(HttpClient client, IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(urls.Select(async url =>
+                    {
+                        await this._semaphore.WaitAsync(cancellationToken);
+                        try
+                        {
+                            await client.GetAsync(url, cancellationToken);
+                        }
+                        finally
+                        {
+                            this._semaphore.Release();
+                        }
+                    }));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenSemaphoreWaitAndReleaseUseDifferentReceivers()
     {
         const string source = """
@@ -233,6 +270,52 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
                             releaseSemaphore.Release();
                         }
                     }));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenGateIsLookalikeWaitAndReleaseType()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(HttpClient client, IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    var gate = new CustomGate();
+                    return Task.WhenAll(urls.Select(async url =>
+                    {
+                        await gate.WaitAsync(cancellationToken);
+                        try
+                        {
+                            await client.GetAsync(url, cancellationToken);
+                        }
+                        finally
+                        {
+                            gate.Release();
+                        }
+                    }));
+                }
+            }
+
+            public sealed class CustomGate
+            {
+                public Task WaitAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+                public void Release()
+                {
                 }
             }
             """;

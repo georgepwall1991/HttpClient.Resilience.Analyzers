@@ -121,7 +121,7 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         return invocation.ArgumentList.Arguments
             .Select(argument => argument.Expression)
             .OfType<LambdaExpressionSyntax>()
-            .Any(lambda => !UsesSemaphoreGate(lambda) &&
+            .Any(lambda => !UsesSemaphoreGate(lambda, semanticModel, cancellationToken) &&
                 lambda.Body.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>().Any(
                     invocation => IsUnboundedHttpCall(invocation, semanticModel, cancellationToken)));
     }
@@ -368,14 +368,18 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    private static bool UsesSemaphoreGate(LambdaExpressionSyntax lambda)
+    private static bool UsesSemaphoreGate(
+        LambdaExpressionSyntax lambda,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         var semaphoreWaitReceivers = lambda.Body
             .DescendantNodesAndSelf()
             .OfType<InvocationExpressionSyntax>()
             .Select(invocation => invocation.Expression)
             .OfType<MemberAccessExpressionSyntax>()
-            .Where(memberAccess => memberAccess.Name.Identifier.ValueText == "WaitAsync")
+            .Where(memberAccess => memberAccess.Name.Identifier.ValueText == "WaitAsync" &&
+                IsSemaphoreSlimReceiver(memberAccess.Expression, semanticModel, cancellationToken))
             .Select(memberAccess => memberAccess.Expression.ToString())
             .ToArray();
 
@@ -390,6 +394,89 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             .Select(invocation => invocation.Expression)
             .OfType<MemberAccessExpressionSyntax>()
             .Any(memberAccess => memberAccess.Name.Identifier.ValueText == "Release" &&
+                IsSemaphoreSlimReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
                 semaphoreWaitReceivers.Contains(memberAccess.Expression.ToString(), System.StringComparer.Ordinal));
+    }
+
+    private static bool IsSemaphoreSlimReceiver(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var expressionType = semanticModel.GetTypeInfo(expression, cancellationToken).Type;
+        if (expressionType is not null && expressionType is not IErrorTypeSymbol)
+        {
+            return IsSemaphoreSlim(expressionType);
+        }
+
+        var symbolType = semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
+        {
+            ILocalSymbol local => local.Type,
+            IFieldSymbol field => field.Type,
+            IPropertySymbol property => property.Type,
+            _ => null
+        };
+
+        if (symbolType is not null && symbolType is not IErrorTypeSymbol)
+        {
+            return IsSemaphoreSlim(symbolType);
+        }
+
+        return SyntacticReceiverLooksLikeSemaphoreSlim(expression);
+    }
+
+    private static bool IsSemaphoreSlim(ITypeSymbol type)
+    {
+        return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::System.Threading.SemaphoreSlim";
+    }
+
+    private static bool SyntacticReceiverLooksLikeSemaphoreSlim(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => LocalLooksLikeSemaphoreSlim(identifier) ||
+                FieldOrPropertyLooksLikeSemaphoreSlim(identifier),
+            MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax, Name: IdentifierNameSyntax name } =>
+                FieldOrPropertyLooksLikeSemaphoreSlim(name),
+            _ => false
+        };
+    }
+
+    private static bool LocalLooksLikeSemaphoreSlim(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<BlockSyntax>()?
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+                variable.Parent is VariableDeclarationSyntax declaration &&
+                (IsSemaphoreSlimName(declaration.Type) ||
+                    variable.Initializer?.Value is BaseObjectCreationExpressionSyntax creation &&
+                    IsSemaphoreSlimCreation(creation))) == true;
+    }
+
+    private static bool FieldOrPropertyLooksLikeSemaphoreSlim(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
+            .Members
+            .Any(member => member switch
+            {
+                FieldDeclarationSyntax field => IsSemaphoreSlimName(field.Declaration.Type) &&
+                    field.Declaration.Variables.Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText),
+                PropertyDeclarationSyntax property => IsSemaphoreSlimName(property.Type) &&
+                    property.Identifier.ValueText == identifier.Identifier.ValueText,
+                _ => false
+            }) == true;
+    }
+
+    private static bool IsSemaphoreSlimName(TypeSyntax type)
+    {
+        return type.ToString().EndsWith("SemaphoreSlim", System.StringComparison.Ordinal);
+    }
+
+    private static bool IsSemaphoreSlimCreation(BaseObjectCreationExpressionSyntax creation)
+    {
+        return creation is ObjectCreationExpressionSyntax objectCreation &&
+            objectCreation.Type.ToString().EndsWith("SemaphoreSlim", System.StringComparison.Ordinal);
     }
 }
