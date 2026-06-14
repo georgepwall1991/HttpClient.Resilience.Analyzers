@@ -219,6 +219,52 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenLookalikeTypedClientRegistrationIsNotIServiceCollection()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static CustomBuilder Configure(CustomServices services)
+                {
+                    return services
+                        .AddHttpClient<PaymentsClient>()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public sealed class CustomServices
+            {
+            }
+
+            public sealed class CustomBuilder
+            {
+            }
+
+            public static class CustomBuilderExtensions
+            {
+                public static CustomBuilder AddHttpClient<TClient>(this CustomServices services) => new();
+                public static CustomBuilder AddStandardResilienceHandler(this CustomBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenUnsafeMethodsAreDisabled()
     {
         const string source = """
@@ -913,6 +959,58 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
             {
                 public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name) => null!;
                 public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenLookalikeNamedClientRegistrationIsNotIServiceCollection()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static CustomBuilder Configure(CustomServices services)
+                {
+                    return services
+                        .AddHttpClient("payments")
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class PaymentJob(IHttpClientFactory factory)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    var client = factory.CreateClient("payments");
+                    return client.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+
+            public sealed class CustomServices
+            {
+            }
+
+            public sealed class CustomBuilder
+            {
+            }
+
+            public static class CustomBuilderExtensions
+            {
+                public static CustomBuilder AddHttpClient(this CustomServices services, string name) => new();
+                public static CustomBuilder AddStandardResilienceHandler(this CustomBuilder builder) => builder;
             }
             """;
 

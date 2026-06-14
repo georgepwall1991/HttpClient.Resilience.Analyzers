@@ -69,7 +69,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        var typedClient = FindTypedClientInChain(invocation);
+        var typedClient = FindTypedClientInChain(invocation, context.SemanticModel, context.CancellationToken);
 
         if (typedClient is not null && TypedClientSendsUnsafeHttpMethod(roots, typedClient))
         {
@@ -77,7 +77,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        var namedClient = FindNamedClientInChain(invocation);
+        var namedClient = FindNamedClientInChain(invocation, context.SemanticModel, context.CancellationToken);
         if (namedClient is not null && NamedClientSendsUnsafeHttpMethod(roots, namedClient))
         {
             ReportDiagnostic(context, invocation);
@@ -146,7 +146,10 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             !httpMethods.Any(method => UnsafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal));
     }
 
-    private static string? FindTypedClientInChain(InvocationExpressionSyntax invocation)
+    private static string? FindTypedClientInChain(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         ExpressionSyntax current = invocation;
 
@@ -159,7 +162,8 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                         Identifier.ValueText: "AddHttpClient",
                         TypeArgumentList.Arguments.Count: 1
                     } genericName
-                })
+                } addHttpClientAccess &&
+                IsServiceCollectionReceiver(addHttpClientAccess.Expression, semanticModel, cancellationToken))
             {
                 return genericName.TypeArgumentList.Arguments[0].ToString();
             }
@@ -175,7 +179,10 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         return null;
     }
 
-    private static string? FindNamedClientInChain(InvocationExpressionSyntax invocation)
+    private static string? FindNamedClientInChain(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         ExpressionSyntax current = invocation;
 
@@ -184,7 +191,8 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             if (currentInvocation.Expression is MemberAccessExpressionSyntax
                 {
                     Name.Identifier.ValueText: "AddHttpClient"
-                } &&
+                } addHttpClientAccess &&
+                IsServiceCollectionReceiver(addHttpClientAccess.Expression, semanticModel, cancellationToken) &&
                 currentInvocation.ArgumentList.Arguments.Count > 0 &&
                 TryGetStringLiteral(currentInvocation.ArgumentList.Arguments[0].Expression) is { } clientName)
             {
@@ -200,6 +208,103 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         }
 
         return null;
+    }
+
+    private static bool IsServiceCollectionReceiver(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return IsServiceCollectionType(semanticModel.GetTypeInfo(expression, cancellationToken).Type) ||
+            semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
+            {
+                ILocalSymbol local => IsServiceCollectionType(local.Type) || SyntacticDeclarationLooksLikeServiceCollection(local),
+                IParameterSymbol parameter => IsServiceCollectionType(parameter.Type) || SyntacticDeclarationLooksLikeServiceCollection(parameter),
+                IFieldSymbol field => IsServiceCollectionType(field.Type) || SyntacticDeclarationLooksLikeServiceCollection(field),
+                IPropertySymbol property => IsServiceCollectionType(property.Type) || SyntacticDeclarationLooksLikeServiceCollection(property),
+                _ => false
+            } ||
+            SyntacticReceiverLooksLikeServiceCollection(expression);
+    }
+
+    private static bool IsServiceCollectionType(ITypeSymbol? type)
+    {
+        return type is not null &&
+            type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::Microsoft.Extensions.DependencyInjection.IServiceCollection";
+    }
+
+    private static bool SyntacticDeclarationLooksLikeServiceCollection(ISymbol symbol)
+    {
+        return symbol.DeclaringSyntaxReferences
+            .Select(reference => reference.GetSyntax())
+            .Any(syntax => syntax switch
+            {
+                ParameterSyntax parameter => parameter.Type is not null &&
+                    IsServiceCollectionTypeName(parameter.Type),
+                VariableDeclaratorSyntax variable => variable.Parent is VariableDeclarationSyntax declaration &&
+                    IsServiceCollectionTypeName(declaration.Type),
+                PropertyDeclarationSyntax property => IsServiceCollectionTypeName(property.Type),
+                _ => false
+            });
+    }
+
+    private static bool SyntacticReceiverLooksLikeServiceCollection(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText is "services" or "serviceCollection" &&
+                (ParameterLooksLikeServiceCollection(identifier) ||
+                    LocalLooksLikeServiceCollection(identifier) ||
+                    FieldOrPropertyLooksLikeServiceCollection(identifier)),
+            MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Services" } => true,
+            _ => false
+        };
+    }
+
+    private static bool ParameterLooksLikeServiceCollection(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<BaseMethodDeclarationSyntax>()?
+            .ParameterList.Parameters
+            .Any(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText &&
+                parameter.Type is not null &&
+                IsServiceCollectionTypeName(parameter.Type)) == true;
+    }
+
+    private static bool LocalLooksLikeServiceCollection(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<BlockSyntax>()?
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+                variable.Parent is VariableDeclarationSyntax declaration &&
+                IsServiceCollectionTypeName(declaration.Type)) == true;
+    }
+
+    private static bool FieldOrPropertyLooksLikeServiceCollection(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
+            .Members
+            .Any(member => member switch
+            {
+                FieldDeclarationSyntax field => IsServiceCollectionTypeName(field.Declaration.Type) &&
+                    field.Declaration.Variables.Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText),
+                PropertyDeclarationSyntax property => IsServiceCollectionTypeName(property.Type) &&
+                    property.Identifier.ValueText == identifier.Identifier.ValueText,
+                _ => false
+            }) == true;
+    }
+
+    private static bool IsServiceCollectionTypeName(TypeSyntax type)
+    {
+        return type switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "IServiceCollection",
+            QualifiedNameSyntax qualified => qualified.ToString() == "Microsoft.Extensions.DependencyInjection.IServiceCollection" ||
+                qualified.ToString() == "global::Microsoft.Extensions.DependencyInjection.IServiceCollection",
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() == "global::Microsoft.Extensions.DependencyInjection.IServiceCollection",
+            _ => false
+        };
     }
 
     private static bool TypedClientSendsUnsafeHttpMethod(IEnumerable<SyntaxNode> roots, string typedClient)
