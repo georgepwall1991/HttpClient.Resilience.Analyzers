@@ -47,7 +47,7 @@ Implemented diagnostic slices:
 - `HCR040` for duplicate `AddStandardResilienceHandler()` calls or same-name custom resilience handlers in one fluent `AddHttpClient`/`IHttpClientBuilder` chain, with lookalike-builder filtering and a code fix.
 - `HCR041` for standard resilience handlers paired with visible unsafe typed-client or named-client calls across the compilation, including namespace-aware qualified typed-client names, typed-client `HttpClient` receiver validation, unsafe `HttpRequestMessage` `Send`/`SendAsync` shapes, retry-guard detection, and a code fix.
 - `HCR060` for undisposed awaited `ResponseHeadersRead` HTTP responses, with task-local filtering, returned-owner transfer heuristics, and a simple code fix.
-- `HCR080` for obvious unbounded `Task.WhenAll` HTTP fan-out, with `HttpClient` receiver validation plus bounded-concurrency and connection-limit exclusions.
+- `HCR080` for obvious unbounded `Task.WhenAll` HTTP fan-out, with BCL `Task` and `HttpClient` receiver validation plus bounded-concurrency and connection-limit exclusions.
 
 ## Example
 

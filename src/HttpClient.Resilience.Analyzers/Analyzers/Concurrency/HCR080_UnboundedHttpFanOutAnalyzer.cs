@@ -36,7 +36,8 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
-        if (!IsTaskWhenAll(invocation) || invocation.ArgumentList.Arguments.Count == 0)
+        if (!IsTaskWhenAll(invocation, context.SemanticModel, context.CancellationToken) ||
+            invocation.ArgumentList.Arguments.Count == 0)
         {
             return;
         }
@@ -55,11 +56,40 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             memberAccess.Name.GetLocation()));
     }
 
-    private static bool IsTaskWhenAll(InvocationExpressionSyntax invocation)
+    private static bool IsTaskWhenAll(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsBclTaskWhenAll(method);
+        }
+
+        if (symbolInfo.CandidateSymbols.Length > 0)
+        {
+            return symbolInfo.CandidateSymbols
+                .OfType<IMethodSymbol>()
+                .Any(IsBclTaskWhenAll);
+        }
+
+        return IsSyntacticTaskWhenAll(invocation);
+    }
+
+    private static bool IsBclTaskWhenAll(IMethodSymbol method)
+    {
+        return method.Name == "WhenAll" &&
+            method.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::System.Threading.Tasks.Task";
+    }
+
+    private static bool IsSyntacticTaskWhenAll(InvocationExpressionSyntax invocation)
     {
         return invocation.Expression is MemberAccessExpressionSyntax
         {
-            Expression: IdentifierNameSyntax { Identifier.ValueText: "Task" },
+            Expression: IdentifierNameSyntax { Identifier.ValueText: "Task" } or
+                MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Task" },
             Name.Identifier.ValueText: "WhenAll"
         };
     }

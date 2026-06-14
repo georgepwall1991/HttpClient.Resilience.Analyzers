@@ -32,6 +32,31 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenFullyQualifiedTaskWhenAllFansOutHttpCalls()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(HttpClient client, IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    return System.Threading.Tasks.Task.WhenAll(urls.Select(url => client.GetAsync(url, cancellationToken)));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenTaskWhenAllDoesNotContainHttpCall()
     {
         const string source = """
@@ -45,6 +70,34 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
                 {
                     return Task.WhenAll(urls.Select(url => Task.FromResult(url)));
                 }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenLookalikeTaskWhenAllFansOutHttpCalls()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+
+            public sealed class FanOutService
+            {
+                public object Send(HttpClient client, IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(urls.Select(url => client.GetAsync(url, cancellationToken)));
+                }
+            }
+
+            public static class Task
+            {
+                public static object WhenAll<T>(IEnumerable<T> values) => new();
             }
             """;
 
