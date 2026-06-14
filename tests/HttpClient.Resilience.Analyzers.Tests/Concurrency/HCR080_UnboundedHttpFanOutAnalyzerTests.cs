@@ -54,6 +54,36 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenTaskWhenAllFansOutLookalikeGetAsyncCalls()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(CustomClient client, IEnumerable<string> urls)
+                {
+                    return Task.WhenAll(urls.Select(url => client.GetAsync(url)));
+                }
+            }
+
+            public sealed class CustomClient
+            {
+                public Task<string> GetAsync(string value)
+                {
+                    return Task.FromResult(value);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenTaskWhenAllFanOutIsGatedBySemaphore()
     {
         const string source = """

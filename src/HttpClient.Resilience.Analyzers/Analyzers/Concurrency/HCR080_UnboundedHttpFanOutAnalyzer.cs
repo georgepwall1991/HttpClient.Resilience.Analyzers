@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Collections.Generic;
 using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
+using HttpClient.Resilience.Analyzers.KnownSymbols;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -40,7 +41,10 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        if (!ContainsSelectWithHttpCall(invocation.ArgumentList.Arguments[0].Expression))
+        if (!ContainsSelectWithHttpCall(
+            invocation.ArgumentList.Arguments[0].Expression,
+            context.SemanticModel,
+            context.CancellationToken))
         {
             return;
         }
@@ -60,15 +64,21 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    private static bool ContainsSelectWithHttpCall(ExpressionSyntax expression)
+    private static bool ContainsSelectWithHttpCall(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         return expression
             .DescendantNodesAndSelf()
             .OfType<InvocationExpressionSyntax>()
-            .Any(IsSelectInvocationWithHttpCall);
+            .Any(invocation => IsSelectInvocationWithHttpCall(invocation, semanticModel, cancellationToken));
     }
 
-    private static bool IsSelectInvocationWithHttpCall(InvocationExpressionSyntax invocation)
+    private static bool IsSelectInvocationWithHttpCall(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         if (invocation.Expression is not MemberAccessExpressionSyntax
             {
@@ -82,18 +92,89 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             .Select(argument => argument.Expression)
             .OfType<LambdaExpressionSyntax>()
             .Any(lambda => !UsesSemaphoreGate(lambda) &&
-                lambda.Body.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>().Any(IsUnboundedHttpCall));
+                lambda.Body.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>().Any(
+                    invocation => IsUnboundedHttpCall(invocation, semanticModel, cancellationToken)));
     }
 
-    private static bool IsHttpCall(InvocationExpressionSyntax invocation)
+    private static bool IsHttpCall(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         return invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
-            HttpCallMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal);
+            HttpCallMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
+            IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken);
     }
 
-    private static bool IsUnboundedHttpCall(InvocationExpressionSyntax invocation)
+    private static bool IsUnboundedHttpCall(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
-        return IsHttpCall(invocation) && !UsesConnectionLimitedClient(invocation);
+        return IsHttpCall(invocation, semanticModel, cancellationToken) && !UsesConnectionLimitedClient(invocation);
+    }
+
+    private static bool IsHttpClientReceiver(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (HttpClientSymbols.IsHttpClient(semanticModel.GetTypeInfo(expression, cancellationToken).Type))
+        {
+            return true;
+        }
+
+        return semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
+        {
+            ILocalSymbol local => HttpClientSymbols.IsHttpClient(local.Type),
+            IParameterSymbol parameter => HttpClientSymbols.IsHttpClient(parameter.Type),
+            IFieldSymbol field => HttpClientSymbols.IsHttpClient(field.Type),
+            IPropertySymbol property => HttpClientSymbols.IsHttpClient(property.Type),
+            _ => false
+        } || SyntacticReceiverLooksLikeHttpClient(expression);
+    }
+
+    private static bool SyntacticReceiverLooksLikeHttpClient(ExpressionSyntax expression)
+    {
+        return expression is IdentifierNameSyntax identifier &&
+            (ParameterLooksLikeHttpClient(identifier) ||
+                LocalLooksLikeHttpClient(identifier) ||
+                FieldOrPropertyLooksLikeHttpClient(identifier));
+    }
+
+    private static bool ParameterLooksLikeHttpClient(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<BaseMethodDeclarationSyntax>()?
+            .ParameterList.Parameters
+            .Any(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText &&
+                parameter.Type is not null &&
+                HttpClientSymbols.IsHttpClientName(parameter.Type)) == true;
+    }
+
+    private static bool LocalLooksLikeHttpClient(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<BlockSyntax>()?
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+                variable.Parent is VariableDeclarationSyntax declaration &&
+                (HttpClientSymbols.IsHttpClientName(declaration.Type) ||
+                    variable.Initializer?.Value is BaseObjectCreationExpressionSyntax creation &&
+                    IsHttpClientCreation(creation))) == true;
+    }
+
+    private static bool FieldOrPropertyLooksLikeHttpClient(IdentifierNameSyntax identifier)
+    {
+        return identifier.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
+            .Members
+            .Any(member => member switch
+            {
+                FieldDeclarationSyntax field => HttpClientSymbols.IsHttpClientName(field.Declaration.Type) &&
+                    field.Declaration.Variables.Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText),
+                PropertyDeclarationSyntax property => HttpClientSymbols.IsHttpClientName(property.Type) &&
+                    property.Identifier.ValueText == identifier.Identifier.ValueText,
+                _ => false
+            }) == true;
     }
 
     private static bool UsesConnectionLimitedClient(InvocationExpressionSyntax invocation)
