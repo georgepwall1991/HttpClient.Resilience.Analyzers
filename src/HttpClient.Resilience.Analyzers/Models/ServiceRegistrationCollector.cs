@@ -97,9 +97,14 @@ internal static class ServiceRegistrationCollector
             return null;
         }
 
-        string? implementationType = null;
+        var implementationType = invocation.ArgumentList.Arguments.Count == 2 &&
+            TryGetTypeofArgument(invocation.ArgumentList.Arguments[1], out var secondType)
+                ? secondType
+                : null;
+
         if (invocation.ArgumentList.Arguments.Count == 2 &&
-            !TryGetTypeofArgument(invocation.ArgumentList.Arguments[1], out implementationType))
+            implementationType is null &&
+            !IsSupportedNonTypeofRegistrationArgument(invocation.ArgumentList.Arguments[1]))
         {
             return null;
         }
@@ -122,6 +127,16 @@ internal static class ServiceRegistrationCollector
 
         typeName = string.Empty;
         return false;
+    }
+
+    private static bool IsSupportedNonTypeofRegistrationArgument(ArgumentSyntax argument)
+    {
+        return argument.Expression is
+            LambdaExpressionSyntax or
+            AnonymousMethodExpressionSyntax or
+            BaseObjectCreationExpressionSyntax or
+            IdentifierNameSyntax or
+            MemberAccessExpressionSyntax;
     }
 
     private static ServiceRegistrationKind? TryGetKind(string methodName)

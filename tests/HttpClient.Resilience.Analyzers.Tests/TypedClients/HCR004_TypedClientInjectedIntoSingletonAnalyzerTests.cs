@@ -209,6 +209,50 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenTypeofSingletonFactoryResolvesTypedClient()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton(typeof(PaymentJob), sp => PaymentJob.Create(sp.GetRequiredService<PaymentsClient>()));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentJob
+            {
+                public static PaymentJob Create(PaymentsClient paymentsClient) => new();
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton(this IServiceCollection services, System.Type serviceType, System.Func<System.IServiceProvider, object> factory) => services;
+            }
+
+            public static class ServiceProviderExtensions
+            {
+                public static TService GetRequiredService<TService>(this System.IServiceProvider provider) => default!;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenSingletonFactoryResolvesLazyTypedClient()
     {
         const string source = """
