@@ -51,7 +51,7 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
         }
 
         var assignedSymbol = context.SemanticModel.GetSymbolInfo(assignment.Left, context.CancellationToken).Symbol;
-        if (!IsLongLivedMember(assignedSymbol, singletonTypes))
+        if (!IsLongLivedHttpClientMember(assignedSymbol, singletonTypes))
         {
             return;
         }
@@ -76,7 +76,8 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        if (!IsLongLivedField(field, singletonTypes))
+        if (!IsLongLivedField(field, singletonTypes) ||
+            !IsHttpClientField(field))
         {
             return;
         }
@@ -100,7 +101,8 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        if (!IsLongLivedProperty(propertySymbol, singletonTypes))
+        if (!IsLongLivedProperty(propertySymbol, singletonTypes) ||
+            !IsHttpClientProperty(propertySymbol))
         {
             return;
         }
@@ -330,14 +332,35 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             singletonTypes.Any(typeName => MatchesContainingType(property.ContainingType, typeName));
     }
 
-    private static bool IsLongLivedMember(ISymbol? symbol, IReadOnlyCollection<string> singletonTypes)
+    private static bool IsLongLivedHttpClientMember(ISymbol? symbol, IReadOnlyCollection<string> singletonTypes)
     {
         return symbol switch
         {
-            IFieldSymbol field => IsLongLivedField(field, singletonTypes),
-            IPropertySymbol property => IsLongLivedProperty(property, singletonTypes),
+            IFieldSymbol field => IsLongLivedField(field, singletonTypes) &&
+                IsHttpClientField(field),
+            IPropertySymbol property => IsLongLivedProperty(property, singletonTypes) &&
+                IsHttpClientProperty(property),
             _ => false
         };
+    }
+
+    private static bool IsHttpClientField(IFieldSymbol field)
+    {
+        return HttpClientSymbols.IsHttpClient(field.Type) ||
+            field.DeclaringSyntaxReferences
+                .Select(reference => reference.GetSyntax())
+                .OfType<VariableDeclaratorSyntax>()
+                .Any(variable => variable.Parent is VariableDeclarationSyntax declaration &&
+                    HttpClientSymbols.IsHttpClientName(declaration.Type));
+    }
+
+    private static bool IsHttpClientProperty(IPropertySymbol property)
+    {
+        return HttpClientSymbols.IsHttpClient(property.Type) ||
+            property.DeclaringSyntaxReferences
+                .Select(reference => reference.GetSyntax())
+                .OfType<PropertyDeclarationSyntax>()
+                .Any(propertyDeclaration => HttpClientSymbols.IsHttpClientName(propertyDeclaration.Type));
     }
 
     private static bool MatchesContainingType(INamedTypeSymbol containingType, string registrationTypeName)
