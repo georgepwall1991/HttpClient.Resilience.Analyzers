@@ -28,15 +28,18 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzer : Diagnostic
         var typedClientRegistrations = registrations
             .Where(registration => registration.Kind == ServiceRegistrationKind.HttpClient)
             .ToArray();
-        var typedClients = ServiceRegistrationCollector.GetTypedClientTypeNames(typedClientRegistrations);
-        if (typedClients.Count == 0)
+        if (typedClientRegistrations.Length == 0)
         {
             return;
         }
 
         foreach (var registration in registrations.Where(IsStandaloneServiceRegistration))
         {
-            if (!MatchesAnyTypedClientRegistration(registration, typedClientRegistrations))
+            if (!MatchesAnyTypedClientRegistration(
+                    registration,
+                    typedClientRegistrations,
+                    context.Compilation,
+                    context.CancellationToken))
             {
                 continue;
             }
@@ -65,35 +68,120 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzer : Diagnostic
 
     private static bool MatchesAnyTypedClientRegistration(
         ServiceRegistrationModel registration,
-        IEnumerable<ServiceRegistrationModel> typedClientRegistrations)
+        IEnumerable<ServiceRegistrationModel> typedClientRegistrations,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
-        return GetRegisteredTypeNames(registration)
+        var registrationTypes = GetRegisteredTypeNames(registration, compilation, cancellationToken).ToArray();
+
+        return registrationTypes
             .Any(registrationTypeName => typedClientRegistrations
-                .SelectMany(GetRegisteredTypeNames)
+                .SelectMany(typedClientRegistration => GetRegisteredTypeNames(
+                    typedClientRegistration,
+                    compilation,
+                    cancellationToken))
                 .Any(typedClientTypeName => TypeNamesMatch(registrationTypeName, typedClientTypeName)));
     }
 
-    private static IEnumerable<string> GetRegisteredTypeNames(ServiceRegistrationModel registration)
+    private static IEnumerable<RegisteredTypeName> GetRegisteredTypeNames(
+        ServiceRegistrationModel registration,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
-        yield return registration.ServiceTypeName;
+        var resolvedTypeNames = GetResolvedRegistrationTypeNames(registration, compilation, cancellationToken)
+            .ToArray();
+
+        yield return CreateRegisteredTypeName(registration.ServiceTypeName, resolvedTypeNames);
 
         if (registration.ImplementationTypeName is not null)
         {
-            yield return registration.ImplementationTypeName;
+            yield return CreateRegisteredTypeName(registration.ImplementationTypeName, resolvedTypeNames);
         }
     }
 
-    private static bool TypeNamesMatch(string left, string right)
+    private static RegisteredTypeName CreateRegisteredTypeName(
+        string typeName,
+        IReadOnlyCollection<string> resolvedTypeNames)
     {
-        left = NormalizeTypeName(left);
-        right = NormalizeTypeName(right);
+        typeName = NormalizeTypeName(typeName);
+        var simpleName = TypeNameUtilities.ToSimpleName(typeName);
+        var resolvedTypeName = resolvedTypeNames.FirstOrDefault(resolved =>
+            resolved == typeName ||
+            TypeNameUtilities.ToSimpleName(resolved) == simpleName);
 
-        if (IsQualifiedTypeName(left) && IsQualifiedTypeName(right))
+        return new RegisteredTypeName(typeName, resolvedTypeName);
+    }
+
+    private static IEnumerable<string> GetResolvedRegistrationTypeNames(
+        ServiceRegistrationModel registration,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var semanticModel = GetSemanticModel(compilation, registration.Invocation.SyntaxTree);
+
+        foreach (var type in GetRegistrationTypeSyntaxes(registration.Invocation))
         {
-            return left == right;
+            var resolvedType = semanticModel.GetTypeInfo(type, cancellationToken).Type;
+            if (resolvedType is null || resolvedType is IErrorTypeSymbol)
+            {
+                continue;
+            }
+
+            yield return NormalizeTypeName(resolvedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        }
+    }
+
+    private static IEnumerable<TypeSyntax> GetRegistrationTypeSyntaxes(InvocationExpressionSyntax invocation)
+    {
+        if (invocation.Expression is MemberAccessExpressionSyntax
+            {
+                Name: GenericNameSyntax genericName
+            })
+        {
+            foreach (var argument in genericName.TypeArgumentList.Arguments)
+            {
+                yield return argument;
+            }
         }
 
-        return TypeNameUtilities.ToSimpleName(left) == TypeNameUtilities.ToSimpleName(right);
+        foreach (var typeOfExpression in invocation.ArgumentList.Arguments
+            .Select(argument => argument.Expression)
+            .OfType<TypeOfExpressionSyntax>())
+        {
+            yield return typeOfExpression.Type;
+        }
+
+        foreach (var objectCreation in invocation.ArgumentList.Arguments
+            .SelectMany(argument => argument.Expression.DescendantNodesAndSelf())
+            .OfType<ObjectCreationExpressionSyntax>())
+        {
+            yield return objectCreation.Type;
+        }
+    }
+
+    private static bool TypeNamesMatch(RegisteredTypeName left, RegisteredTypeName right)
+    {
+        if (left.ResolvedTypeName is not null && right.ResolvedTypeName is not null)
+        {
+            return left.ResolvedTypeName == right.ResolvedTypeName;
+        }
+
+        if (left.ResolvedTypeName is not null && IsQualifiedTypeName(right.RawTypeName))
+        {
+            return left.ResolvedTypeName == right.RawTypeName;
+        }
+
+        if (right.ResolvedTypeName is not null && IsQualifiedTypeName(left.RawTypeName))
+        {
+            return right.ResolvedTypeName == left.RawTypeName;
+        }
+
+        if (IsQualifiedTypeName(left.RawTypeName) && IsQualifiedTypeName(right.RawTypeName))
+        {
+            return left.RawTypeName == right.RawTypeName;
+        }
+
+        return TypeNameUtilities.ToSimpleName(left.RawTypeName) == TypeNameUtilities.ToSimpleName(right.RawTypeName);
     }
 
     private static string NormalizeTypeName(string typeName)
@@ -107,5 +195,25 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzer : Diagnostic
     private static bool IsQualifiedTypeName(string typeName)
     {
         return typeName.Contains(".");
+    }
+
+#pragma warning disable RS1030 // HCR005 performs compilation-wide DI matching and needs cross-tree semantic type checks.
+    private static SemanticModel GetSemanticModel(Compilation compilation, SyntaxTree syntaxTree)
+    {
+        return compilation.GetSemanticModel(syntaxTree);
+    }
+#pragma warning restore RS1030
+
+    private sealed class RegisteredTypeName
+    {
+        public RegisteredTypeName(string rawTypeName, string? resolvedTypeName)
+        {
+            RawTypeName = rawTypeName;
+            ResolvedTypeName = resolvedTypeName;
+        }
+
+        public string RawTypeName { get; }
+
+        public string? ResolvedTypeName { get; }
     }
 }
