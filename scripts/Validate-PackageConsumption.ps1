@@ -61,6 +61,7 @@ dotnet_diagnostic.HCR063.severity = warning
 dotnet_diagnostic.HCR064.severity = warning
 dotnet_diagnostic.HCR080.severity = warning
 dotnet_diagnostic.HCR081.severity = warning
+dotnet_diagnostic.HCR082.severity = warning
 "@ | Set-Content -LiteralPath $editorConfigPath
 
     @"
@@ -238,6 +239,15 @@ public sealed class BadUndisposedStreamService
     }
 }
 
+public sealed class BadPerRequestPipelineService
+{
+    public void Send()
+    {
+        var pipeline = new Polly.ResiliencePipelineBuilder().Build();
+        pipeline.Execute();
+    }
+}
+
 public interface IServiceCollection
 {
 }
@@ -286,6 +296,24 @@ public static class HttpClientBuilderExtensions
     {
     }
 }
+
+namespace Polly
+{
+    public sealed class ResiliencePipeline
+    {
+        public void Execute()
+        {
+        }
+    }
+
+    public sealed class ResiliencePipelineBuilder
+    {
+        public ResiliencePipeline Build()
+        {
+            return new ResiliencePipeline();
+        }
+    }
+}
 "@ | Set-Content -LiteralPath $programPath
 
     $restoreOutput = & dotnet restore $projectPath 2>&1
@@ -318,7 +346,8 @@ public static class HttpClientBuilderExtensions
         'HCR063',
         'HCR064',
         'HCR080',
-        'HCR081'
+        'HCR081',
+        'HCR082'
     )
 
     $missingDiagnostics = @(

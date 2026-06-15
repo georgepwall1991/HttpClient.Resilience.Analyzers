@@ -21,6 +21,7 @@ This project currently implements every MVP diagnostic ID from the starter docum
 | `HCR064` | Yes | Guide | Cancellation-aware HTTP API detection for visible `HttpClient` async calls and common `HttpContent` async reads that omit an available `CancellationToken`, including method/lambda parameter and prior-local token discovery, token overload validation, existing-token argument recognition, no-visible-token filtering, and resolved custom-client filtering. |
 | `HCR080` | Yes | Guide | Obvious unbounded `Task.WhenAll` HTTP fan-out with inline or visible unreassigned local LINQ `Select(...)` task sequences, BCL `Task`, and resolved `HttpClient` receiver validation; skips symbol-equivalent or visibly declared same-receiver `SemaphoreSlim` gates, bounded `Parallel.ForEachAsync`, reassignment-aware local/member clients backed by real `SocketsHttpHandler.MaxConnectionsPerServer` evidence including `this.`-qualified members and shared handler fields, and resolved custom clients, lookalike async methods, custom `Select(...)` methods, or lookalike handler limit properties. |
 | `HCR081` | Yes | Guide | HTTP stream ownership detection for streams materialized from `HttpClient.GetStreamAsync(...)` or `HttpContent.ReadAsStreamAsync(...)`, including local declarations and assignments, direct dispose or dispose-async recognition, using statement/declaration ownership, return and returned-wrapper ownership transfer, reassignment checks, and resolved custom-client filtering. |
+| `HCR082` | Yes | Guide | Per-request `Polly.ResiliencePipelineBuilder.Build()` detection inside obvious request paths, including controller/service-style type suffixes and Minimal API endpoint lambdas, visible builder-local tracking, fluent builder chains, static-field/startup/test-context filtering, and resolved custom-builder filtering. |
 
 ## Current Limitations
 
@@ -29,3 +30,4 @@ This project currently implements every MVP diagnostic ID from the starter docum
 - `HCR060` uses local ownership heuristics rather than full control-flow analysis.
 - `HCR080` is intentionally suggestion-level and heuristic.
 - `HCR081` tracks local stream ownership heuristically rather than full interprocedural ownership flow.
+- `HCR082` intentionally limits request-path evidence to visible type names and Minimal API shapes; it does not infer arbitrary framework dispatch conventions.

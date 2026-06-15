@@ -41,7 +41,8 @@ $expectedDiagnosticIds = @(
     'HCR063',
     'HCR064',
     'HCR080',
-    'HCR081'
+    'HCR081',
+    'HCR082'
 )
 
 $unexpectedIds = @($diagnosticIds | Where-Object { $expectedDiagnosticIds -notcontains $_ })

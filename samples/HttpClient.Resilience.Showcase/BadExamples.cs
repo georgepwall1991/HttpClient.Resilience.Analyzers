@@ -163,6 +163,15 @@ public sealed class BadUndisposedStreamService
     }
 }
 
+public sealed class BadPerRequestPipelineService
+{
+    public void Send()
+    {
+        var pipeline = new Polly.ResiliencePipelineBuilder().Build();
+        pipeline.Execute();
+    }
+}
+
 public interface IServiceCollection
 {
 }
@@ -209,5 +218,23 @@ public static class HttpClientBuilderExtensions
 
     private sealed class DemoHttpClientBuilder : IHttpClientBuilder
     {
+    }
+}
+
+namespace Polly
+{
+    public sealed class ResiliencePipeline
+    {
+        public void Execute()
+        {
+        }
+    }
+
+    public sealed class ResiliencePipelineBuilder
+    {
+        public ResiliencePipeline Build()
+        {
+            return new ResiliencePipeline();
+        }
     }
 }

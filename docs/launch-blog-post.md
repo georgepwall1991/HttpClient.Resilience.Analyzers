@@ -21,6 +21,7 @@ Most .NET services use `HttpClient`, but many production issues come from patter
 - Missing cancellation-token flow into outbound HTTP APIs.
 - Undisposed streams returned from HTTP content.
 - Obvious unbounded `Task.WhenAll` outbound HTTP fan-out.
+- Per-request resilience pipeline construction.
 
 ## Example
 

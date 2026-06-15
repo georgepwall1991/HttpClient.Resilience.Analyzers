@@ -95,6 +95,12 @@ public static class DiagnosticDescriptors
         "Dispose streams returned from HTTP content",
         DiagnosticCategories.ResponseLifetime);
 
+    public static readonly DiagnosticDescriptor HCR082 = Create(
+        DiagnosticIds.HCR082,
+        "Avoid per-request creation of resilience pipelines",
+        "Avoid per-request creation of resilience pipelines",
+        DiagnosticCategories.Resilience);
+
     private static DiagnosticDescriptor Create(
         string id,
         string title,

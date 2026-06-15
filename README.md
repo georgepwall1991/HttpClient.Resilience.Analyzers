@@ -22,6 +22,7 @@ Compile-time safety for `.NET` `HttpClient`, `IHttpClientFactory`, typed clients
 - HTTP calls that omit an available cancellation token.
 - Undisposed streams returned from HTTP content.
 - Obvious unbounded outbound HTTP fan-out.
+- Per-request resilience pipeline construction.
 
 ## Install
 
@@ -59,6 +60,7 @@ Implemented diagnostic slices:
 - `HCR064` for cancellation-aware outbound HTTP, including visible `HttpClient` async calls and common `HttpContent` async reads that omit an available `CancellationToken`, with method/lambda/local token discovery, overload validation, and custom-client filtering.
 - `HCR080` for obvious unbounded `Task.WhenAll` HTTP fan-out, including inline or visible unreassigned local LINQ `Select(...)` task sequences, with BCL `Task` and resolved `HttpClient` receiver validation plus symbol-aware same-receiver `SemaphoreSlim` gating, custom-client, and reassignment-aware local/member real `SocketsHttpHandler` connection-limit exclusions including `this.`-qualified members and shared handler fields.
 - `HCR081` for streams returned by `HttpClient.GetStreamAsync(...)` or `HttpContent.ReadAsStreamAsync(...)` that are neither disposed nor visibly transferred to the caller or a returned owner.
+- `HCR082` for `Polly.ResiliencePipelineBuilder.Build()` calls inside obvious request paths, including controller/service-style types and Minimal API endpoint lambdas, with startup/static-field/test-context and custom-builder filtering.
 
 ## Example
 
