@@ -30,7 +30,10 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
         var registrations = roots
             .SelectMany(ServiceRegistrationCollector.Collect)
             .ToArray();
-        var typedClients = ServiceRegistrationCollector.GetTypedClientTypeNames(registrations);
+        var typedClients = GetTypedClientTypeNames(
+            registrations,
+            context.Compilation,
+            context.CancellationToken);
         if (typedClients.Count == 0)
         {
             return;
@@ -41,8 +44,17 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
 
         foreach (var singleton in singletonRegistrations)
         {
-            if (!ConstructorConsumesTypedClient(roots, singleton.ImplementationTypeName ?? singleton.ServiceTypeName, typedClients) &&
-                !SingletonFactoryResolvesTypedClient(singleton, typedClients))
+            if (!ConstructorConsumesTypedClient(
+                    roots,
+                    singleton.ImplementationTypeName ?? singleton.ServiceTypeName,
+                    typedClients,
+                    context.Compilation,
+                    context.CancellationToken) &&
+                !SingletonFactoryResolvesTypedClient(
+                    singleton,
+                    typedClients,
+                    context.Compilation,
+                    context.CancellationToken))
             {
                 continue;
             }
@@ -53,18 +65,61 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
         }
     }
 
+    private static ISet<string> GetTypedClientTypeNames(
+        IReadOnlyCollection<ServiceRegistrationModel> registrations,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var typeNames = ServiceRegistrationCollector.GetTypedClientTypeNames(registrations);
+
+        foreach (var registration in registrations.Where(registration => registration.Kind == ServiceRegistrationKind.HttpClient))
+        {
+            if (registration.Invocation.Expression is not MemberAccessExpressionSyntax
+                {
+                    Name: GenericNameSyntax genericName
+                })
+            {
+                continue;
+            }
+
+            var semanticModel = GetSemanticModel(compilation, registration.Invocation.SyntaxTree);
+            foreach (var typeArgument in genericName.TypeArgumentList.Arguments)
+            {
+                var resolvedType = semanticModel.GetTypeInfo(typeArgument, cancellationToken).Type;
+                if (resolvedType is null || resolvedType is IErrorTypeSymbol)
+                {
+                    continue;
+                }
+
+                var qualifiedTypeName = NormalizeTypeName(resolvedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                typeNames.Add(qualifiedTypeName);
+                typeNames.Add(TypeNameUtilities.ToSimpleName(qualifiedTypeName));
+            }
+        }
+
+        return typeNames;
+    }
+
     private static bool SingletonFactoryResolvesTypedClient(
         ServiceRegistrationModel singleton,
-        ISet<string> typedClients)
+        ISet<string> typedClients,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
         return singleton.Invocation.ArgumentList.Arguments
             .Select(argument => argument.Expression)
-            .Any(expression => FactoryExpressionResolvesTypedClient(expression, typedClients));
+            .Any(expression => FactoryExpressionResolvesTypedClient(
+                expression,
+                typedClients,
+                compilation,
+                cancellationToken));
     }
 
     private static bool FactoryExpressionResolvesTypedClient(
         ExpressionSyntax expression,
-        ISet<string> typedClients)
+        ISet<string> typedClients,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
         var body = expression switch
         {
@@ -77,13 +132,20 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
             body
                 .DescendantNodesAndSelf()
                 .OfType<InvocationExpressionSyntax>()
-                .Any(invocation => IsServiceProviderResolutionOfTypedClient(invocation, expression, typedClients));
+                .Any(invocation => IsServiceProviderResolutionOfTypedClient(
+                    invocation,
+                    expression,
+                    typedClients,
+                    compilation,
+                    cancellationToken));
     }
 
     private static bool IsServiceProviderResolutionOfTypedClient(
         InvocationExpressionSyntax invocation,
         ExpressionSyntax containingFactory,
-        ISet<string> typedClients)
+        ISet<string> typedClients,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
         return invocation.Expression is MemberAccessExpressionSyntax
         {
@@ -95,7 +157,11 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
             } genericName
         } &&
         IsServiceProviderFactoryParameter(receiver, containingFactory) &&
-        TypeMatchesTypedClient(genericName.TypeArgumentList.Arguments[0], typedClients);
+        TypeMatchesTypedClient(
+            genericName.TypeArgumentList.Arguments[0],
+            typedClients,
+            compilation,
+            cancellationToken);
     }
 
     private static bool IsServiceProviderFactoryParameter(
@@ -142,7 +208,12 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
         };
     }
 
-    private static bool ConstructorConsumesTypedClient(IEnumerable<SyntaxNode> roots, string singletonTypeName, ISet<string> typedClients)
+    private static bool ConstructorConsumesTypedClient(
+        IEnumerable<SyntaxNode> roots,
+        string singletonTypeName,
+        ISet<string> typedClients,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
         var singletonClasses = roots
             .SelectMany(root => root.DescendantNodes().OfType<ClassDeclarationSyntax>())
@@ -154,7 +225,11 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
             foreach (var parameter in GetConstructorParameters(singletonClass))
             {
                 if (parameter.Type is not null &&
-                    TypeMatchesTypedClient(parameter.Type, typedClients))
+                    TypeMatchesTypedClient(
+                        parameter.Type,
+                        typedClients,
+                        compilation,
+                        cancellationToken))
                 {
                     return true;
                 }
@@ -164,17 +239,56 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
         return false;
     }
 
-    private static bool TypeMatchesTypedClient(TypeSyntax type, ISet<string> typedClients)
+    private static bool TypeMatchesTypedClient(
+        TypeSyntax type,
+        ISet<string> typedClients,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
         type = UnwrapNullableType(type);
 
         if (TryGetTypedClientWrapperArgument(type, out var wrappedType))
         {
-            return TypeMatchesTypedClient(wrappedType, typedClients);
+            return TypeMatchesTypedClient(wrappedType, typedClients, compilation, cancellationToken);
+        }
+
+        var semanticModel = GetSemanticModel(compilation, type.SyntaxTree);
+        var resolvedType = semanticModel.GetTypeInfo(type, cancellationToken).Type;
+        if (resolvedType is not null && resolvedType is not IErrorTypeSymbol)
+        {
+            return ResolvedTypeMatchesTypedClient(resolvedType, typedClients);
         }
 
         return TypeNameUtilities.GetComparableNames(type.ToString()).Any(typedClients.Contains);
     }
+
+    private static bool ResolvedTypeMatchesTypedClient(ITypeSymbol resolvedType, ISet<string> typedClients)
+    {
+        var qualifiedTypeName = NormalizeTypeName(resolvedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        if (typedClients.Contains(qualifiedTypeName))
+        {
+            return true;
+        }
+
+        var simpleName = resolvedType.Name;
+        return typedClients.Contains(simpleName) &&
+            (resolvedType.ContainingNamespace.IsGlobalNamespace ||
+                !HasQualifiedTypedClientWithSimpleName(typedClients, simpleName));
+    }
+
+    private static bool HasQualifiedTypedClientWithSimpleName(ISet<string> typedClients, string simpleName)
+    {
+        return typedClients.Any(typeName =>
+            NormalizeTypeName(typeName).Contains(".") &&
+            TypeNameUtilities.ToSimpleName(typeName) == simpleName);
+    }
+
+#pragma warning disable RS1030 // HCR004 performs compilation-wide DI matching and needs cross-tree semantic type checks.
+    private static SemanticModel GetSemanticModel(Compilation compilation, SyntaxTree syntaxTree)
+    {
+        return compilation.GetSemanticModel(syntaxTree);
+    }
+#pragma warning restore RS1030
 
     private static bool TryGetTypedClientWrapperArgument(TypeSyntax type, out TypeSyntax wrappedType)
     {

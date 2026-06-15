@@ -835,6 +835,99 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenUnqualifiedTypedClientRegistrationResolvesToConstructorType()
+    {
+        const string source = """
+            namespace Clients
+            {
+                public static class Registrations
+                {
+                    public static void Configure(IServiceCollection services)
+                    {
+                        services.AddHttpClient<PaymentsClient>();
+                        services.AddSingleton<Jobs.PaymentJob>();
+                    }
+                }
+
+                public sealed class PaymentsClient
+                {
+                }
+            }
+
+            namespace Jobs
+            {
+                using Clients;
+
+                public sealed class PaymentJob(PaymentsClient paymentsClient)
+                {
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenQualifiedTypedClientRegistrationTargetsDifferentSameNamedConstructorType()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<Clients.PaymentsClient>();
+                    services.AddSingleton<Jobs.PaymentJob>();
+                }
+            }
+
+            namespace Clients
+            {
+                public sealed class PaymentsClient
+                {
+                }
+            }
+
+            namespace Jobs
+            {
+                public sealed class PaymentsClient
+                {
+                }
+
+                public sealed class PaymentJob(PaymentsClient paymentsClient)
+                {
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenQualifiedSingletonRegistrationTargetsDifferentSameNamedType()
     {
         const string source = """
