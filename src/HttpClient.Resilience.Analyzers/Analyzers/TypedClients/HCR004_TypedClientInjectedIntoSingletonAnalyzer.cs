@@ -59,16 +59,30 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
     {
         return singleton.Invocation.ArgumentList.Arguments
             .Select(argument => argument.Expression)
-            .OfType<LambdaExpressionSyntax>()
-            .Any(lambda => lambda.Body
+            .Any(expression => FactoryExpressionResolvesTypedClient(expression, typedClients));
+    }
+
+    private static bool FactoryExpressionResolvesTypedClient(
+        ExpressionSyntax expression,
+        ISet<string> typedClients)
+    {
+        var body = expression switch
+        {
+            LambdaExpressionSyntax lambda => lambda.Body,
+            AnonymousMethodExpressionSyntax anonymousMethod => anonymousMethod.Block,
+            _ => null
+        };
+
+        return body is not null &&
+            body
                 .DescendantNodesAndSelf()
                 .OfType<InvocationExpressionSyntax>()
-                .Any(invocation => IsServiceProviderResolutionOfTypedClient(invocation, lambda, typedClients)));
+                .Any(invocation => IsServiceProviderResolutionOfTypedClient(invocation, expression, typedClients));
     }
 
     private static bool IsServiceProviderResolutionOfTypedClient(
         InvocationExpressionSyntax invocation,
-        LambdaExpressionSyntax containingLambda,
+        ExpressionSyntax containingFactory,
         ISet<string> typedClients)
     {
         return invocation.Expression is MemberAccessExpressionSyntax
@@ -80,18 +94,20 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
                 TypeArgumentList.Arguments.Count: 1
             } genericName
         } &&
-        IsServiceProviderFactoryParameter(receiver, containingLambda) &&
+        IsServiceProviderFactoryParameter(receiver, containingFactory) &&
         TypeMatchesTypedClient(genericName.TypeArgumentList.Arguments[0], typedClients);
     }
 
     private static bool IsServiceProviderFactoryParameter(
         IdentifierNameSyntax receiver,
-        LambdaExpressionSyntax containingLambda)
+        ExpressionSyntax containingFactory)
     {
-        return containingLambda switch
+        return containingFactory switch
         {
             SimpleLambdaExpressionSyntax simple => ParameterMatchesServiceProvider(simple.Parameter, receiver),
             ParenthesizedLambdaExpressionSyntax parenthesized => parenthesized.ParameterList.Parameters
+                .Any(parameter => ParameterMatchesServiceProvider(parameter, receiver)),
+            AnonymousMethodExpressionSyntax { ParameterList: { } parameterList } => parameterList.Parameters
                 .Any(parameter => ParameterMatchesServiceProvider(parameter, receiver)),
             _ => false
         };
