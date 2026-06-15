@@ -1,0 +1,53 @@
+name: False positive
+description: Report a diagnostic that fires on code that should be accepted.
+title: "[False positive]: "
+labels:
+  - false-positive
+body:
+  - type: dropdown
+    id: diagnostic
+    attributes:
+      label: Diagnostic ID
+      options:
+        - HCR001
+        - HCR002
+        - HCR003
+        - HCR004
+        - HCR005
+        - HCR020
+        - HCR040
+        - HCR041
+        - HCR060
+        - HCR061
+        - HCR062
+        - HCR063
+        - HCR064
+        - HCR080
+        - HCR081
+        - HCR082
+        - HCR083
+        - HCR084
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: Minimal code sample
+      description: Include the smallest public sample that still reports the diagnostic.
+      render: csharp
+    validations:
+      required: true
+  - type: textarea
+    id: why-safe
+    attributes:
+      label: Why this should be accepted
+      description: Explain the lifetime, ownership, retry, or concurrency guarantee that makes the code safe.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version or commit
+      placeholder: 0.1.0-preview.1 or commit SHA
+    validations:
+      required: true

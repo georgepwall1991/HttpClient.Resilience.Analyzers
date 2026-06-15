@@ -44,6 +44,7 @@ The repository is scaffolded with:
 
 See [implementation status](docs/implementation-status.md) for current analyzer and code-fix coverage.
 See [releasing](docs/releasing.md) for the guarded NuGet publish workflow.
+See [contributing](CONTRIBUTING.md), [support](SUPPORT.md), and [security](SECURITY.md) for project workflow and reporting guidance.
 
 Implemented diagnostic slices:
 

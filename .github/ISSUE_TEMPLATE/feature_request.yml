@@ -1,0 +1,28 @@
+name: Feature request
+description: Propose a new diagnostic, code fix, profile, or documentation improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What production-safety issue should this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the diagnostic, code fix, profile, or documentation change.
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples
+      description: Include bad and better code examples when proposing analyzer behavior.
+      render: csharp
+    validations:
+      required: false

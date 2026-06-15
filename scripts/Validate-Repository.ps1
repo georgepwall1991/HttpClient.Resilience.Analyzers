@@ -108,6 +108,9 @@ foreach ($diagnosticId in $diagnosticIds) {
 }
 
 $requiredTopLevelDocs = @(
+    'CONTRIBUTING.md',
+    'SECURITY.md',
+    'SUPPORT.md',
     'docs\adoption.md',
     'docs\configuration.md',
     'docs\false-positive-policy.md',
@@ -134,5 +137,33 @@ foreach ($path in $requiredScripts) {
         throw "Missing required validation script: $path."
     }
 }
+
+$requiredRepositoryFiles = @(
+    '.gitattributes',
+    '.github\CODEOWNERS',
+    '.github\dependabot.yml',
+    '.github\pull_request_template.md',
+    '.github\ISSUE_TEMPLATE\bug_report.yml',
+    '.github\ISSUE_TEMPLATE\config.yml',
+    '.github\ISSUE_TEMPLATE\false_positive.yml',
+    '.github\ISSUE_TEMPLATE\feature_request.yml',
+    '.github\workflows\ci.yml',
+    '.github\workflows\release.yml'
+)
+
+foreach ($path in $requiredRepositoryFiles) {
+    if (-not (Test-Path -LiteralPath (Get-RepositoryPath $path))) {
+        throw "Missing required repository file: $path."
+    }
+}
+
+Assert-Contains '.gitattributes' '\*\s+text=auto\s+eol=lf' '.gitattributes must normalize text files to LF.'
+Assert-Contains '.github\CODEOWNERS' '@georgepwall1991' 'CODEOWNERS must include the repository owner.'
+Assert-Contains '.github\dependabot.yml' 'package-ecosystem:\s+nuget' 'dependabot.yml must include NuGet updates.'
+Assert-Contains '.github\dependabot.yml' 'package-ecosystem:\s+github-actions' 'dependabot.yml must include GitHub Actions updates.'
+Assert-Contains '.github\pull_request_template.md' 'Validate-Repository\.ps1' 'Pull request template must include repository validation.'
+Assert-Contains 'SECURITY.md' 'Reporting a Vulnerability' 'SECURITY.md must document vulnerability reporting.'
+Assert-Contains 'CONTRIBUTING.md' 'Diagnostic Quality Bar' 'CONTRIBUTING.md must document diagnostic quality expectations.'
+Assert-Contains 'SUPPORT.md' 'False positives' 'SUPPORT.md must document support paths for false positives.'
 
 "repository validation ok: $($diagnosticIds -join ', ')"
