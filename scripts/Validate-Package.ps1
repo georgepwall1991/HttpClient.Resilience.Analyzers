@@ -70,7 +70,7 @@ try {
     Assert-MetadataText 'description' 'Roslyn analyzers for .NET HttpClient, IHttpClientFactory, and Microsoft.Extensions.Http.Resilience. Catches socket exhaustion risks, DNS-stale clients, typed-client lifetime bugs, unsafe retries, handler scope leaks, response disposal mistakes, and fragile outbound HTTP patterns at compile time.'
     Assert-MetadataText 'icon' 'icon.png'
     Assert-MetadataText 'readme' 'README.md'
-    Assert-MetadataText 'projectUrl' 'https://github.com/georg-jung/HttpClient.Resilience.Analyzers'
+    Assert-MetadataText 'projectUrl' 'https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers'
     Assert-MetadataText 'releaseNotes' 'Initial preview with production-safety diagnostics for HttpClient lifetime, typed clients, handlers, resilience retries, request/response correctness, response disposal, cancellation, stream ownership, outbound fan-out, and named-client hygiene.'
     Assert-MetadataText 'developmentDependency' 'true'
 
@@ -80,7 +80,7 @@ try {
     }
 
     $repository = $xml.SelectSingleNode('/n:package/n:metadata/n:repository', $namespaceManager)
-    if ($null -eq $repository -or $repository.type -ne 'git' -or $repository.url -ne 'https://github.com/georg-jung/HttpClient.Resilience.Analyzers') {
+    if ($null -eq $repository -or $repository.type -ne 'git' -or $repository.url -ne 'https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers') {
         throw 'Package repository metadata is missing or incorrect.'
     }
 

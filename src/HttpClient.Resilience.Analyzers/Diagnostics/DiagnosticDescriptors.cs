@@ -127,6 +127,6 @@ public static class DiagnosticDescriptors
             category,
             defaultSeverity,
             isEnabledByDefault: true,
-            helpLinkUri: $"https://github.com/georg-jung/HttpClient.Resilience.Analyzers/blob/main/docs/rules/{id}.md");
+            helpLinkUri: $"https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/docs/rules/{id}.md");
     }
 }
