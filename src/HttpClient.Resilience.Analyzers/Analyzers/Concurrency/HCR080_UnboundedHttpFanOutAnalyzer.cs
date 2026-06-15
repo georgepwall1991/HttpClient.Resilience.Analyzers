@@ -187,12 +187,46 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
+        if (!IsLinqSelectInvocation(invocation, semanticModel, cancellationToken))
+        {
+            return false;
+        }
+
         return invocation.ArgumentList.Arguments
             .Select(argument => argument.Expression)
             .OfType<LambdaExpressionSyntax>()
             .Any(lambda => !UsesSemaphoreGate(lambda, semanticModel, cancellationToken) &&
                 lambda.Body.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>().Any(
                     invocation => IsUnboundedHttpCall(invocation, semanticModel, cancellationToken)));
+    }
+
+    private static bool IsLinqSelectInvocation(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsLinqSelect(method);
+        }
+
+        if (symbolInfo.CandidateSymbols.Length > 0)
+        {
+            return symbolInfo.CandidateSymbols
+                .OfType<IMethodSymbol>()
+                .Any(IsLinqSelect);
+        }
+
+        return true;
+    }
+
+    private static bool IsLinqSelect(IMethodSymbol method)
+    {
+        return method.Name == "Select" &&
+            method.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) is
+                "global::System.Linq.Enumerable" or
+                "global::System.Linq.Queryable";
     }
 
     private static bool IsHttpCall(

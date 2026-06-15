@@ -189,6 +189,44 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenTaskWhenAllUsesLookalikeSelect()
+    {
+        const string source = """
+            using System;
+            using System.Collections.Generic;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(HttpClient client, CustomSource urls, CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(urls.Select(url => client.GetAsync(url, cancellationToken)));
+                }
+            }
+
+            public sealed class CustomSource
+            {
+            }
+
+            public static class CustomSourceExtensions
+            {
+                public static IEnumerable<TResult> Select<TResult>(
+                    this CustomSource source,
+                    Func<string, TResult> selector)
+                {
+                    return new[] { selector("/one") };
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenTaskWhenAllFansOutResolvedCustomHttpClient()
     {
         const string source = """
