@@ -93,7 +93,10 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
             return;
         }
 
-        if (!HasHighConfidenceRequestPathEvidence(creation))
+        if (!HasHighConfidenceRequestPathEvidence(
+                creation,
+                context.SemanticModel,
+                context.CancellationToken))
         {
             return;
         }
@@ -103,11 +106,14 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
             creation.GetLocation()));
     }
 
-    private static bool HasHighConfidenceRequestPathEvidence(SyntaxNode node)
+    private static bool HasHighConfidenceRequestPathEvidence(
+        SyntaxNode node,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         return IsInsideLoop(node) ||
             IsDisposedInUsing(node) ||
-            IsInsideMinimalApiEndpoint(node) ||
+            IsInsideMinimalApiEndpoint(node, semanticModel, cancellationToken) ||
             IsInsideLikelyRequestPathType(node);
     }
 
@@ -148,7 +154,10 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
             node.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>()?.UsingKeyword.IsKind(SyntaxKind.UsingKeyword) == true;
     }
 
-    private static bool IsInsideMinimalApiEndpoint(SyntaxNode node)
+    private static bool IsInsideMinimalApiEndpoint(
+        SyntaxNode node,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         var lambda = node.FirstAncestorOrSelf<AnonymousFunctionExpressionSyntax>();
         if (lambda?.Parent is not ArgumentSyntax argument ||
@@ -159,35 +168,106 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
             return false;
         }
 
-        return MinimalApiReceiverLooksLikeEndpointBuilder(memberAccess.Expression);
+        return MinimalApiReceiverLooksLikeEndpointBuilder(
+            memberAccess.Expression,
+            semanticModel,
+            cancellationToken);
     }
 
-    private static bool MinimalApiReceiverLooksLikeEndpointBuilder(ExpressionSyntax expression)
+    private static bool MinimalApiReceiverLooksLikeEndpointBuilder(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         expression = UnwrapParentheses(expression);
 
+        if (ExpressionTypeLooksLikeEndpointBuilder(expression, semanticModel, cancellationToken))
+        {
+            return true;
+        }
+
         return expression switch
         {
-            IdentifierNameSyntax identifier => MinimalApiReceiverNames.Contains(
-                    identifier.Identifier.ValueText,
-                    System.StringComparer.Ordinal) ||
+            IdentifierNameSyntax identifier =>
                 VisibleIdentifierDeclarationType(identifier) is { } type &&
                 IsEndpointBuilderTypeName(type) ||
-                VisibleIdentifierInitializerLooksLikeEndpointBuilder(identifier),
+                VisibleIdentifierInitializerLooksLikeEndpointBuilder(
+                    identifier,
+                    semanticModel,
+                    cancellationToken) ||
+                MinimalApiReceiverNames.Contains(
+                    identifier.Identifier.ValueText,
+                    System.StringComparer.Ordinal) &&
+                !VisibleIdentifierHasNonEndpointBuilderType(
+                    identifier,
+                    semanticModel,
+                    cancellationToken),
             MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText is "Endpoints",
-            InvocationExpressionSyntax invocation => InvocationReturnsEndpointBuilder(invocation),
+            InvocationExpressionSyntax invocation => InvocationReturnsEndpointBuilder(
+                invocation,
+                semanticModel,
+                cancellationToken),
             _ => false
         };
     }
 
-    private static bool InvocationReturnsEndpointBuilder(InvocationExpressionSyntax invocation)
+    private static bool ExpressionTypeLooksLikeEndpointBuilder(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
-        return invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
-            memberAccess.Name.Identifier.ValueText == "MapGroup" &&
-            MinimalApiReceiverLooksLikeEndpointBuilder(memberAccess.Expression);
+        var type = semanticModel.GetTypeInfo(expression, cancellationToken).Type;
+        return TypeSymbolLooksLikeEndpointBuilder(type);
     }
 
-    private static bool VisibleIdentifierInitializerLooksLikeEndpointBuilder(IdentifierNameSyntax identifier)
+    private static bool TypeSymbolLooksLikeEndpointBuilder(ITypeSymbol? type)
+    {
+        if (type is null || type is IErrorTypeSymbol)
+        {
+            return false;
+        }
+
+        return type.Name is "WebApplication" or "IEndpointRouteBuilder" or "RouteGroupBuilder" ||
+            type.AllInterfaces.Any(candidate => candidate.Name == "IEndpointRouteBuilder") ||
+            type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) is
+                "global::Microsoft.AspNetCore.Builder.WebApplication" or
+                "global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder" or
+                "global::Microsoft.AspNetCore.Routing.RouteGroupBuilder";
+    }
+
+    private static bool VisibleIdentifierHasNonEndpointBuilderType(
+        IdentifierNameSyntax identifier,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var type = semanticModel.GetTypeInfo(identifier, cancellationToken).Type;
+        return type is not null &&
+            type is not IErrorTypeSymbol &&
+            !TypeSymbolLooksLikeEndpointBuilder(type);
+    }
+
+    private static bool InvocationReturnsEndpointBuilder(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (ExpressionTypeLooksLikeEndpointBuilder(invocation, semanticModel, cancellationToken))
+        {
+            return true;
+        }
+
+        return invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
+            memberAccess.Name.Identifier.ValueText == "MapGroup" &&
+            MinimalApiReceiverLooksLikeEndpointBuilder(
+                memberAccess.Expression,
+                semanticModel,
+                cancellationToken);
+    }
+
+    private static bool VisibleIdentifierInitializerLooksLikeEndpointBuilder(
+        IdentifierNameSyntax identifier,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         var scope = identifier.FirstAncestorOrSelf<BlockSyntax>() as SyntaxNode ??
             identifier.SyntaxTree.GetRoot();
@@ -199,7 +279,10 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
                 variable.SpanStart < identifier.SpanStart)
             .Select(variable => variable.Initializer?.Value)
             .OfType<InvocationExpressionSyntax>()
-            .Any(InvocationReturnsEndpointBuilder);
+            .Any(invocation => InvocationReturnsEndpointBuilder(
+                invocation,
+                semanticModel,
+                cancellationToken));
     }
 
     private static TypeSyntax? VisibleIdentifierDeclarationType(IdentifierNameSyntax identifier)
@@ -231,10 +314,13 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
                 "Microsoft.AspNetCore.Builder.WebApplication" or
                 "global::Microsoft.AspNetCore.Builder.WebApplication" or
                 "Microsoft.AspNetCore.Routing.IEndpointRouteBuilder" or
-                "global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder",
+                "global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder" or
+                "Microsoft.AspNetCore.Routing.RouteGroupBuilder" or
+                "global::Microsoft.AspNetCore.Routing.RouteGroupBuilder",
             AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() is
                 "global::Microsoft.AspNetCore.Builder.WebApplication" or
-                "global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder",
+                "global::Microsoft.AspNetCore.Routing.IEndpointRouteBuilder" or
+                "global::Microsoft.AspNetCore.Routing.RouteGroupBuilder",
             _ => false
         };
     }

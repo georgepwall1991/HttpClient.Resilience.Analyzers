@@ -185,6 +185,50 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenMinimalApiRouteGroupVariableHasEndpointBuilderType()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using Microsoft.AspNetCore.Routing;
+
+            IEndpointRouteBuilder app = new EndpointRouteBuilder();
+            RouteGroupBuilder group = app.MapGroup("/api");
+
+            group.MapPost("/payments", () =>
+            {
+                return new HttpClient();
+            });
+
+            namespace Microsoft.AspNetCore.Routing
+            {
+                public interface IEndpointRouteBuilder
+                {
+                    RouteGroupBuilder MapGroup(string prefix);
+                }
+
+                public sealed class EndpointRouteBuilder : IEndpointRouteBuilder
+                {
+                    public RouteGroupBuilder MapGroup(string prefix) => new();
+                }
+
+                public sealed class RouteGroupBuilder : IEndpointRouteBuilder
+                {
+                    public RouteGroupBuilder MapGroup(string prefix) => new();
+                    public void MapPost(string pattern, Func<HttpClient> handler)
+                    {
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenPlainTopLevelHttpClientHasNoRequestPathEvidence()
     {
         const string source = """
@@ -208,6 +252,33 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
             var mapper = new CustomMapper();
 
             mapper.MapGet("client", () =>
+            {
+                return new HttpClient();
+            });
+
+            public sealed class CustomMapper
+            {
+                public void MapGet(string name, Func<HttpClient> factory)
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenLookalikeAppReceiverCreatesHttpClient()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            var app = new CustomMapper();
+
+            app.MapGet("client", () =>
             {
                 return new HttpClient();
             });
