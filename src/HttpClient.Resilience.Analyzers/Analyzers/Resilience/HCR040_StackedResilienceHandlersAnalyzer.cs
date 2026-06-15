@@ -258,7 +258,8 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
         System.Threading.CancellationToken cancellationToken)
     {
         return GetInvocationChain(invocation).Any(candidate =>
-            IsAddHttpClientInvocation(candidate) ||
+            IsAddHttpClientInvocation(candidate) &&
+            IsVisibleHttpClientBuilderType(semanticModel.GetTypeInfo(candidate, cancellationToken).Type) ||
             candidate.Expression is MemberAccessExpressionSyntax memberAccess &&
             IsHttpClientBuilderReceiver(memberAccess.Expression, semanticModel, cancellationToken));
     }
@@ -296,6 +297,16 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
         return type is not null &&
             type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
             "global::Microsoft.Extensions.DependencyInjection.IHttpClientBuilder";
+    }
+
+    private static bool IsVisibleHttpClientBuilderType(ITypeSymbol? type)
+    {
+        return IsHttpClientBuilderType(type) ||
+            type is INamedTypeSymbol
+            {
+                Name: "IHttpClientBuilder",
+                ContainingNamespace.IsGlobalNamespace: true
+            };
     }
 
     private static bool SyntacticReceiverLooksLikeHttpClientBuilder(ExpressionSyntax expression)

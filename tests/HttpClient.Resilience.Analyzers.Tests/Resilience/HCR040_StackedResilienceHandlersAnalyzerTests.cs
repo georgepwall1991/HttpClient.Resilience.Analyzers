@@ -165,6 +165,52 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenLookalikeAddHttpClientChainReturnsCustomBuilder()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static CustomBuilder Configure(CustomServices services)
+                {
+                    return services
+                        .AddHttpClient<GitHubClient>()
+                        .AddStandardResilienceHandler()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public sealed class CustomServices
+            {
+            }
+
+            public sealed class CustomBuilder
+            {
+            }
+
+            public static class CustomBuilderExtensions
+            {
+                public static CustomBuilder AddHttpClient<T>(this CustomServices services)
+                {
+                    return new CustomBuilder();
+                }
+
+                public static CustomBuilder AddStandardResilienceHandler(this CustomBuilder builder)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenQualifiedLookalikeBuilderNameIsNotMicrosoftBuilder()
     {
         const string source = """
