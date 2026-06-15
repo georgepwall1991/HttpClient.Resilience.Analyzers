@@ -4,7 +4,12 @@ This repository has a guarded release workflow at `.github/workflows/release.yml
 
 ## Prerequisites
 
-- Set a repository secret named `NUGET_API_KEY` with permission to push `HttpClient.Resilience.Analyzers`.
+- Create a NuGet.org Trusted Publishing policy for this repository:
+  - Repository owner: `georgepwall1991`
+  - Repository: `HttpClient.Resilience.Analyzers`
+  - Workflow file: `release.yml`
+  - Environment: leave empty unless the workflow is changed to use a GitHub Actions environment.
+- Set a repository variable named `NUGET_USER` to the NuGet.org profile name that owns the trusted publishing policy. Use the profile name, not an email address.
 - Keep the package version in `src/HttpClient.Resilience.Analyzers.Package/HttpClient.Resilience.Analyzers.Package.csproj` aligned with the intended NuGet version.
 - Run the local validation stack before tagging:
 
@@ -31,6 +36,7 @@ git push origin v0.1.0-preview.1
 ```
 
 The release workflow will restore, format-check, build, test, pack, validate the package, upload artifacts, and push the `.nupkg` to NuGet.org.
+Publishing uses NuGet Trusted Publishing through GitHub OIDC and `NuGet/login@v1`; no long-lived NuGet API key is stored in the repository.
 
 ## Dry Run
 

@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   release:
@@ -74,14 +75,29 @@ jobs:
           path: artifacts/test-results/*.trx
           if-no-files-found: ignore
 
+      - name: Validate trusted publishing configuration
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true'
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace('${{ vars.NUGET_USER }}')) {
+              throw 'NUGET_USER repository variable is required for NuGet trusted publishing.'
+          }
+
+      - name: NuGet trusted publishing login
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true'
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ vars.NUGET_USER }}
+
       - name: Publish to NuGet
         if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true'
         shell: pwsh
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:NUGET_API_KEY)) {
-              throw 'NUGET_API_KEY repository secret is required to publish.'
+              throw 'NuGet trusted publishing did not return a temporary API key.'
           }
 
           $packages = Get-ChildItem artifacts/packages/*.nupkg
