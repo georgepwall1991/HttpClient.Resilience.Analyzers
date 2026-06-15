@@ -115,6 +115,15 @@ public sealed class BadFanOutService
     }
 }
 
+public sealed class BadUncheckedResponseService
+{
+    public async Task<string> ReadAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        var response = await client.GetAsync("https://example.com", cancellationToken);
+        return await response.Content.ReadAsStringAsync(cancellationToken);
+    }
+}
+
 public interface IServiceCollection
 {
 }

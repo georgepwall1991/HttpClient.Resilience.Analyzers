@@ -1,0 +1,230 @@
+using HttpClient.Resilience.Analyzers.Analyzers.ResponseLifetime;
+using HttpClient.Resilience.Analyzers.Diagnostics;
+using HttpClient.Resilience.Analyzers.Tests.TestInfrastructure;
+
+namespace HttpClient.Resilience.Analyzers.Tests.ResponseLifetime;
+
+public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzerTests
+{
+    [Fact]
+    public async Task ReportsDiagnostic_WhenContentIsReadBeforeSuccessIsChecked()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR061, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenUsingDeclarationDisposesButDoesNotCheckSuccess()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    using var response = await client.GetAsync("https://example.com", cancellationToken);
+                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR061, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenEnsureSuccessStatusCodeIsCalledBeforeContentRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    response.EnsureSuccessStatusCode();
+                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenIsSuccessStatusCodeIsCheckedBeforeContentRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        return string.Empty;
+                    }
+
+                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenStatusCodeIsCheckedBeforeContentRead()
+    {
+        const string source = """
+            using System.Net;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    if (response.StatusCode == HttpStatusCode.NotFound)
+                    {
+                        return string.Empty;
+                    }
+
+                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenResponseIsReturnedWithoutContentRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    return response;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenResponseLocalIsReassignedBeforeContentRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    response = new HttpResponseMessage();
+                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenResolvedCustomHttpClientReturnsResponseLikeType()
+    {
+        const string source = """
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(Custom.HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+
+            namespace Custom
+            {
+                public sealed class HttpClient
+                {
+                    public Task<Response> GetAsync(string url, CancellationToken cancellationToken)
+                    {
+                        return Task.FromResult(new Response());
+                    }
+                }
+
+                public sealed class Response
+                {
+                    public Content Content { get; } = new();
+                }
+
+                public sealed class Content
+                {
+                    public Task<string> ReadAsStringAsync(CancellationToken cancellationToken)
+                    {
+                        return Task.FromResult(string.Empty);
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+}

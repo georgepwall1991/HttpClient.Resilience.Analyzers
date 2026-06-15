@@ -55,6 +55,7 @@ dotnet_diagnostic.HCR020.severity = warning
 dotnet_diagnostic.HCR040.severity = warning
 dotnet_diagnostic.HCR041.severity = warning
 dotnet_diagnostic.HCR060.severity = warning
+dotnet_diagnostic.HCR061.severity = warning
 dotnet_diagnostic.HCR080.severity = warning
 "@ | Set-Content -LiteralPath $editorConfigPath
 
@@ -185,6 +186,15 @@ public sealed class BadStreamingResponseService
     }
 }
 
+public sealed class BadUncheckedResponseService
+{
+    public async Task<string> ReadAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        var response = await client.GetAsync("https://example.com", cancellationToken);
+        return await response.Content.ReadAsStringAsync(cancellationToken);
+    }
+}
+
 public interface IServiceCollection
 {
 }
@@ -260,6 +270,7 @@ public static class HttpClientBuilderExtensions
         'HCR040',
         'HCR041',
         'HCR060',
+        'HCR061',
         'HCR080'
     )
 
@@ -280,4 +291,4 @@ finally {
     Remove-Item -LiteralPath $tempDirectory -Recurse -Force
 }
 
-"package consumption validation ok: HttpClient.Resilience.Analyzers $packageVersion emits all MVP diagnostics"
+"package consumption validation ok: HttpClient.Resilience.Analyzers $packageVersion emits all configured diagnostics"

@@ -19,7 +19,7 @@ dotnet_diagnostic.HCR080.severity = suggestion
 
 ## Severity Guidance
 
-Keep `HCR041` and `HCR060` visible during adoption. Unsafe retries and undisposed streaming responses can cause duplicated writes, connection pool pressure, and hard-to-debug production behavior.
+Keep `HCR041`, `HCR060`, and `HCR061` visible during adoption. Unsafe retries, undisposed streaming responses, and unchecked error responses can cause duplicated writes, connection pool pressure, and misleading payload handling.
 
 Keep `HCR080` at `suggestion` or `warning` until the team agrees on fan-out limits. It is intentionally heuristic.
 

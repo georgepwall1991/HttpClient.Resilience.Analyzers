@@ -36,6 +36,7 @@ $expectedDiagnosticIds = @(
     'HCR040',
     'HCR041',
     'HCR060',
+    'HCR061',
     'HCR080'
 )
 
@@ -47,7 +48,7 @@ if ($unexpectedIds.Count -gt 0) {
 }
 
 if ($missingExpectedIds.Count -gt 0) {
-    throw "Expected MVP diagnostic IDs are missing: $($missingExpectedIds -join ', ')."
+    throw "Expected diagnostic IDs are missing: $($missingExpectedIds -join ', ')."
 }
 
 $profilePaths = @(

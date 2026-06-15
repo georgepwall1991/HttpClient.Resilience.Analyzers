@@ -8,4 +8,5 @@ dotnet_diagnostic.HCR020.severity = error
 dotnet_diagnostic.HCR040.severity = error
 dotnet_diagnostic.HCR041.severity = error
 dotnet_diagnostic.HCR060.severity = error
+dotnet_diagnostic.HCR061.severity = error
 dotnet_diagnostic.HCR080.severity = warning

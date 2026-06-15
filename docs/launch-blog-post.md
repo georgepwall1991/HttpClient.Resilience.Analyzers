@@ -15,6 +15,7 @@ Most .NET services use `HttpClient`, but many production issues come from patter
 - Duplicate standard or same-name custom resilience handlers.
 - Unsafe HTTP methods retried by standard resilience handlers without explicit guardrails, including typed-client and named-client cases across the compilation.
 - `ResponseHeadersRead` responses whose ownership is not disposed or transferred.
+- Response content reads before visible success handling.
 - Obvious unbounded `Task.WhenAll` outbound HTTP fan-out.
 
 ## Example
@@ -48,4 +49,4 @@ The package is intentionally not a style analyzer. Warnings should feel like pro
 
 ## Status
 
-The initial preview implements the ten MVP diagnostics with tests, documentation, sample cases, `.editorconfig` profiles, and NuGet analyzer packaging.
+The initial preview implements the MVP diagnostics plus the first response-correctness expansion, with tests, documentation, sample cases, `.editorconfig` profiles, and NuGet analyzer packaging.

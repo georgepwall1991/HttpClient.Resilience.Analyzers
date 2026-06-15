@@ -58,6 +58,12 @@ public static class DiagnosticDescriptors
         "Dispose HttpResponseMessage when using ResponseHeadersRead",
         DiagnosticCategories.ResponseLifetime);
 
+    public static readonly DiagnosticDescriptor HCR061 = Create(
+        DiagnosticIds.HCR061,
+        "Check HTTP response success before reading content",
+        "Check HTTP response success before reading content",
+        DiagnosticCategories.ResponseLifetime);
+
     public static readonly DiagnosticDescriptor HCR080 = Create(
         DiagnosticIds.HCR080,
         "High-concurrency HTTP fan-out should use bounded concurrency or connection limits",

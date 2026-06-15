@@ -16,6 +16,7 @@ Compile-time safety for `.NET` `HttpClient`, `IHttpClientFactory`, typed clients
 - Duplicate resilience handlers.
 - Unsafe HTTP methods retried without explicit idempotency configuration.
 - `ResponseHeadersRead` responses that are not disposed.
+- HTTP response content read before checking success.
 - Obvious unbounded outbound HTTP fan-out.
 
 ## Install
@@ -48,6 +49,7 @@ Implemented diagnostic slices:
 - `HCR040` for duplicate `AddStandardResilienceHandler()` calls or same-name custom resilience handlers with literal or constant names in one fluent `AddHttpClient`/`IHttpClientBuilder` chain, plus repeated standard handlers on the same visible unreassigned builder receiver, with builder-return validation and namespace-aware lookalike-builder filtering plus a code fix.
 - `HCR041` for standard resilience handlers paired with visible unsafe typed-client or named-client calls across the compilation, including service-collection and minimal-hosting `Services` chain validation, unreassigned split `IHttpClientBuilder` locals, resolved namespace-aware typed-client matching, one- or two-generic typed-client registrations, constant named-client names, namespace-aware typed-client `HttpClient` and named-client factory receiver validation including `this.`-qualified fields/properties, reassignment-aware named-client and request-message locals, unsafe `HttpRequestMessage` `Send`/`SendAsync` shapes with literal or constant custom methods, retry-guard detection, and a code fix.
 - `HCR060` for undisposed awaited `ResponseHeadersRead` HTTP responses from local declarations or assignments, with resolved `HttpClient` receiver and response-return validation, `using`, reassignment-aware direct block-level `Dispose()`, `finally`, and same-block using-declaration ownership recognition, conditional-dispose filtering, task-local filtering, returned-owner constructor or initializer transfer heuristics, and a simple declaration code fix.
+- `HCR061` for response content reads before visible status handling, including awaited `HttpClient` response locals, common `HttpContent` read methods, `EnsureSuccessStatusCode()`, `IsSuccessStatusCode`, and `StatusCode` recognition, reassignment-aware local tracking, and resolved custom-client filtering.
 - `HCR080` for obvious unbounded `Task.WhenAll` HTTP fan-out, including inline or visible unreassigned local LINQ `Select(...)` task sequences, with BCL `Task` and resolved `HttpClient` receiver validation plus symbol-aware same-receiver `SemaphoreSlim` gating, custom-client, and reassignment-aware local/member real `SocketsHttpHandler` connection-limit exclusions including `this.`-qualified members and shared handler fields.
 
 ## Example

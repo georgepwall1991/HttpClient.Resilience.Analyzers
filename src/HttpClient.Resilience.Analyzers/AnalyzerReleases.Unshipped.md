@@ -13,6 +13,7 @@ HCR020 | HttpClient.Handlers | Warning | DelegatingHandler should not capture sc
 HCR040 | HttpClient.Resilience | Warning | Do not stack duplicate resilience handlers
 HCR041 | HttpClient.Resilience | Warning | Unsafe HTTP methods should not be retried unless explicitly configured
 HCR060 | HttpClient.ResponseLifetime | Warning | Dispose HttpResponseMessage when using ResponseHeadersRead
+HCR061 | HttpClient.ResponseLifetime | Warning | Check HTTP response success before reading content
 HCR080 | HttpClient.Concurrency | Info | High-concurrency HTTP fan-out should use bounded concurrency or connection limits
 
 ### Removed Rules
