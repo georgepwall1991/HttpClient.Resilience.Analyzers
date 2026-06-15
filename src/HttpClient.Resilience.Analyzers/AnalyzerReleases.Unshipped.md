@@ -20,6 +20,7 @@ HCR064 | HttpClient.ResponseLifetime | Warning | Use cancellation-aware HTTP API
 HCR080 | HttpClient.Concurrency | Info | High-concurrency HTTP fan-out should use bounded concurrency or connection limits
 HCR081 | HttpClient.ResponseLifetime | Warning | Dispose streams returned from HTTP content
 HCR082 | HttpClient.Resilience | Warning | Avoid per-request creation of resilience pipelines
+HCR083 | HttpClient.TypedClients | Warning | Configure BaseAddress for typed clients that use relative URLs
 
 ### Removed Rules
 

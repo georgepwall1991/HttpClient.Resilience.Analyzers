@@ -62,6 +62,7 @@ dotnet_diagnostic.HCR064.severity = warning
 dotnet_diagnostic.HCR080.severity = warning
 dotnet_diagnostic.HCR081.severity = warning
 dotnet_diagnostic.HCR082.severity = warning
+dotnet_diagnostic.HCR083.severity = warning
 "@ | Set-Content -LiteralPath $editorConfigPath
 
     @"
@@ -124,6 +125,14 @@ public static class BadDuplicateTypedClientRegistration
     {
         services.AddHttpClient<BadPaymentsService>();
         services.AddTransient<BadPaymentsService>();
+    }
+}
+
+public static class BadRelativeTypedClientRegistration
+{
+    public static void Configure(IServiceCollection services)
+    {
+        services.AddHttpClient<BadRelativeTypedClient>();
     }
 }
 
@@ -248,6 +257,21 @@ public sealed class BadPerRequestPipelineService
     }
 }
 
+public sealed class BadRelativeTypedClient
+{
+    private readonly HttpClient _client;
+
+    public BadRelativeTypedClient(HttpClient client)
+    {
+        _client = client;
+    }
+
+    public Task<HttpResponseMessage> SendAsync(CancellationToken cancellationToken)
+    {
+        return _client.GetAsync("/payments", cancellationToken);
+    }
+}
+
 public interface IServiceCollection
 {
 }
@@ -347,7 +371,8 @@ namespace Polly
         'HCR064',
         'HCR080',
         'HCR081',
-        'HCR082'
+        'HCR082',
+        'HCR083'
     )
 
     $missingDiagnostics = @(

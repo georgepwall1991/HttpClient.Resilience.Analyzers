@@ -60,6 +60,14 @@ public static class BadDuplicateTypedClientRegistration
     }
 }
 
+public static class BadRelativeTypedClientRegistration
+{
+    public static void Configure(IServiceCollection services)
+    {
+        services.AddHttpClient<BadRelativeTypedClient>();
+    }
+}
+
 public static class BadUnsafeRetryRegistration
 {
     public static IHttpClientBuilder Configure(IServiceCollection services)
@@ -169,6 +177,21 @@ public sealed class BadPerRequestPipelineService
     {
         var pipeline = new Polly.ResiliencePipelineBuilder().Build();
         pipeline.Execute();
+    }
+}
+
+public sealed class BadRelativeTypedClient
+{
+    private readonly HttpClient _client;
+
+    public BadRelativeTypedClient(HttpClient client)
+    {
+        _client = client;
+    }
+
+    public Task<HttpResponseMessage> SendAsync(CancellationToken cancellationToken)
+    {
+        return _client.GetAsync("/payments", cancellationToken);
     }
 }
 

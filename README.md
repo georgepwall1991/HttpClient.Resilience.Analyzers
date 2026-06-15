@@ -23,6 +23,7 @@ Compile-time safety for `.NET` `HttpClient`, `IHttpClientFactory`, typed clients
 - Undisposed streams returned from HTTP content.
 - Obvious unbounded outbound HTTP fan-out.
 - Per-request resilience pipeline construction.
+- Typed clients that use relative URLs without a configured `BaseAddress`.
 
 ## Install
 
@@ -61,6 +62,7 @@ Implemented diagnostic slices:
 - `HCR080` for obvious unbounded `Task.WhenAll` HTTP fan-out, including inline or visible unreassigned local LINQ `Select(...)` task sequences, with BCL `Task` and resolved `HttpClient` receiver validation plus symbol-aware same-receiver `SemaphoreSlim` gating, custom-client, and reassignment-aware local/member real `SocketsHttpHandler` connection-limit exclusions including `this.`-qualified members and shared handler fields.
 - `HCR081` for streams returned by `HttpClient.GetStreamAsync(...)` or `HttpContent.ReadAsStreamAsync(...)` that are neither disposed nor visibly transferred to the caller or a returned owner.
 - `HCR082` for `Polly.ResiliencePipelineBuilder.Build()` calls inside obvious request paths, including controller/service-style types and Minimal API endpoint lambdas, with startup/static-field/test-context and custom-builder filtering.
+- `HCR083` for registered typed clients that use relative string URLs on `HttpClient` calls without visible `BaseAddress` configuration in `AddHttpClient(...)` or chained `ConfigureHttpClient(...)`.
 
 ## Example
 

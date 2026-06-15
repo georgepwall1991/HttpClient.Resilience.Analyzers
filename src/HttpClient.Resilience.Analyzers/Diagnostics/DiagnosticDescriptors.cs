@@ -101,6 +101,12 @@ public static class DiagnosticDescriptors
         "Avoid per-request creation of resilience pipelines",
         DiagnosticCategories.Resilience);
 
+    public static readonly DiagnosticDescriptor HCR083 = Create(
+        DiagnosticIds.HCR083,
+        "Configure BaseAddress for typed clients that use relative URLs",
+        "Configure BaseAddress for typed clients that use relative URLs",
+        DiagnosticCategories.TypedClients);
+
     private static DiagnosticDescriptor Create(
         string id,
         string title,

@@ -22,6 +22,7 @@ This project currently implements every MVP diagnostic ID from the starter docum
 | `HCR080` | Yes | Guide | Obvious unbounded `Task.WhenAll` HTTP fan-out with inline or visible unreassigned local LINQ `Select(...)` task sequences, BCL `Task`, and resolved `HttpClient` receiver validation; skips symbol-equivalent or visibly declared same-receiver `SemaphoreSlim` gates, bounded `Parallel.ForEachAsync`, reassignment-aware local/member clients backed by real `SocketsHttpHandler.MaxConnectionsPerServer` evidence including `this.`-qualified members and shared handler fields, and resolved custom clients, lookalike async methods, custom `Select(...)` methods, or lookalike handler limit properties. |
 | `HCR081` | Yes | Guide | HTTP stream ownership detection for streams materialized from `HttpClient.GetStreamAsync(...)` or `HttpContent.ReadAsStreamAsync(...)`, including local declarations and assignments, direct dispose or dispose-async recognition, using statement/declaration ownership, return and returned-wrapper ownership transfer, reassignment checks, and resolved custom-client filtering. |
 | `HCR082` | Yes | Guide | Per-request `Polly.ResiliencePipelineBuilder.Build()` detection inside obvious request paths, including controller/service-style type suffixes and Minimal API endpoint lambdas, visible builder-local tracking, fluent builder chains, static-field/startup/test-context filtering, and resolved custom-builder filtering. |
+| `HCR083` | Yes | Guide | Typed-client relative URL detection for registered `AddHttpClient<T>()` and `AddHttpClient<TService,TImplementation>()` clients without visible `BaseAddress` configuration, including direct `AddHttpClient(..., client => client.BaseAddress = ...)` and chained `ConfigureHttpClient(...)` filtering, resolved real `HttpClient` receiver validation, absolute URL filtering, and custom-client filtering. |
 
 ## Current Limitations
 
@@ -31,3 +32,4 @@ This project currently implements every MVP diagnostic ID from the starter docum
 - `HCR080` is intentionally suggestion-level and heuristic.
 - `HCR081` tracks local stream ownership heuristically rather than full interprocedural ownership flow.
 - `HCR082` intentionally limits request-path evidence to visible type names and Minimal API shapes; it does not infer arbitrary framework dispatch conventions.
+- `HCR083` follows visible typed-client registrations and simple string URL constants; it does not evaluate configuration-driven base addresses.
