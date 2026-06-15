@@ -20,6 +20,7 @@ This project currently implements every MVP diagnostic ID from the starter docum
 | `HCR063` | Yes | Guide | Sync-over-async detection for `.Result`, `.Wait()`, and `.GetAwaiter().GetResult()` on visible `HttpClient` async calls, visible task locals initialized from those calls before reassignment, and common `HttpContent` async read methods, with awaited-call, arbitrary-task, and resolved custom-client filtering. |
 | `HCR064` | Yes | Guide | Cancellation-aware HTTP API detection for visible `HttpClient` async calls and common `HttpContent` async reads that omit an available `CancellationToken`, including method/lambda parameter and prior-local token discovery, token overload validation, existing-token argument recognition, no-visible-token filtering, and resolved custom-client filtering. |
 | `HCR080` | Yes | Guide | Obvious unbounded `Task.WhenAll` HTTP fan-out with inline or visible unreassigned local LINQ `Select(...)` task sequences, BCL `Task`, and resolved `HttpClient` receiver validation; skips symbol-equivalent or visibly declared same-receiver `SemaphoreSlim` gates, bounded `Parallel.ForEachAsync`, reassignment-aware local/member clients backed by real `SocketsHttpHandler.MaxConnectionsPerServer` evidence including `this.`-qualified members and shared handler fields, and resolved custom clients, lookalike async methods, custom `Select(...)` methods, or lookalike handler limit properties. |
+| `HCR081` | Yes | Guide | HTTP stream ownership detection for streams materialized from `HttpClient.GetStreamAsync(...)` or `HttpContent.ReadAsStreamAsync(...)`, including local declarations and assignments, direct dispose or dispose-async recognition, using statement/declaration ownership, return and returned-wrapper ownership transfer, reassignment checks, and resolved custom-client filtering. |
 
 ## Current Limitations
 
@@ -27,3 +28,4 @@ This project currently implements every MVP diagnostic ID from the starter docum
 - `HCR041` models visible typed-client and named-client call sites across syntax trees, including string literals and compile-time constants for named clients and custom `HttpMethod` string names, but it does not trace values through mutable variables or configuration.
 - `HCR060` uses local ownership heuristics rather than full control-flow analysis.
 - `HCR080` is intentionally suggestion-level and heuristic.
+- `HCR081` tracks local stream ownership heuristically rather than full interprocedural ownership flow.

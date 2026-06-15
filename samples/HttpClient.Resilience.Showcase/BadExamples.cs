@@ -149,6 +149,20 @@ public sealed class BadMissingCancellationService
     }
 }
 
+public sealed class BadUndisposedStreamService
+{
+    public async Task CopyAsync(HttpClient client, System.IO.Stream destination, CancellationToken cancellationToken)
+    {
+        using var response = await client.GetAsync(
+            "https://example.com",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await stream.CopyToAsync(destination, cancellationToken);
+    }
+}
+
 public interface IServiceCollection
 {
 }

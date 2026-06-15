@@ -89,6 +89,12 @@ public static class DiagnosticDescriptors
         DiagnosticCategories.Concurrency,
         DiagnosticSeverity.Info);
 
+    public static readonly DiagnosticDescriptor HCR081 = Create(
+        DiagnosticIds.HCR081,
+        "Dispose streams returned from HTTP content",
+        "Dispose streams returned from HTTP content",
+        DiagnosticCategories.ResponseLifetime);
+
     private static DiagnosticDescriptor Create(
         string id,
         string title,

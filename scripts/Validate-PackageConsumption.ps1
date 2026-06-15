@@ -60,6 +60,7 @@ dotnet_diagnostic.HCR062.severity = warning
 dotnet_diagnostic.HCR063.severity = warning
 dotnet_diagnostic.HCR064.severity = warning
 dotnet_diagnostic.HCR080.severity = warning
+dotnet_diagnostic.HCR081.severity = warning
 "@ | Set-Content -LiteralPath $editorConfigPath
 
     @"
@@ -223,6 +224,20 @@ public sealed class BadMissingCancellationService
     }
 }
 
+public sealed class BadUndisposedStreamService
+{
+    public async Task CopyAsync(HttpClient client, System.IO.Stream destination, CancellationToken cancellationToken)
+    {
+        using var response = await client.GetAsync(
+            "https://example.com",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await stream.CopyToAsync(destination, cancellationToken);
+    }
+}
+
 public interface IServiceCollection
 {
 }
@@ -302,7 +317,8 @@ public static class HttpClientBuilderExtensions
         'HCR062',
         'HCR063',
         'HCR064',
-        'HCR080'
+        'HCR080',
+        'HCR081'
     )
 
     $missingDiagnostics = @(

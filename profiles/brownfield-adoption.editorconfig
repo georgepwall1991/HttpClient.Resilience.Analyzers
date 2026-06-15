@@ -13,3 +13,4 @@ dotnet_diagnostic.HCR062.severity = suggestion
 dotnet_diagnostic.HCR063.severity = suggestion
 dotnet_diagnostic.HCR064.severity = suggestion
 dotnet_diagnostic.HCR080.severity = silent
+dotnet_diagnostic.HCR081.severity = suggestion

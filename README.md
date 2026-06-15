@@ -20,6 +20,7 @@ Compile-time safety for `.NET` `HttpClient`, `IHttpClientFactory`, typed clients
 - Shared `DefaultRequestHeaders` mutated for per-request headers.
 - Sync-over-async around outbound HTTP calls.
 - HTTP calls that omit an available cancellation token.
+- Undisposed streams returned from HTTP content.
 - Obvious unbounded outbound HTTP fan-out.
 
 ## Install
@@ -57,6 +58,7 @@ Implemented diagnostic slices:
 - `HCR063` for sync-over-async around outbound HTTP, including `.Result`, `.Wait()`, and `.GetAwaiter().GetResult()` on visible `HttpClient` async calls, task locals initialized from those calls, and common `HttpContent` async reads, with reassignment and custom-client filtering.
 - `HCR064` for cancellation-aware outbound HTTP, including visible `HttpClient` async calls and common `HttpContent` async reads that omit an available `CancellationToken`, with method/lambda/local token discovery, overload validation, and custom-client filtering.
 - `HCR080` for obvious unbounded `Task.WhenAll` HTTP fan-out, including inline or visible unreassigned local LINQ `Select(...)` task sequences, with BCL `Task` and resolved `HttpClient` receiver validation plus symbol-aware same-receiver `SemaphoreSlim` gating, custom-client, and reassignment-aware local/member real `SocketsHttpHandler` connection-limit exclusions including `this.`-qualified members and shared handler fields.
+- `HCR081` for streams returned by `HttpClient.GetStreamAsync(...)` or `HttpContent.ReadAsStreamAsync(...)` that are neither disposed nor visibly transferred to the caller or a returned owner.
 
 ## Example
 

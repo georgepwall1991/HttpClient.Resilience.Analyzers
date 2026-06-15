@@ -18,6 +18,7 @@ HCR062 | HttpClient.ResponseLifetime | Warning | Prefer per-request headers over
 HCR063 | HttpClient.ResponseLifetime | Warning | Avoid sync-over-async around outbound HTTP
 HCR064 | HttpClient.ResponseLifetime | Warning | Use cancellation-aware HTTP APIs when a token is available
 HCR080 | HttpClient.Concurrency | Info | High-concurrency HTTP fan-out should use bounded concurrency or connection limits
+HCR081 | HttpClient.ResponseLifetime | Warning | Dispose streams returned from HTTP content
 
 ### Removed Rules
 
