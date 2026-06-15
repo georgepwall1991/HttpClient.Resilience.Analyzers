@@ -295,6 +295,43 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenSemaphoreWaitAndReleaseUseQualifiedAndUnqualifiedSameField()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                private readonly SemaphoreSlim _semaphore = new(8);
+
+                public Task SendAsync(HttpClient client, IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(urls.Select(async url =>
+                    {
+                        await this._semaphore.WaitAsync(cancellationToken);
+                        try
+                        {
+                            await client.GetAsync(url, cancellationToken);
+                        }
+                        finally
+                        {
+                            _semaphore.Release();
+                        }
+                    }));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenSemaphoreWaitAndReleaseUseDifferentReceivers()
     {
         const string source = """

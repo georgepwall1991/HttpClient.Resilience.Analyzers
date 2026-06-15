@@ -517,7 +517,9 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             .OfType<MemberAccessExpressionSyntax>()
             .Where(memberAccess => memberAccess.Name.Identifier.ValueText == "WaitAsync" &&
                 IsSemaphoreSlimReceiver(memberAccess.Expression, semanticModel, cancellationToken))
-            .Select(memberAccess => memberAccess.Expression.ToString())
+            .Select(memberAccess => GetReceiverMatchKey(memberAccess.Expression, semanticModel, cancellationToken))
+            .Where(receiver => receiver is not null)
+            .Select(receiver => receiver!)
             .ToArray();
 
         if (semaphoreWaitReceivers.Length == 0)
@@ -532,7 +534,25 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             .OfType<MemberAccessExpressionSyntax>()
             .Any(memberAccess => memberAccess.Name.Identifier.ValueText == "Release" &&
                 IsSemaphoreSlimReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
-                semaphoreWaitReceivers.Contains(memberAccess.Expression.ToString(), System.StringComparer.Ordinal));
+                GetReceiverMatchKey(memberAccess.Expression, semanticModel, cancellationToken) is { } receiver &&
+                semaphoreWaitReceivers.Contains(receiver, System.StringComparer.Ordinal));
+    }
+
+    private static string? GetReceiverMatchKey(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbol = semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol;
+        if (symbol is ILocalSymbol or IFieldSymbol or IPropertySymbol or IParameterSymbol)
+        {
+            var locationStart = symbol.Locations.FirstOrDefault(location => location.IsInSource)?.SourceSpan.Start ?? -1;
+            return symbol.Kind + ":" +
+                symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ":" +
+                locationStart.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        return expression.ToString();
     }
 
     private static bool IsSemaphoreSlimReceiver(
