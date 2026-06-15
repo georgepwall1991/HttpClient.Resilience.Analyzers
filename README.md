@@ -2,29 +2,11 @@
 
 [![CI](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/actions/workflows/ci.yml/badge.svg)](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/HttpClient.Resilience.Analyzers.svg)](https://www.nuget.org/packages/HttpClient.Resilience.Analyzers)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Compile-time safety for `.NET` `HttpClient`, `IHttpClientFactory`, typed clients, retries, handlers, and outbound HTTP resilience.
+Production-focused Roslyn analyzers for .NET `HttpClient`, `IHttpClientFactory`, typed clients, Polly, and `Microsoft.Extensions.Http.Resilience`.
 
-## What It Catches
-
-- `HttpClient` created and disposed per request.
-- Static or singleton-owned manual `HttpClient` instances without connection lifetime configuration.
-- Factory-created clients cached in singleton services.
-- Typed clients injected into singleton services.
-- Duplicate typed client registrations.
-- `DelegatingHandler` implementations that capture scoped request data.
-- Duplicate resilience handlers.
-- Unsafe HTTP methods retried without explicit idempotency configuration.
-- `ResponseHeadersRead` responses that are not disposed.
-- HTTP response content read before checking success.
-- Shared `DefaultRequestHeaders` mutated for per-request headers.
-- Sync-over-async around outbound HTTP calls.
-- HTTP calls that omit an available cancellation token.
-- Undisposed streams returned from HTTP content.
-- Obvious unbounded outbound HTTP fan-out.
-- Per-request resilience pipeline construction.
-- Typed clients that use relative URLs without a configured `BaseAddress`.
-- Duplicated string literals for named `HttpClient` names.
+`HttpClient.Resilience.Analyzers` catches outbound HTTP bugs at compile time: socket exhaustion risks, stale DNS clients, typed-client lifetime leaks, unsafe retries, response disposal mistakes, sync-over-async calls, missing cancellation tokens, unbounded fan-out, and fragile named-client strings.
 
 ## Install
 
@@ -32,42 +14,28 @@ Compile-time safety for `.NET` `HttpClient`, `IHttpClientFactory`, typed clients
 dotnet add package HttpClient.Resilience.Analyzers
 ```
 
-## Current Scaffold
+For explicit package references:
 
-The repository is scaffolded with:
+```xml
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.0-preview.1" PrivateAssets="all" />
+```
 
-- A `netstandard2.0` Roslyn analyzer assembly.
-- A NuGet package project that packs analyzer DLLs under `analyzers/dotnet/cs`.
-- An xUnit test project with analyzer test infrastructure.
-- A sample project wired to the local analyzer project, with script-enforced build output coverage for every configured diagnostic.
-- Rule docs, `.editorconfig` profiles, and GitHub Actions CI/release pipelines.
+The package is analyzer-only. It adds no runtime dependency to your application.
 
-See [implementation status](docs/implementation-status.md) for current analyzer and code-fix coverage.
-See [releasing](docs/releasing.md) for the guarded NuGet publish workflow.
-See [contributing](CONTRIBUTING.md), [support](SUPPORT.md), and [security](SECURITY.md) for project workflow and reporting guidance.
+## Why This Exists
 
-Implemented diagnostic slices:
+.NET gives teams several valid ways to use outbound HTTP: factory clients, typed clients, named clients, long-lived manual clients, resilience handlers, streaming responses, and custom handlers. The expensive failures usually come from small lifetime or ownership mistakes that are hard to spot in review.
 
-- `HCR001` for high-confidence `new HttpClient()` usage in request-path types, Minimal API endpoint and route-group lambdas, loops, `using` ownership patterns, and top-level loop/using statements, with resolved custom `HttpClient` types, visible lookalike Minimal API receivers, and obvious xUnit/NUnit/MSTest contexts skipped plus a partial code fix when an `IHttpClientFactory` method, local-function, or primary-constructor parameter is already in scope.
-- `HCR002` for static or singleton-owned manual `HttpClient` field/property initializers, direct assignments, and simple unreassigned local handoffs without `PooledConnectionLifetime`, with resolved custom client types skipped, reassignment-aware configured handler local/field/property recognition, namespace-aware qualified-registration recognition, visible singleton factory registrations that construct implementations, plus a safe code fix for parameterless field initializers.
-- `HCR003` for `IHttpClientFactory` clients cached through direct assignments, simple unreassigned local handoffs, or initializers into static or known singleton `HttpClient` fields/properties, including namespace-aware and resolved member factory receiver validation, qualified singleton registrations, and visible singleton factory registrations that construct an implementation.
-- `HCR004` for typed clients injected into singleton services, including nullable and common wrapped constructor parameters, namespace-aware constructor and factory resolution matching, lambda or anonymous singleton factory service-provider resolutions, visible singleton factory registrations that construct an implementation, visible `IServiceCollection` receiver validation, `typeof(...)` singleton factory registrations, and namespace-aware qualified registration matching.
-- `HCR005` for duplicate typed-client service registrations, including visible `IServiceCollection` and minimal-hosting `Services` receiver validation, resolved namespace-aware registration matching, `typeof(...)` standalone registrations, visible factory registrations that construct the typed-client implementation, and a code fix.
-- `HCR020` for request-scoped data and known scoped services captured by direct or visibly inherited `DelegatingHandler` constructors, fields, or properties, including visible `IServiceCollection` receiver validation, scoped factory registrations that construct implementations, common deferred/collection wrappers, namespace-aware qualified request/scoped service names, resolved custom request-type lookalike filtering, and resolved or qualified handler-base lookalike filtering.
-- `HCR040` for duplicate `AddStandardResilienceHandler()` calls or same-name custom resilience handlers with literal or constant names in one fluent `AddHttpClient`/`IHttpClientBuilder` chain, plus repeated standard handlers on the same visible unreassigned builder receiver, with builder-return validation and namespace-aware lookalike-builder filtering plus a code fix.
-- `HCR041` for standard resilience handlers paired with visible unsafe typed-client or named-client calls across the compilation, including service-collection and minimal-hosting `Services` chain validation, unreassigned split `IHttpClientBuilder` locals, resolved namespace-aware typed-client matching, one- or two-generic typed-client registrations, constant named-client names, namespace-aware typed-client `HttpClient` and named-client factory receiver validation including `this.`-qualified fields/properties, reassignment-aware named-client and request-message locals, unsafe `HttpRequestMessage` `Send`/`SendAsync` shapes with literal or constant custom methods, retry-guard detection, and a code fix.
-- `HCR060` for undisposed awaited `ResponseHeadersRead` HTTP responses from local declarations or assignments, with resolved `HttpClient` receiver and response-return validation, `using`, reassignment-aware direct block-level `Dispose()`, `finally`, and same-block using-declaration ownership recognition, conditional-dispose filtering, task-local filtering, returned-owner constructor or initializer transfer heuristics, and a simple declaration code fix.
-- `HCR061` for response content reads before visible status handling, including awaited `HttpClient` response locals, common `HttpContent` read methods, `EnsureSuccessStatusCode()`, `IsSuccessStatusCode`, and `StatusCode` recognition, reassignment-aware local tracking, and resolved custom-client filtering.
-- `HCR062` for mutating shared `HttpClient.DefaultRequestHeaders` instead of per-request `HttpRequestMessage.Headers`, including direct header mutations, nested collection mutations, property assignments, real `HttpClient` receiver validation, read-only access filtering, and custom-client filtering.
-- `HCR063` for sync-over-async around outbound HTTP, including `.Result`, `.Wait()`, and `.GetAwaiter().GetResult()` on visible `HttpClient` async calls, task locals initialized from those calls, and common `HttpContent` async reads, with reassignment and custom-client filtering.
-- `HCR064` for cancellation-aware outbound HTTP, including visible `HttpClient` async calls and common `HttpContent` async reads that omit an available `CancellationToken`, with method/lambda/local token discovery, overload validation, and custom-client filtering.
-- `HCR080` for obvious unbounded `Task.WhenAll` HTTP fan-out, including inline or visible unreassigned local LINQ `Select(...)` task sequences, with BCL `Task` and resolved `HttpClient` receiver validation plus symbol-aware same-receiver `SemaphoreSlim` gating, custom-client, and reassignment-aware local/member real `SocketsHttpHandler` connection-limit exclusions including `this.`-qualified members and shared handler fields.
-- `HCR081` for streams returned by `HttpClient.GetStreamAsync(...)` or `HttpContent.ReadAsStreamAsync(...)` that are neither disposed nor visibly transferred to the caller or a returned owner.
-- `HCR082` for `Polly.ResiliencePipelineBuilder.Build()` calls inside obvious request paths, including controller/service-style types and Minimal API endpoint lambdas, with startup/static-field/test-context and custom-builder filtering.
-- `HCR083` for registered typed clients that use relative string URLs on `HttpClient` calls without visible `BaseAddress` configuration in `AddHttpClient(...)` or chained `ConfigureHttpClient(...)`.
-- `HCR084` for named-client string literals duplicated between `AddHttpClient("name")` registrations and `IHttpClientFactory.CreateClient("name")` use sites, with shared-constant and custom-factory filtering.
+This analyzer targets those failure modes directly:
 
-## Example
+- `HttpClient` lifetime mistakes that can cause socket exhaustion, DNS staleness, or connection churn.
+- `IHttpClientFactory` and typed-client DI patterns that accidentally promote short-lived clients into singleton state.
+- Resilience handler configuration that retries unsafe HTTP methods such as `POST`, `PUT`, `PATCH`, `DELETE`, or `CONNECT`.
+- Response and stream ownership mistakes around `ResponseHeadersRead`, `HttpContent`, and streaming APIs.
+- Request correctness issues such as missing cancellation tokens, shared `DefaultRequestHeaders`, and sync-over-async calls.
+- Operational risk patterns such as unbounded outbound fan-out and per-request resilience pipeline construction.
+
+## Quick Example
 
 ```csharp
 services.AddHttpClient<PaymentsClient>()
@@ -82,7 +50,7 @@ public sealed class PaymentsClient(HttpClient httpClient)
 }
 ```
 
-`HCR041` warns because the standard resilience pipeline can retry unsafe HTTP methods such as `POST`, `PUT`, `PATCH`, `DELETE`, and `CONNECT` unless configured otherwise.
+`HCR041` reports this because the standard resilience handler may retry unsafe HTTP methods. Retrying a non-idempotent `POST` can duplicate writes unless the endpoint is explicitly safe to retry.
 
 ```csharp
 services.AddHttpClient<PaymentsClient>()
@@ -92,13 +60,69 @@ services.AddHttpClient<PaymentsClient>()
     });
 ```
 
+## Rule Catalog
+
+The default profile keeps production-safety rules visible as warnings and leaves the heuristic fan-out rule as a suggestion. Every rule has a dedicated documentation page with bad code, better code, current detection details, suppression guidance, and references.
+
+| Rule | Category | Catches | Default profile | Fix support |
+|---|---|---|---:|---|
+| [`HCR001`](docs/rules/HCR001.md) | Lifetime | Creating and disposing `HttpClient` in request paths | Warning | Partial |
+| [`HCR002`](docs/rules/HCR002.md) | Lifetime | Long-lived manual `HttpClient` without `PooledConnectionLifetime` | Warning | Yes |
+| [`HCR003`](docs/rules/HCR003.md) | Lifetime | Cached `IHttpClientFactory.CreateClient()` results | Warning | Guide |
+| [`HCR004`](docs/rules/HCR004.md) | Typed clients | Typed clients injected into singleton services | Warning | Guide |
+| [`HCR005`](docs/rules/HCR005.md) | Typed clients | Duplicate typed-client registrations | Warning | Yes |
+| [`HCR020`](docs/rules/HCR020.md) | Handlers | `DelegatingHandler` capturing scoped request data | Warning | Guide |
+| [`HCR040`](docs/rules/HCR040.md) | Resilience | Duplicate resilience handlers in a client pipeline | Warning | Yes |
+| [`HCR041`](docs/rules/HCR041.md) | Resilience | Unsafe HTTP methods retried without explicit configuration | Warning | Yes |
+| [`HCR060`](docs/rules/HCR060.md) | Response lifetime | Undisposed `ResponseHeadersRead` responses | Warning | Yes |
+| [`HCR061`](docs/rules/HCR061.md) | Response lifetime | Reading response content before checking success | Warning | Guide |
+| [`HCR062`](docs/rules/HCR062.md) | Response lifetime | Per-request headers written to `DefaultRequestHeaders` | Warning | Guide |
+| [`HCR063`](docs/rules/HCR063.md) | Response lifetime | Sync-over-async around outbound HTTP | Warning | Guide |
+| [`HCR064`](docs/rules/HCR064.md) | Response lifetime | HTTP calls that omit an available `CancellationToken` | Warning | Guide |
+| [`HCR080`](docs/rules/HCR080.md) | Concurrency | Obvious unbounded `Task.WhenAll` HTTP fan-out | Suggestion | Guide |
+| [`HCR081`](docs/rules/HCR081.md) | Response lifetime | Undisposed streams returned from HTTP content | Warning | Guide |
+| [`HCR082`](docs/rules/HCR082.md) | Resilience | Per-request resilience pipeline construction | Warning | Guide |
+| [`HCR083`](docs/rules/HCR083.md) | Typed clients | Typed clients using relative URLs without `BaseAddress` | Warning | Guide |
+| [`HCR084`](docs/rules/HCR084.md) | Typed clients | Duplicated string literals for named `HttpClient` names | Warning | Guide |
+
+See the full [rules index](docs/rules/README.md) for rollout priority, categories, and links.
+
 ## Adoption Profiles
 
-The package includes `.editorconfig` profiles under `profiles/`:
+Use the included `.editorconfig` profiles to match the analyzer to your team and codebase:
 
-- `default.editorconfig` keeps the production-safety rules at their intended defaults.
-- `brownfield-adoption.editorconfig` lowers most rules while teams triage an existing codebase.
-- `strict-ci.editorconfig` promotes production-safety warnings to errors for CI gates.
-- `library-author.editorconfig` is stricter about streaming response ownership.
+| Profile | Use it for |
+|---|---|
+| [`profiles/default.editorconfig`](profiles/default.editorconfig) | New services or teams ready to act on production-safety warnings. |
+| [`profiles/brownfield-adoption.editorconfig`](profiles/brownfield-adoption.editorconfig) | Existing applications that need a low-noise first pass. |
+| [`profiles/strict-ci.editorconfig`](profiles/strict-ci.editorconfig) | Repositories that want CI to fail on production-safety warnings. |
+| [`profiles/library-author.editorconfig`](profiles/library-author.editorconfig) | Libraries where response and stream ownership should be stricter. |
 
-See [adoption](docs/adoption.md), [configuration](docs/configuration.md), and the [false-positive policy](docs/false-positive-policy.md) for rollout guidance.
+Recommended rollout:
+
+1. Add the package.
+2. Start with the brownfield profile if the repository already has significant outbound HTTP code.
+3. Fix or intentionally suppress high-confidence findings first.
+4. Move to the default profile once new warnings are actionable.
+5. Promote to strict CI only after the current baseline is clean.
+
+More detail: [adoption guide](docs/adoption.md), [configuration guide](docs/configuration.md), and [false-positive policy](docs/false-positive-policy.md).
+
+## Documentation
+
+- [Documentation hub](docs/README.md)
+- [Rules index](docs/rules/README.md)
+- [Implementation status](docs/implementation-status.md)
+- [Configuration](docs/configuration.md)
+- [Adoption](docs/adoption.md)
+- [False-positive policy](docs/false-positive-policy.md)
+- [Releasing](docs/releasing.md)
+- [Contributing](CONTRIBUTING.md)
+- [Support](SUPPORT.md)
+- [Security](SECURITY.md)
+
+## Project Status
+
+This is a preview package. The implemented analyzer set covers the MVP diagnostics and the first future-rule expansion through `HCR084`.
+
+The quality bar is intentionally conservative: rules should report concrete outbound HTTP risks, avoid noisy guesses, and document the safe escape hatches when a project has a deliberate exception.

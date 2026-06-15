@@ -23,3 +23,5 @@ services.AddHttpClient<PaymentsClient>()
 ```
 
 For large services, start with `HCR041`, `HCR060`, `HCR061`, `HCR062`, `HCR063`, `HCR064`, `HCR081`, `HCR082`, `HCR083`, and `HCR084` in the most critical outbound paths, then work through lifetime and DI findings.
+
+Use the [rules index](rules/README.md) when assigning cleanup work by category or rollout priority.

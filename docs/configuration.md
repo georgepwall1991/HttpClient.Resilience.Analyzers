@@ -25,7 +25,7 @@ Keep `HCR080` at `suggestion` or `warning` until the team agrees on fan-out limi
 
 ## Per-Rule Overrides
 
-Rule pages under `docs/rules/` describe current detection and suppression guidance. Prefer changing individual severities over disabling the whole package.
+The [rules index](rules/README.md) lists every analyzer rule by category, default profile severity, and fix support. Individual rule pages under `docs/rules/` describe current detection and suppression guidance. Prefer changing individual severities over disabling the whole package.
 
 ## Analyzer Packaging References
 
