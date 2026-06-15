@@ -653,6 +653,40 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenUnresolvedBuilderServicesSharesServiceCollectionPropertyName()
+    {
+        const string source = """
+            var builder = UnknownApplication.CreateBuilder(args);
+
+            builder.Services.AddHttpClient<PaymentsClient>();
+            builder.Services.AddTransient<PaymentsClient>();
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class RealApplication
+            {
+                public IServiceCollection Services { get; } = null!;
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task CodeFix_RemovesDuplicateRegistrationStatement()
     {
         const string source = """

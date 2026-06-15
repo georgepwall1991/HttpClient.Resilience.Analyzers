@@ -216,12 +216,8 @@ internal static class ServiceRegistrationCollector
             .SelectMany(method => method.ParameterList.Parameters)
             .FirstOrDefault(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText)
             ?.Type ??
-            identifier
-                .FirstAncestorOrSelf<BlockSyntax>()?
-                .DescendantNodes()
+            VisibleVariableDeclaratorsBefore(identifier)
                 .OfType<VariableDeclaratorSyntax>()
-                .Where(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
-                    variable.SpanStart < identifier.SpanStart)
                 .Select(variable => variable.Parent)
                 .OfType<VariableDeclarationSyntax>()
                 .Select(declaration => declaration.Type)
@@ -248,14 +244,14 @@ internal static class ServiceRegistrationCollector
 
     private static TypeSyntax? ServicesMemberType(MemberAccessExpressionSyntax memberAccess)
     {
-        if (memberAccess.Expression is IdentifierNameSyntax identifier &&
-            VisibleIdentifierTypeName(identifier) is { } receiverTypeName &&
-            FindMemberType(memberAccess, receiverTypeName) is { } receiverMemberType)
+        if (memberAccess.Expression is not IdentifierNameSyntax identifier)
         {
-            return receiverMemberType;
+            return null;
         }
 
-        return FindMemberType(memberAccess, typeName: null);
+        return VisibleIdentifierTypeName(identifier) is { } receiverTypeName
+            ? FindMemberType(memberAccess, receiverTypeName)
+            : null;
     }
 
     private static string? VisibleIdentifierTypeName(IdentifierNameSyntax identifier)
@@ -266,18 +262,25 @@ internal static class ServiceRegistrationCollector
             return TypeNameUtilities.ToSimpleName(type.ToString());
         }
 
-        return identifier
-            .FirstAncestorOrSelf<BlockSyntax>()?
-            .DescendantNodes()
-            .OfType<VariableDeclaratorSyntax>()
-            .Where(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
-                variable.SpanStart < identifier.SpanStart)
+        return VisibleVariableDeclaratorsBefore(identifier)
             .Select(variable => variable.Initializer?.Value)
             .OfType<InvocationExpressionSyntax>()
             .Select(invocation => invocation.Expression)
             .OfType<MemberAccessExpressionSyntax>()
             .Select(memberAccess => TypeNameUtilities.ToSimpleName(memberAccess.Expression.ToString()))
             .FirstOrDefault();
+    }
+
+    private static IEnumerable<VariableDeclaratorSyntax> VisibleVariableDeclaratorsBefore(IdentifierNameSyntax identifier)
+    {
+        var scope = identifier.FirstAncestorOrSelf<BlockSyntax>() as SyntaxNode ??
+            identifier.FirstAncestorOrSelf<CompilationUnitSyntax>();
+
+        return scope?.DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Where(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+                variable.SpanStart < identifier.SpanStart) ??
+            Enumerable.Empty<VariableDeclaratorSyntax>();
     }
 
     private static TypeSyntax? FindMemberType(MemberAccessExpressionSyntax memberAccess, string? typeName)
