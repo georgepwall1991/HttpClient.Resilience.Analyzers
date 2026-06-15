@@ -17,6 +17,7 @@ Most .NET services use `HttpClient`, but many production issues come from patter
 - `ResponseHeadersRead` responses whose ownership is not disposed or transferred.
 - Response content reads before visible success handling.
 - Shared `DefaultRequestHeaders` mutations for per-request data.
+- Sync-over-async around outbound HTTP calls.
 - Obvious unbounded `Task.WhenAll` outbound HTTP fan-out.
 
 ## Example

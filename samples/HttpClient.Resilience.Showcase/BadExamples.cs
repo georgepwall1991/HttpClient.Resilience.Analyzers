@@ -133,6 +133,14 @@ public sealed class BadDefaultHeadersService
     }
 }
 
+public sealed class BadSyncOverAsyncService
+{
+    public HttpResponseMessage Send(HttpClient client)
+    {
+        return client.GetAsync("https://example.com").Result;
+    }
+}
+
 public interface IServiceCollection
 {
 }

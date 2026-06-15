@@ -15,6 +15,7 @@ HCR041 | HttpClient.Resilience | Warning | Unsafe HTTP methods should not be ret
 HCR060 | HttpClient.ResponseLifetime | Warning | Dispose HttpResponseMessage when using ResponseHeadersRead
 HCR061 | HttpClient.ResponseLifetime | Warning | Check HTTP response success before reading content
 HCR062 | HttpClient.ResponseLifetime | Warning | Prefer per-request headers over mutating DefaultRequestHeaders
+HCR063 | HttpClient.ResponseLifetime | Warning | Avoid sync-over-async around outbound HTTP
 HCR080 | HttpClient.Concurrency | Info | High-concurrency HTTP fan-out should use bounded concurrency or connection limits
 
 ### Removed Rules

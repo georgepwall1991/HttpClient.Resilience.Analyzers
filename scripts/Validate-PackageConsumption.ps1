@@ -57,6 +57,7 @@ dotnet_diagnostic.HCR041.severity = warning
 dotnet_diagnostic.HCR060.severity = warning
 dotnet_diagnostic.HCR061.severity = warning
 dotnet_diagnostic.HCR062.severity = warning
+dotnet_diagnostic.HCR063.severity = warning
 dotnet_diagnostic.HCR080.severity = warning
 "@ | Set-Content -LiteralPath $editorConfigPath
 
@@ -205,6 +206,14 @@ public sealed class BadDefaultHeadersService
     }
 }
 
+public sealed class BadSyncOverAsyncService
+{
+    public HttpResponseMessage Send(HttpClient client)
+    {
+        return client.GetAsync("https://example.com").Result;
+    }
+}
+
 public interface IServiceCollection
 {
 }
@@ -282,6 +291,7 @@ public static class HttpClientBuilderExtensions
         'HCR060',
         'HCR061',
         'HCR062',
+        'HCR063',
         'HCR080'
     )
 

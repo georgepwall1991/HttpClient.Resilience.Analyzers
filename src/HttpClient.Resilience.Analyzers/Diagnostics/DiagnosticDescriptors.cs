@@ -70,6 +70,12 @@ public static class DiagnosticDescriptors
         "Prefer per-request headers over mutating DefaultRequestHeaders",
         DiagnosticCategories.ResponseLifetime);
 
+    public static readonly DiagnosticDescriptor HCR063 = Create(
+        DiagnosticIds.HCR063,
+        "Avoid sync-over-async around outbound HTTP",
+        "Avoid sync-over-async around outbound HTTP",
+        DiagnosticCategories.ResponseLifetime);
+
     public static readonly DiagnosticDescriptor HCR080 = Create(
         DiagnosticIds.HCR080,
         "High-concurrency HTTP fan-out should use bounded concurrency or connection limits",
