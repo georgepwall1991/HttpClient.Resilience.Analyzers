@@ -568,10 +568,15 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         return containingBlock
             .DescendantNodes()
             .OfType<VariableDeclaratorSyntax>()
-            .Where(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+            .Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
                 variable.SpanStart < context.SpanStart &&
-                variable.Initializer is not null)
-            .Any(variable => RequestExpressionUsesUnsafeHttpMethod(variable.Initializer!.Value, variable, roots));
+                variable.Initializer is not null &&
+                !LocalIsReassignedBetween(
+                    containingBlock,
+                    identifier.Identifier.ValueText,
+                    variable.SpanStart,
+                    context.SpanStart) &&
+                RequestExpressionUsesUnsafeHttpMethod(variable.Initializer!.Value, variable, roots));
     }
 
     private static bool IsMethodMember(ExpressionSyntax expression)
