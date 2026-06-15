@@ -49,7 +49,7 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor HCR041 = Create(
         DiagnosticIds.HCR041,
         "Unsafe HTTP methods should not be retried unless explicitly configured",
-        "Standard resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE unless the operation is idempotent.",
+        "Standard resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.",
         DiagnosticCategories.Resilience);
 
     public static readonly DiagnosticDescriptor HCR060 = Create(

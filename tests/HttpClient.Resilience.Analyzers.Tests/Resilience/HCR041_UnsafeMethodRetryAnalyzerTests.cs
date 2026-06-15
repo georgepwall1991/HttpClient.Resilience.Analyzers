@@ -55,6 +55,64 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenTypedClientSendsConnectMethodThroughHttpClientExtension()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<TunnelClient>()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class TunnelClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> ConnectAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.ConnectAsync("/tunnel", cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+
+            public static class HttpClientConnectExtensions
+            {
+                public static Task<HttpResponseMessage> ConnectAsync(
+                    this HttpClient client,
+                    string route,
+                    CancellationToken cancellationToken)
+                {
+                    return client.SendAsync(new HttpRequestMessage(HttpMethod.Connect, route), cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR041, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenTypedClientStandardResilienceHandlerIsSplitAcrossBuilderLocal()
     {
         const string source = """
@@ -860,6 +918,54 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
                 public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
                 {
                     var request = new HttpRequestMessage(HttpMethod.Post, "/payments");
+                    return httpClient.SendAsync(request, cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR041, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenTypedClientSendsConnectHttpRequestMessage()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<TunnelClient>()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class TunnelClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> ConnectAsync(CancellationToken cancellationToken)
+                {
+                    var request = new HttpRequestMessage(HttpMethod.Connect, "/tunnel");
                     return httpClient.SendAsync(request, cancellationToken);
                 }
             }

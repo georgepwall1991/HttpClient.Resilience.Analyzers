@@ -65,7 +65,7 @@ public sealed class PaymentsClient(HttpClient httpClient)
 }
 ```
 
-`HCR041` warns because the standard resilience pipeline can retry unsafe HTTP methods such as `POST`, `PUT`, `PATCH`, and `DELETE` unless configured otherwise.
+`HCR041` warns because the standard resilience pipeline can retry unsafe HTTP methods such as `POST`, `PUT`, `PATCH`, `DELETE`, and `CONNECT` unless configured otherwise.
 
 ```csharp
 services.AddHttpClient<PaymentsClient>()

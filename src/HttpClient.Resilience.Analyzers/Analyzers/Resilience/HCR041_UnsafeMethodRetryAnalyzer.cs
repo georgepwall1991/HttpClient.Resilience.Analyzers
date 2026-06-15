@@ -16,6 +16,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
 {
     private static readonly string[] UnsafeHttpMethodPrefixes =
     {
+        "Connect",
         "Delete",
         "Patch",
         "Post",
