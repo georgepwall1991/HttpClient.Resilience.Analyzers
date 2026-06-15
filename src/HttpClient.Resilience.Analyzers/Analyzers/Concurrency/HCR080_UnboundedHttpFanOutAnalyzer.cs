@@ -210,7 +210,8 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        return IsHttpCall(invocation, semanticModel, cancellationToken) && !UsesConnectionLimitedClient(invocation);
+        return IsHttpCall(invocation, semanticModel, cancellationToken) &&
+            !UsesConnectionLimitedClient(invocation, semanticModel, cancellationToken);
     }
 
     private static bool IsHttpClientReceiver(
@@ -299,7 +300,10 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             }) == true;
     }
 
-    private static bool UsesConnectionLimitedClient(InvocationExpressionSyntax invocation)
+    private static bool UsesConnectionLimitedClient(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
             !TryGetHttpClientReceiverIdentifier(memberAccess.Expression, out var receiver))
@@ -318,12 +322,17 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
 
         if (clientDeclaration?.Initializer?.Value is { } value &&
             !IsLocalReassignedBetween(clientDeclaration, invocation.SpanStart) &&
-            IsConnectionLimitedHttpClientCreation(value, declarations, clientDeclaration.SpanStart))
+            IsConnectionLimitedHttpClientCreation(
+                value,
+                declarations,
+                clientDeclaration.SpanStart,
+                semanticModel,
+                cancellationToken))
         {
             return true;
         }
 
-        return ReceiverMemberUsesConnectionLimitedHandler(receiver);
+        return ReceiverMemberUsesConnectionLimitedHandler(receiver, semanticModel, cancellationToken);
     }
 
     private static bool TryGetHttpClientReceiverIdentifier(
@@ -344,7 +353,10 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    private static bool ReceiverMemberUsesConnectionLimitedHandler(IdentifierNameSyntax receiver)
+    private static bool ReceiverMemberUsesConnectionLimitedHandler(
+        IdentifierNameSyntax receiver,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         var typeMemberHandlers = GetTypeMemberHandlerDeclarations(receiver);
 
@@ -356,11 +368,21 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
                     field.Declaration.Variables.Any(variable =>
                         variable.Identifier.ValueText == receiver.Identifier.ValueText &&
                         variable.Initializer?.Value is { } value &&
-                        IsConnectionLimitedHttpClientCreation(value, typeMemberHandlers, variable.SpanStart)),
+                        IsConnectionLimitedHttpClientCreation(
+                            value,
+                            typeMemberHandlers,
+                            variable.SpanStart,
+                            semanticModel,
+                            cancellationToken)),
                 PropertyDeclarationSyntax property => HttpClientSymbols.IsHttpClientName(property.Type) &&
                     property.Identifier.ValueText == receiver.Identifier.ValueText &&
                     property.Initializer?.Value is { } value &&
-                    IsConnectionLimitedHttpClientCreation(value, typeMemberHandlers, property.SpanStart),
+                    IsConnectionLimitedHttpClientCreation(
+                        value,
+                        typeMemberHandlers,
+                        property.SpanStart,
+                        semanticModel,
+                        cancellationToken),
                 _ => false
             }) == true;
     }
@@ -377,7 +399,9 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
     private static bool IsConnectionLimitedHttpClientCreation(
         ExpressionSyntax expression,
         IReadOnlyCollection<VariableDeclaratorSyntax> declarations,
-        int evidenceStart)
+        int evidenceStart,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         if (expression is not BaseObjectCreationExpressionSyntax creation ||
             !IsHttpClientCreation(creation) ||
@@ -388,7 +412,12 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
 
         return argumentList.Arguments
             .Select(argument => argument.Expression)
-            .Any(argument => IsConnectionLimitedHandler(argument, declarations, evidenceStart));
+            .Any(argument => IsConnectionLimitedHandler(
+                argument,
+                declarations,
+                evidenceStart,
+                semanticModel,
+                cancellationToken));
     }
 
     private static bool IsHttpClientCreation(BaseObjectCreationExpressionSyntax creation)
@@ -401,11 +430,13 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
     private static bool IsConnectionLimitedHandler(
         ExpressionSyntax expression,
         IReadOnlyCollection<VariableDeclaratorSyntax> declarations,
-        int evidenceStart)
+        int evidenceStart,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         if (expression is BaseObjectCreationExpressionSyntax creation)
         {
-            return IsSocketsHttpHandlerCreation(creation) &&
+            return IsSocketsHttpHandlerCreation(creation, semanticModel, cancellationToken) &&
                 HasMaxConnectionsPerServerInitializer(creation);
         }
 
@@ -418,7 +449,7 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             .FirstOrDefault(declaration => declaration.Identifier.ValueText == identifier.Identifier.ValueText);
 
         return handlerDeclaration?.Initializer?.Value is BaseObjectCreationExpressionSyntax handlerCreation &&
-            IsSocketsHttpHandlerCreation(handlerCreation, handlerDeclaration) &&
+            IsSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken, handlerDeclaration) &&
             !IsLocalReassignedBetween(handlerDeclaration, evidenceStart) &&
             HasMaxConnectionsPerServerInitializer(handlerCreation);
     }
@@ -439,8 +470,17 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
 
     private static bool IsSocketsHttpHandlerCreation(
         BaseObjectCreationExpressionSyntax creation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
         VariableDeclaratorSyntax? variable = null)
     {
+        var creationType = semanticModel.GetTypeInfo(creation, cancellationToken).Type;
+        if (creationType is not null && creationType is not IErrorTypeSymbol)
+        {
+            return creationType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                "global::System.Net.Http.SocketsHttpHandler";
+        }
+
         return creation is ObjectCreationExpressionSyntax objectCreation &&
             objectCreation.Type.ToString().EndsWith("SocketsHttpHandler", System.StringComparison.Ordinal) ||
             creation is ImplicitObjectCreationExpressionSyntax &&
