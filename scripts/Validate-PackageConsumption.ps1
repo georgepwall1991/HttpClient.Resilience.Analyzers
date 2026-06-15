@@ -63,6 +63,7 @@ dotnet_diagnostic.HCR080.severity = warning
 dotnet_diagnostic.HCR081.severity = warning
 dotnet_diagnostic.HCR082.severity = warning
 dotnet_diagnostic.HCR083.severity = warning
+dotnet_diagnostic.HCR084.severity = warning
 "@ | Set-Content -LiteralPath $editorConfigPath
 
     @"
@@ -272,6 +273,14 @@ public sealed class BadRelativeTypedClient
     }
 }
 
+public sealed class BadStringlyNamedClientService
+{
+    public HttpClient Create(IHttpClientFactory factory)
+    {
+        return factory.CreateClient("payments");
+    }
+}
+
 public interface IServiceCollection
 {
 }
@@ -372,7 +381,8 @@ namespace Polly
         'HCR080',
         'HCR081',
         'HCR082',
-        'HCR083'
+        'HCR083',
+        'HCR084'
     )
 
     $missingDiagnostics = @(

@@ -195,6 +195,14 @@ public sealed class BadRelativeTypedClient
     }
 }
 
+public sealed class BadStringlyNamedClientService
+{
+    public HttpClient Create(IHttpClientFactory factory)
+    {
+        return factory.CreateClient("payments");
+    }
+}
+
 public interface IServiceCollection
 {
 }

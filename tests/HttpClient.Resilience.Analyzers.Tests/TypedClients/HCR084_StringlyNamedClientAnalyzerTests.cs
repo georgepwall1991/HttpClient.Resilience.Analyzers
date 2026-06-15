@@ -1,0 +1,253 @@
+using HttpClient.Resilience.Analyzers.Analyzers.TypedClients;
+using HttpClient.Resilience.Analyzers.Diagnostics;
+using HttpClient.Resilience.Analyzers.Tests.TestInfrastructure;
+
+namespace HttpClient.Resilience.Analyzers.Tests.TypedClients;
+
+public sealed class HCR084_StringlyNamedClientAnalyzerTests
+{
+    [Fact]
+    public async Task ReportsDiagnostic_WhenNamedClientLiteralIsDuplicatedAtCreateClient()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient("payments");
+                }
+            }
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory factory)
+                {
+                    return factory.CreateClient("payments");
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR084_StringlyNamedClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR084, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenNamedClientUsesSharedConstant()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class ClientNames
+            {
+                public const string Payments = "payments";
+            }
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient(ClientNames.Payments);
+                }
+            }
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory factory)
+                {
+                    return factory.CreateClient(ClientNames.Payments);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR084_StringlyNamedClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenCreateClientUsesDifferentName()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient("payments");
+                }
+            }
+
+            public sealed class SearchService
+            {
+                public HttpClient Create(IHttpClientFactory factory)
+                {
+                    return factory.CreateClient("search");
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR084_StringlyNamedClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenFactoryIsCustomLookalike()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient("payments");
+                }
+            }
+
+            public sealed class PaymentsService
+            {
+                public string Create(CustomFactory factory)
+                {
+                    return factory.CreateClient("payments");
+                }
+            }
+
+            public sealed class CustomFactory
+            {
+                public string CreateClient(string name)
+                {
+                    return name;
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR084_StringlyNamedClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenRegistrationReceiverIsCustomLookalike()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Composition
+            {
+                public static void Configure(CustomServices services)
+                {
+                    services.AddHttpClient("payments");
+                }
+            }
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory factory)
+                {
+                    return factory.CreateClient("payments");
+                }
+            }
+
+            public sealed class CustomServices
+            {
+                public void AddHttpClient(string name)
+                {
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR084_StringlyNamedClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+}

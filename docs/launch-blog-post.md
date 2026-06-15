@@ -23,6 +23,7 @@ Most .NET services use `HttpClient`, but many production issues come from patter
 - Obvious unbounded `Task.WhenAll` outbound HTTP fan-out.
 - Per-request resilience pipeline construction.
 - Typed clients using relative URLs without a configured `BaseAddress`.
+- Named clients whose string names are duplicated across registration and use sites.
 
 ## Example
 

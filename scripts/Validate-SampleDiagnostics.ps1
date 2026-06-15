@@ -44,7 +44,8 @@ $requiredDiagnostics = @(
     'HCR080',
     'HCR081',
     'HCR082',
-    'HCR083'
+    'HCR083',
+    'HCR084'
 )
 
 $missingDiagnostics = @(

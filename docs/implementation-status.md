@@ -23,6 +23,7 @@ This project currently implements every MVP diagnostic ID from the starter docum
 | `HCR081` | Yes | Guide | HTTP stream ownership detection for streams materialized from `HttpClient.GetStreamAsync(...)` or `HttpContent.ReadAsStreamAsync(...)`, including local declarations and assignments, direct dispose or dispose-async recognition, using statement/declaration ownership, return and returned-wrapper ownership transfer, reassignment checks, and resolved custom-client filtering. |
 | `HCR082` | Yes | Guide | Per-request `Polly.ResiliencePipelineBuilder.Build()` detection inside obvious request paths, including controller/service-style type suffixes and Minimal API endpoint lambdas, visible builder-local tracking, fluent builder chains, static-field/startup/test-context filtering, and resolved custom-builder filtering. |
 | `HCR083` | Yes | Guide | Typed-client relative URL detection for registered `AddHttpClient<T>()` and `AddHttpClient<TService,TImplementation>()` clients without visible `BaseAddress` configuration, including direct `AddHttpClient(..., client => client.BaseAddress = ...)` and chained `ConfigureHttpClient(...)` filtering, resolved real `HttpClient` receiver validation, absolute URL filtering, and custom-client filtering. |
+| `HCR084` | Yes | Guide | Named-client literal duplication detection between visible string-literal `AddHttpClient("name")` registrations and matching string-literal `IHttpClientFactory.CreateClient("name")` use sites, including obvious service-collection and factory receiver validation, shared-constant filtering, and custom factory or registration lookalike filtering. |
 
 ## Current Limitations
 
@@ -33,3 +34,4 @@ This project currently implements every MVP diagnostic ID from the starter docum
 - `HCR081` tracks local stream ownership heuristically rather than full interprocedural ownership flow.
 - `HCR082` intentionally limits request-path evidence to visible type names and Minimal API shapes; it does not infer arbitrary framework dispatch conventions.
 - `HCR083` follows visible typed-client registrations and simple string URL constants; it does not evaluate configuration-driven base addresses.
+- `HCR084` intentionally reports duplicated string literals, not constant-backed names or configuration-provided names.

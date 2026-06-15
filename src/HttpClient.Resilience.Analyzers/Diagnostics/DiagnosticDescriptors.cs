@@ -107,6 +107,12 @@ public static class DiagnosticDescriptors
         "Configure BaseAddress for typed clients that use relative URLs",
         DiagnosticCategories.TypedClients);
 
+    public static readonly DiagnosticDescriptor HCR084 = Create(
+        DiagnosticIds.HCR084,
+        "Avoid duplicated string literals for named HttpClient names",
+        "Avoid duplicated string literals for named HttpClient names",
+        DiagnosticCategories.TypedClients);
+
     private static DiagnosticDescriptor Create(
         string id,
         string title,

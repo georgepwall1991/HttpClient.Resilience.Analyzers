@@ -24,6 +24,7 @@ Compile-time safety for `.NET` `HttpClient`, `IHttpClientFactory`, typed clients
 - Obvious unbounded outbound HTTP fan-out.
 - Per-request resilience pipeline construction.
 - Typed clients that use relative URLs without a configured `BaseAddress`.
+- Duplicated string literals for named `HttpClient` names.
 
 ## Install
 
@@ -63,6 +64,7 @@ Implemented diagnostic slices:
 - `HCR081` for streams returned by `HttpClient.GetStreamAsync(...)` or `HttpContent.ReadAsStreamAsync(...)` that are neither disposed nor visibly transferred to the caller or a returned owner.
 - `HCR082` for `Polly.ResiliencePipelineBuilder.Build()` calls inside obvious request paths, including controller/service-style types and Minimal API endpoint lambdas, with startup/static-field/test-context and custom-builder filtering.
 - `HCR083` for registered typed clients that use relative string URLs on `HttpClient` calls without visible `BaseAddress` configuration in `AddHttpClient(...)` or chained `ConfigureHttpClient(...)`.
+- `HCR084` for named-client string literals duplicated between `AddHttpClient("name")` registrations and `IHttpClientFactory.CreateClient("name")` use sites, with shared-constant and custom-factory filtering.
 
 ## Example
 
