@@ -59,6 +59,7 @@ if ($missingExpectedIds.Count -gt 0) {
 }
 
 $profilePaths = @(
+    '.editorconfig',
     'profiles\default.editorconfig',
     'profiles\brownfield-adoption.editorconfig',
     'profiles\strict-ci.editorconfig',

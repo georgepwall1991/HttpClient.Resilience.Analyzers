@@ -56,4 +56,4 @@ The package is intentionally not a style analyzer. Warnings should feel like pro
 
 ## Status
 
-The initial preview implements the MVP diagnostics plus the first response-correctness expansion, with tests, documentation, sample cases, `.editorconfig` profiles, and NuGet analyzer packaging.
+The initial preview implements the MVP diagnostics plus the starter's first future-rule expansion through `HCR084`, with tests, documentation, sample cases, `.editorconfig` profiles, and NuGet analyzer packaging.

@@ -39,7 +39,7 @@ The repository is scaffolded with:
 - A `netstandard2.0` Roslyn analyzer assembly.
 - A NuGet package project that packs analyzer DLLs under `analyzers/dotnet/cs`.
 - An xUnit test project with analyzer test infrastructure.
-- A sample project wired to the local analyzer project, with script-enforced build output coverage for every MVP diagnostic.
+- A sample project wired to the local analyzer project, with script-enforced build output coverage for every configured diagnostic.
 - Rule docs, `.editorconfig` profiles, and GitHub Actions CI/release pipelines.
 
 See [implementation status](docs/implementation-status.md) for current analyzer and code-fix coverage.
@@ -97,7 +97,7 @@ The package includes `.editorconfig` profiles under `profiles/`:
 
 - `default.editorconfig` keeps the production-safety rules at their intended defaults.
 - `brownfield-adoption.editorconfig` lowers most rules while teams triage an existing codebase.
-- `strict-ci.editorconfig` promotes MVP warnings to errors for CI gates.
+- `strict-ci.editorconfig` promotes production-safety warnings to errors for CI gates.
 - `library-author.editorconfig` is stricter about streaming response ownership.
 
 See [adoption](docs/adoption.md), [configuration](docs/configuration.md), and the [false-positive policy](docs/false-positive-policy.md) for rollout guidance.

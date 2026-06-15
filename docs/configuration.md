@@ -12,9 +12,9 @@ dotnet_diagnostic.HCR080.severity = suggestion
 
 | Profile | Use when |
 |---|---|
-| `profiles/default.editorconfig` | New services or teams ready to act on all MVP warnings. |
+| `profiles/default.editorconfig` | New services or teams ready to act on all configured warnings. |
 | `profiles/brownfield-adoption.editorconfig` | Existing applications with an unknown warning baseline. |
-| `profiles/strict-ci.editorconfig` | Repositories that want CI to fail on MVP warnings. |
+| `profiles/strict-ci.editorconfig` | Repositories that want CI to fail on production-safety warnings. |
 | `profiles/library-author.editorconfig` | Libraries where response ownership mistakes should be treated more strictly. |
 
 ## Severity Guidance
