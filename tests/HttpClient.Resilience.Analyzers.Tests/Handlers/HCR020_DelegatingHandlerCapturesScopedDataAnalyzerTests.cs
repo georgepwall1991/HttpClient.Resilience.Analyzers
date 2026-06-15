@@ -701,6 +701,30 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenResolvedSimpleRequestScopedTypeNameIsCustomLookalike()
+    {
+        const string source = """
+            using Custom;
+            using System.Net.Http;
+
+            public sealed class UserHeaderHandler(IHttpContextAccessor context) : DelegatingHandler
+            {
+            }
+
+            namespace Custom
+            {
+                public interface IHttpContextAccessor
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenQualifiedCustomLookalikeIsRegisteredScoped()
     {
         const string source = """
@@ -721,6 +745,48 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
             namespace Custom
             {
                 public sealed class HttpContext
+                {
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddScoped<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenResolvedSimpleCustomLookalikeIsRegisteredScoped()
+    {
+        const string source = """
+            using Custom;
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<Custom.IHttpContextAccessor>();
+                }
+            }
+
+            public sealed class UserHeaderHandler(IHttpContextAccessor context) : DelegatingHandler
+            {
+            }
+
+            namespace Custom
+            {
+                public interface IHttpContextAccessor
                 {
                 }
             }

@@ -66,7 +66,12 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
         var reportedConstructorParameter = false;
         foreach (var parameter in GetConstructorParameters(classDeclaration))
         {
-            if (parameter.Type is null || !IsRequestScopedType(parameter.Type, scopedTypes))
+            if (parameter.Type is null ||
+                !IsRequestScopedType(
+                    parameter.Type,
+                    scopedTypes,
+                    context.SemanticModel,
+                    context.CancellationToken))
             {
                 continue;
             }
@@ -84,7 +89,11 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
 
         foreach (var field in classDeclaration.Members.OfType<FieldDeclarationSyntax>())
         {
-            if (!IsRequestScopedType(field.Declaration.Type, scopedTypes))
+            if (!IsRequestScopedType(
+                    field.Declaration.Type,
+                    scopedTypes,
+                    context.SemanticModel,
+                    context.CancellationToken))
             {
                 continue;
             }
@@ -96,7 +105,11 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
 
         foreach (var property in classDeclaration.Members.OfType<PropertyDeclarationSyntax>())
         {
-            if (!IsRequestScopedType(property.Type, scopedTypes))
+            if (!IsRequestScopedType(
+                    property.Type,
+                    scopedTypes,
+                    context.SemanticModel,
+                    context.CancellationToken))
             {
                 continue;
             }
@@ -219,13 +232,23 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
         }
     }
 
-    private static bool IsRequestScopedType(TypeSyntax type, ISet<string> scopedTypes)
+    private static bool IsRequestScopedType(
+        TypeSyntax type,
+        ISet<string> scopedTypes,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         type = UnwrapNullableType(type);
 
         if (TryGetRequestScopedWrapperArgument(type, out var wrappedType))
         {
-            return IsRequestScopedType(wrappedType, scopedTypes);
+            return IsRequestScopedType(wrappedType, scopedTypes, semanticModel, cancellationToken);
+        }
+
+        var resolvedType = semanticModel.GetTypeInfo(type, cancellationToken).Type;
+        if (resolvedType is not null && resolvedType is not IErrorTypeSymbol)
+        {
+            return IsRequestScopedType(resolvedType, scopedTypes);
         }
 
         if (TypeIsQualified(type))
@@ -242,6 +265,25 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
         }
 
         return TypeNameUtilities.GetComparableNames(simpleTypeName)
+            .Any(scopedTypes.Contains);
+    }
+
+    private static bool IsRequestScopedType(ITypeSymbol type, ISet<string> scopedTypes)
+    {
+        var qualifiedTypeName = NormalizeTypeName(type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        if (QualifiedRequestScopedTypeNames.Contains(qualifiedTypeName, System.StringComparer.Ordinal) ||
+            scopedTypes.Contains(qualifiedTypeName))
+        {
+            return true;
+        }
+
+        if (!type.ContainingNamespace.IsGlobalNamespace)
+        {
+            return false;
+        }
+
+        return RequestScopedTypeNames.Contains(type.Name, System.StringComparer.Ordinal) ||
+            TypeNameUtilities.GetComparableNames(type.Name)
             .Any(scopedTypes.Contains);
     }
 
