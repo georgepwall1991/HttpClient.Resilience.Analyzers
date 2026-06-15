@@ -20,6 +20,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
         context.RegisterSyntaxNodeAction(AnalyzeLocalDeclaration, SyntaxKind.LocalDeclarationStatement);
+        context.RegisterSyntaxNodeAction(AnalyzeAssignment, SyntaxKind.SimpleAssignmentExpression);
     }
 
     private static void AnalyzeLocalDeclaration(SyntaxNodeAnalysisContext context)
@@ -56,6 +57,30 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                 DiagnosticDescriptors.HCR060,
                 variable.Identifier.GetLocation()));
         }
+    }
+
+    private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context)
+    {
+        var assignment = (AssignmentExpressionSyntax)context.Node;
+        if (assignment.Left is not IdentifierNameSyntax identifier ||
+            context.SemanticModel.GetSymbolInfo(identifier, context.CancellationToken).Symbol is not ILocalSymbol ||
+            !InitializerMaterializesResponse(assignment.Right) ||
+            !IsResponseHeadersReadHttpCall(
+                assignment.Right,
+                context.SemanticModel,
+                context.CancellationToken))
+        {
+            return;
+        }
+
+        if (OwnershipIsTransferredOrDisposed(identifier.Identifier.ValueText, assignment))
+        {
+            return;
+        }
+
+        context.ReportDiagnostic(Diagnostic.Create(
+            DiagnosticDescriptors.HCR060,
+            identifier.GetLocation()));
     }
 
     private static bool InitializerMaterializesResponse(ExpressionSyntax expression)
@@ -287,8 +312,21 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             return false;
         }
 
-        return IsReturned(containingBlock, variableName, variable.SpanStart) ||
-            IsExplicitlyDisposed(containingBlock, variableName, variable.SpanStart);
+        return OwnershipIsTransferredOrDisposed(containingBlock, variableName, variable.SpanStart);
+    }
+
+    private static bool OwnershipIsTransferredOrDisposed(string variableName, AssignmentExpressionSyntax assignment)
+    {
+        var containingBlock = assignment.FirstAncestorOrSelf<BlockSyntax>();
+
+        return containingBlock is not null &&
+            OwnershipIsTransferredOrDisposed(containingBlock, variableName, assignment.SpanStart);
+    }
+
+    private static bool OwnershipIsTransferredOrDisposed(BlockSyntax containingBlock, string variableName, int ownershipStart)
+    {
+        return IsReturned(containingBlock, variableName, ownershipStart) ||
+            IsExplicitlyDisposed(containingBlock, variableName, ownershipStart);
     }
 
     private static bool IsReturned(BlockSyntax containingBlock, string variableName, int declarationStart)
