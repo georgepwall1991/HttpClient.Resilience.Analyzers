@@ -243,34 +243,40 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             return false;
         }
 
-        return IsReturned(containingBlock, variableName) ||
-            IsExplicitlyDisposed(containingBlock, variableName);
+        return IsReturned(containingBlock, variableName, variable.SpanStart) ||
+            IsExplicitlyDisposed(containingBlock, variableName, variable.SpanStart);
     }
 
-    private static bool IsReturned(BlockSyntax containingBlock, string variableName)
+    private static bool IsReturned(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
         return containingBlock
             .DescendantNodes()
             .OfType<ReturnStatementSyntax>()
             .Any(returnStatement => returnStatement.Expression is not null &&
-                TransfersResponseOwnership(returnStatement.Expression, variableName, containingBlock));
+                TransfersResponseOwnership(
+                    returnStatement.Expression,
+                    variableName,
+                    containingBlock,
+                    declarationStart,
+                    returnStatement.SpanStart));
     }
 
-    private static bool IsExplicitlyDisposed(BlockSyntax containingBlock, string variableName)
+    private static bool IsExplicitlyDisposed(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
-        return IsDirectlyDisposedInBlock(containingBlock, variableName) ||
-            IsDisposedInFinally(containingBlock, variableName) ||
-            IsOwnedByUsingStatement(containingBlock, variableName);
+        return IsDirectlyDisposedInBlock(containingBlock, variableName, declarationStart) ||
+            IsDisposedInFinally(containingBlock, variableName, declarationStart) ||
+            IsOwnedByUsingStatement(containingBlock, variableName, declarationStart);
     }
 
-    private static bool IsDirectlyDisposedInBlock(BlockSyntax containingBlock, string variableName)
+    private static bool IsDirectlyDisposedInBlock(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
         return containingBlock.Statements
             .OfType<ExpressionStatementSyntax>()
-            .Any(statement => IsDisposeInvocation(statement.Expression, variableName));
+            .Any(statement => IsDisposeInvocation(statement.Expression, variableName) &&
+                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, statement.SpanStart));
     }
 
-    private static bool IsDisposedInFinally(BlockSyntax containingBlock, string variableName)
+    private static bool IsDisposedInFinally(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
         return containingBlock
             .DescendantNodes()
@@ -278,7 +284,8 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             .Any(finallyClause => finallyClause.Block
                 .DescendantNodes()
                 .OfType<InvocationExpressionSyntax>()
-                .Any(invocation => IsDisposeInvocation(invocation, variableName)));
+                .Any(invocation => IsDisposeInvocation(invocation, variableName) &&
+                    !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, invocation.SpanStart)));
     }
 
     private static bool IsDisposeInvocation(ExpressionSyntax expression, string variableName)
@@ -295,34 +302,46 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         } && identifier.Identifier.ValueText == variableName;
     }
 
-    private static bool IsOwnedByUsingStatement(BlockSyntax containingBlock, string variableName)
+    private static bool IsOwnedByUsingStatement(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
         return containingBlock
             .DescendantNodes()
             .OfType<UsingStatementSyntax>()
             .Any(usingStatement => usingStatement.Expression is IdentifierNameSyntax identifier &&
-                identifier.Identifier.ValueText == variableName);
+                identifier.Identifier.ValueText == variableName &&
+                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, usingStatement.SpanStart));
     }
 
-    private static bool TransfersResponseOwnership(ExpressionSyntax expression, string variableName, BlockSyntax containingBlock)
+    private static bool TransfersResponseOwnership(
+        ExpressionSyntax expression,
+        string variableName,
+        BlockSyntax containingBlock,
+        int declarationStart,
+        int evidenceStart)
     {
         return expression switch
         {
-            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == variableName ||
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == variableName &&
+                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, evidenceStart) ||
                 LocalInitializerTransfersResponseOwnership(
                     containingBlock,
                     identifier.Identifier.ValueText,
-                    variableName),
+                    variableName,
+                    declarationStart),
             ParenthesizedExpressionSyntax parenthesized => TransfersResponseOwnership(
                 parenthesized.Expression,
                 variableName,
-                containingBlock),
+                containingBlock,
+                declarationStart,
+                evidenceStart),
             ObjectCreationExpressionSyntax objectCreation => ObjectCreationTransfersResponseOwnership(
                 objectCreation,
-                variableName),
+                variableName) &&
+                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, evidenceStart),
             ImplicitObjectCreationExpressionSyntax implicitObjectCreation => ObjectCreationTransfersResponseOwnership(
                 implicitObjectCreation,
-                variableName),
+                variableName) &&
+                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, evidenceStart),
             _ => false
         };
     }
@@ -330,13 +349,20 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
     private static bool LocalInitializerTransfersResponseOwnership(
         BlockSyntax containingBlock,
         string localName,
-        string responseVariableName)
+        string responseVariableName,
+        int responseDeclarationStart)
     {
         return containingBlock
             .DescendantNodes()
             .OfType<VariableDeclaratorSyntax>()
             .Any(variable => variable.Identifier.ValueText == localName &&
                 variable.Initializer?.Value is { } initializer &&
+                variable.SpanStart > responseDeclarationStart &&
+                !IsVariableReassignedBetween(
+                    containingBlock,
+                    responseVariableName,
+                    responseDeclarationStart,
+                    variable.SpanStart) &&
                 InitializerCreatesResponseOwner(initializer, responseVariableName));
     }
 
@@ -378,5 +404,21 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             .Select(assignment => assignment.Right)
             .OfType<IdentifierNameSyntax>()
             .Any(identifier => identifier.Identifier.ValueText == variableName) == true;
+    }
+
+    private static bool IsVariableReassignedBetween(
+        BlockSyntax containingBlock,
+        string variableName,
+        int start,
+        int end)
+    {
+        return containingBlock
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => assignment.SpanStart > start &&
+                assignment.SpanStart < end &&
+                assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                assignment.Left is IdentifierNameSyntax identifier &&
+                identifier.Identifier.ValueText == variableName);
     }
 }
