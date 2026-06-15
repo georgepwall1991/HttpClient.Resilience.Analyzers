@@ -366,6 +366,116 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenUnqualifiedTypedClientResolvesInNamespaceAndSendsUnsafeMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            namespace Clients
+            {
+                public static class Registrations
+                {
+                    public static IHttpClientBuilder Configure(IServiceCollection services)
+                    {
+                        return services
+                            .AddHttpClient<PaymentsClient>()
+                            .AddStandardResilienceHandler();
+                    }
+                }
+
+                public sealed class PaymentsClient(HttpClient httpClient)
+                {
+                    public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                    {
+                        return httpClient.PostAsync("/payments", null, cancellationToken);
+                    }
+                }
+
+                public interface IServiceCollection
+                {
+                }
+
+                public interface IHttpClientBuilder
+                {
+                }
+
+                public static class ServiceCollectionExtensions
+                {
+                    public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                    public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR041, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenUnqualifiedTypedClientResolvesToDifferentSameNamedType()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            namespace Clients
+            {
+                public static class Registrations
+                {
+                    public static IHttpClientBuilder Configure(IServiceCollection services)
+                    {
+                        return services
+                            .AddHttpClient<PaymentsClient>()
+                            .AddStandardResilienceHandler();
+                    }
+                }
+
+                public sealed class PaymentsClient(HttpClient httpClient)
+                {
+                    public Task<HttpResponseMessage> GetAsync(CancellationToken cancellationToken)
+                    {
+                        return httpClient.GetAsync("/payments", cancellationToken);
+                    }
+                }
+
+                public interface IServiceCollection
+                {
+                }
+
+                public interface IHttpClientBuilder
+                {
+                }
+
+                public static class ServiceCollectionExtensions
+                {
+                    public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                    public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+                }
+            }
+
+            namespace Other
+            {
+                public sealed class PaymentsClient(HttpClient httpClient)
+                {
+                    public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                    {
+                        return httpClient.PostAsync("/payments", null, cancellationToken);
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenTwoGenericTypedClientImplementationSendsUnsafeMethod()
     {
         const string source = """

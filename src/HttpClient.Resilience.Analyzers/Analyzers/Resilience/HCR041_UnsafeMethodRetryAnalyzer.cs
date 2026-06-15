@@ -14,6 +14,19 @@ namespace HttpClient.Resilience.Analyzers.Analyzers.Resilience;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
 {
+    private sealed class TypedClientRegistration
+    {
+        public TypedClientRegistration(string rawTypeName, string? resolvedTypeName)
+        {
+            RawTypeName = rawTypeName;
+            ResolvedTypeName = resolvedTypeName;
+        }
+
+        public string RawTypeName { get; }
+
+        public string? ResolvedTypeName { get; }
+    }
+
     private static readonly string[] UnsafeHttpMethodPrefixes =
     {
         "Connect",
@@ -155,7 +168,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             !httpMethods.Any(method => UnsafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal));
     }
 
-    private static string? FindTypedClientImplementationInChain(
+    private static TypedClientRegistration? FindTypedClientImplementationInChain(
         InvocationExpressionSyntax invocation,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
@@ -175,7 +188,10 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                 IsServiceCollectionReceiver(addHttpClientAccess.Expression, semanticModel, cancellationToken))
             {
                 var implementationTypeIndex = genericName.TypeArgumentList.Arguments.Count == 2 ? 1 : 0;
-                return genericName.TypeArgumentList.Arguments[implementationTypeIndex].ToString();
+                return CreateTypedClientRegistration(
+                    genericName.TypeArgumentList.Arguments[implementationTypeIndex],
+                    semanticModel,
+                    cancellationToken);
             }
 
             if (currentInvocation.Expression is not MemberAccessExpressionSyntax memberAccess)
@@ -189,7 +205,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         return null;
     }
 
-    private static string? FindTypedClientImplementationForBuilderLocal(
+    private static TypedClientRegistration? FindTypedClientImplementationForBuilderLocal(
         InvocationExpressionSyntax invocation,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
@@ -197,6 +213,19 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         return FindAddHttpClientInvocationForBuilderLocal(invocation) is { } addHttpClient
             ? FindTypedClientImplementationInChain(addHttpClient, semanticModel, cancellationToken)
             : null;
+    }
+
+    private static TypedClientRegistration CreateTypedClientRegistration(
+        TypeSyntax implementationType,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var typeSymbol = semanticModel.GetTypeInfo(implementationType, cancellationToken).Type;
+        return new TypedClientRegistration(
+            implementationType.ToString(),
+            typeSymbol is not null and not IErrorTypeSymbol
+                ? NormalizeTypeName(typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+                : null);
     }
 
     private static string? FindNamedClientInChain(
@@ -367,7 +396,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    private static bool TypedClientSendsUnsafeHttpMethod(IEnumerable<SyntaxNode> roots, string typedClient)
+    private static bool TypedClientSendsUnsafeHttpMethod(IEnumerable<SyntaxNode> roots, TypedClientRegistration typedClient)
     {
         return roots
             .SelectMany(root => root.DescendantNodes().OfType<ClassDeclarationSyntax>())
@@ -376,7 +405,25 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             .Any(invocation => IsUnsafeHttpClientCall(invocation, roots));
     }
 
-    private static bool DeclaredTypeMatchesRegistration(ClassDeclarationSyntax classDeclaration, string registrationTypeName)
+    private static bool DeclaredTypeMatchesRegistration(
+        ClassDeclarationSyntax classDeclaration,
+        TypedClientRegistration registration)
+    {
+        if (registration.ResolvedTypeName is not null)
+        {
+            return GetQualifiedClassName(classDeclaration) == registration.ResolvedTypeName;
+        }
+
+        var registrationTypeName = NormalizeTypeName(registration.RawTypeName);
+        if (registrationTypeName.Contains("."))
+        {
+            return GetQualifiedClassName(classDeclaration) == registrationTypeName;
+        }
+
+        return classDeclaration.Identifier.ValueText == TypeNameUtilities.ToSimpleName(registrationTypeName);
+    }
+
+    private static string NormalizeTypeName(string registrationTypeName)
     {
         registrationTypeName = registrationTypeName.Trim();
         if (registrationTypeName.StartsWith("global::", System.StringComparison.Ordinal))
@@ -384,12 +431,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             registrationTypeName = registrationTypeName.Substring("global::".Length);
         }
 
-        if (registrationTypeName.Contains("."))
-        {
-            return GetQualifiedClassName(classDeclaration) == registrationTypeName;
-        }
-
-        return classDeclaration.Identifier.ValueText == TypeNameUtilities.ToSimpleName(registrationTypeName);
+        return registrationTypeName;
     }
 
     private static string GetQualifiedClassName(ClassDeclarationSyntax classDeclaration)
