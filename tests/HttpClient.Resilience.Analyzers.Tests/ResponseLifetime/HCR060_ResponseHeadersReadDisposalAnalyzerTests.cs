@@ -579,6 +579,30 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenResponseIsTransferredToUsingDeclaration()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    using var owned = response;
+                    _ = await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenResponseLocalIsReassignedBeforeDispose()
     {
         const string source = """
@@ -593,6 +617,31 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
                     var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
                     response = new HttpResponseMessage();
                     response.Dispose();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR060, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenResponseLocalIsReassignedBeforeUsingDeclarationTransfer()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    response = new HttpResponseMessage();
+                    using var owned = response;
                 }
             }
             """;

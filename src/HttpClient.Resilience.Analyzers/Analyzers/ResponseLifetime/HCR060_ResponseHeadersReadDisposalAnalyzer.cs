@@ -309,7 +309,8 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
     {
         return IsDirectlyDisposedInBlock(containingBlock, variableName, declarationStart) ||
             IsDisposedInFinally(containingBlock, variableName, declarationStart) ||
-            IsOwnedByUsingStatement(containingBlock, variableName, declarationStart);
+            IsOwnedByUsingStatement(containingBlock, variableName, declarationStart) ||
+            IsOwnedByUsingDeclaration(containingBlock, variableName, declarationStart);
     }
 
     private static bool IsDirectlyDisposedInBlock(BlockSyntax containingBlock, string variableName, int declarationStart)
@@ -354,6 +355,25 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             .Any(usingStatement => usingStatement.Expression is IdentifierNameSyntax identifier &&
                 identifier.Identifier.ValueText == variableName &&
                 !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, usingStatement.SpanStart));
+    }
+
+    private static bool IsOwnedByUsingDeclaration(BlockSyntax containingBlock, string variableName, int declarationStart)
+    {
+        return containingBlock.Statements
+            .OfType<LocalDeclarationStatementSyntax>()
+            .Any(statement => statement.UsingKeyword.IsKind(SyntaxKind.UsingKeyword) &&
+                statement.SpanStart > declarationStart &&
+                statement.Declaration.Variables.Any(variable => variable.Initializer?.Value is { } initializer &&
+                    IsDirectVariableReference(initializer, variableName)) &&
+                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, statement.SpanStart));
+    }
+
+    private static bool IsDirectVariableReference(ExpressionSyntax expression, string variableName)
+    {
+        expression = UnwrapParentheses(expression);
+
+        return expression is IdentifierNameSyntax identifier &&
+            identifier.Identifier.ValueText == variableName;
     }
 
     private static bool TransfersResponseOwnership(
