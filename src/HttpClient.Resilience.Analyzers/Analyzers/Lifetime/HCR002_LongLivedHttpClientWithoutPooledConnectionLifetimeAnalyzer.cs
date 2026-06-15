@@ -456,7 +456,15 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
                     expression,
                     semanticModel,
                     cancellationToken) &&
-                IsConfiguredSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken));
+                IsSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken) &&
+                (HasPooledConnectionLifetimeInitializer(handlerCreation) ||
+                    LocalHasPooledConnectionLifetimeAssignmentBeforeUse(
+                        containingBlock,
+                        local,
+                        variable.SpanStart,
+                        expression.SpanStart,
+                        semanticModel,
+                        cancellationToken)));
     }
 
     private static bool SymbolInitializerHasPooledConnectionLifetime(
@@ -489,9 +497,34 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         System.Threading.CancellationToken cancellationToken)
     {
         return IsSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken) &&
-            handlerCreation.Initializer?.Expressions
-                .OfType<AssignmentExpressionSyntax>()
-                .Any(assignment => IsPooledConnectionLifetimeMember(assignment.Left)) == true;
+            HasPooledConnectionLifetimeInitializer(handlerCreation);
+    }
+
+    private static bool HasPooledConnectionLifetimeInitializer(BaseObjectCreationExpressionSyntax handlerCreation)
+    {
+        return handlerCreation.Initializer?.Expressions
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => IsPooledConnectionLifetimeMember(assignment.Left)) == true;
+    }
+
+    private static bool LocalHasPooledConnectionLifetimeAssignmentBeforeUse(
+        BlockSyntax containingBlock,
+        ILocalSymbol local,
+        int declarationStart,
+        int useStart,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return containingBlock
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => assignment.SpanStart > declarationStart &&
+                assignment.SpanStart < useStart &&
+                assignment.Left is MemberAccessExpressionSyntax memberAccess &&
+                IsPooledConnectionLifetimeMember(memberAccess.Name) &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetSymbolInfo(memberAccess.Expression, cancellationToken).Symbol,
+                    local));
     }
 
     private static bool IsPooledConnectionLifetimeMember(ExpressionSyntax expression)
