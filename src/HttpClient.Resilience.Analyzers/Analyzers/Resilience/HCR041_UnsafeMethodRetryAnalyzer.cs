@@ -258,7 +258,12 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             .OfType<VariableDeclaratorSyntax>()
             .Where(variable => variable.Identifier.ValueText == builderIdentifier.Identifier.ValueText &&
                 variable.SpanStart < invocation.SpanStart &&
-                variable.Initializer is not null)
+                variable.Initializer is not null &&
+                !LocalIsReassignedBetween(
+                    block,
+                    builderIdentifier.Identifier.ValueText,
+                    variable.SpanStart,
+                    invocation.SpanStart))
             .Select(variable => UnwrapParentheses(variable.Initializer!.Value))
             .OfType<InvocationExpressionSyntax>()
             .FirstOrDefault();
@@ -717,7 +722,11 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             .Any(invocation => invocation.Expression is MemberAccessExpressionSyntax
             {
                 Expression: IdentifierNameSyntax identifier
-            } && identifier.Identifier.ValueText == localName && IsUnsafeHttpCall(invocation, roots));
+            } &&
+                identifier.Identifier.ValueText == localName &&
+                invocation.SpanStart > declarator.SpanStart &&
+                !LocalIsReassignedBetween(containingBlock, localName, declarator.SpanStart, invocation.SpanStart) &&
+                IsUnsafeHttpCall(invocation, roots));
     }
 
     private static string? TryGetStringLiteral(ExpressionSyntax expression)
@@ -815,5 +824,21 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() == "global::System.String",
             _ => false
         };
+    }
+
+    private static bool LocalIsReassignedBetween(
+        BlockSyntax containingBlock,
+        string localName,
+        int start,
+        int end)
+    {
+        return containingBlock
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => assignment.SpanStart > start &&
+                assignment.SpanStart < end &&
+                assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                assignment.Left is IdentifierNameSyntax identifier &&
+                identifier.Identifier.ValueText == localName);
     }
 }
