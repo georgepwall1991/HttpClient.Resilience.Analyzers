@@ -317,7 +317,8 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             .FirstOrDefault(declaration => declaration.Identifier.ValueText == receiver.Identifier.ValueText);
 
         if (clientDeclaration?.Initializer?.Value is { } value &&
-            IsConnectionLimitedHttpClientCreation(value, declarations))
+            !IsLocalReassignedBetween(clientDeclaration, invocation.SpanStart) &&
+            IsConnectionLimitedHttpClientCreation(value, declarations, clientDeclaration.SpanStart))
         {
             return true;
         }
@@ -355,11 +356,11 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
                     field.Declaration.Variables.Any(variable =>
                         variable.Identifier.ValueText == receiver.Identifier.ValueText &&
                         variable.Initializer?.Value is { } value &&
-                        IsConnectionLimitedHttpClientCreation(value, typeMemberHandlers)),
+                        IsConnectionLimitedHttpClientCreation(value, typeMemberHandlers, variable.SpanStart)),
                 PropertyDeclarationSyntax property => HttpClientSymbols.IsHttpClientName(property.Type) &&
                     property.Identifier.ValueText == receiver.Identifier.ValueText &&
                     property.Initializer?.Value is { } value &&
-                    IsConnectionLimitedHttpClientCreation(value, typeMemberHandlers),
+                    IsConnectionLimitedHttpClientCreation(value, typeMemberHandlers, property.SpanStart),
                 _ => false
             }) == true;
     }
@@ -375,7 +376,8 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
 
     private static bool IsConnectionLimitedHttpClientCreation(
         ExpressionSyntax expression,
-        IReadOnlyCollection<VariableDeclaratorSyntax> declarations)
+        IReadOnlyCollection<VariableDeclaratorSyntax> declarations,
+        int evidenceStart)
     {
         if (expression is not BaseObjectCreationExpressionSyntax creation ||
             !IsHttpClientCreation(creation) ||
@@ -386,7 +388,7 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
 
         return argumentList.Arguments
             .Select(argument => argument.Expression)
-            .Any(argument => IsConnectionLimitedHandler(argument, declarations));
+            .Any(argument => IsConnectionLimitedHandler(argument, declarations, evidenceStart));
     }
 
     private static bool IsHttpClientCreation(BaseObjectCreationExpressionSyntax creation)
@@ -398,7 +400,8 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
 
     private static bool IsConnectionLimitedHandler(
         ExpressionSyntax expression,
-        IReadOnlyCollection<VariableDeclaratorSyntax> declarations)
+        IReadOnlyCollection<VariableDeclaratorSyntax> declarations,
+        int evidenceStart)
     {
         if (expression is BaseObjectCreationExpressionSyntax creation)
         {
@@ -416,7 +419,22 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
 
         return handlerDeclaration?.Initializer?.Value is BaseObjectCreationExpressionSyntax handlerCreation &&
             IsSocketsHttpHandlerCreation(handlerCreation, handlerDeclaration) &&
+            !IsLocalReassignedBetween(handlerDeclaration, evidenceStart) &&
             HasMaxConnectionsPerServerInitializer(handlerCreation);
+    }
+
+    private static bool IsLocalReassignedBetween(VariableDeclaratorSyntax variable, int evidenceStart)
+    {
+        var variableName = variable.Identifier.ValueText;
+
+        return variable.FirstAncestorOrSelf<BlockSyntax>()?
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => assignment.SpanStart > variable.SpanStart &&
+                assignment.SpanStart < evidenceStart &&
+                assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                assignment.Left is IdentifierNameSyntax identifier &&
+                identifier.Identifier.ValueText == variableName) == true;
     }
 
     private static bool IsSocketsHttpHandlerCreation(

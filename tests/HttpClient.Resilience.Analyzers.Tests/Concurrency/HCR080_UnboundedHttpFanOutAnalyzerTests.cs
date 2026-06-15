@@ -438,6 +438,69 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenConnectionLimitedHandlerVariableIsReassignedBeforeClientCreation()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    var handler = new SocketsHttpHandler
+                    {
+                        MaxConnectionsPerServer = 8
+                    };
+                    handler = new SocketsHttpHandler();
+                    using var client = new HttpClient(handler);
+
+                    return Task.WhenAll(urls.Select(url => client.GetAsync(url, cancellationToken)));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenConnectionLimitedHttpClientLocalIsReassignedBeforeFanOut()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    var client = new HttpClient(new SocketsHttpHandler
+                    {
+                        MaxConnectionsPerServer = 8
+                    });
+                    client = new HttpClient();
+
+                    return Task.WhenAll(urls.Select(url => client.GetAsync(url, cancellationToken)));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenHandlerDoesNotLimitConnections()
     {
         const string source = """
