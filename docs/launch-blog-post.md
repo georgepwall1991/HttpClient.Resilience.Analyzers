@@ -16,6 +16,7 @@ Most .NET services use `HttpClient`, but many production issues come from patter
 - Unsafe HTTP methods retried by standard resilience handlers without explicit guardrails, including typed-client and named-client cases across the compilation.
 - `ResponseHeadersRead` responses whose ownership is not disposed or transferred.
 - Response content reads before visible success handling.
+- Shared `DefaultRequestHeaders` mutations for per-request data.
 - Obvious unbounded `Task.WhenAll` outbound HTTP fan-out.
 
 ## Example

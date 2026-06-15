@@ -124,6 +124,15 @@ public sealed class BadUncheckedResponseService
     }
 }
 
+public sealed class BadDefaultHeadersService
+{
+    public Task<HttpResponseMessage> SendAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        client.DefaultRequestHeaders.Add("X-Tenant", "northwind");
+        return client.GetAsync("https://example.com", cancellationToken);
+    }
+}
+
 public interface IServiceCollection
 {
 }

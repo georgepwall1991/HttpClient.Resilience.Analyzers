@@ -56,6 +56,7 @@ dotnet_diagnostic.HCR040.severity = warning
 dotnet_diagnostic.HCR041.severity = warning
 dotnet_diagnostic.HCR060.severity = warning
 dotnet_diagnostic.HCR061.severity = warning
+dotnet_diagnostic.HCR062.severity = warning
 dotnet_diagnostic.HCR080.severity = warning
 "@ | Set-Content -LiteralPath $editorConfigPath
 
@@ -195,6 +196,15 @@ public sealed class BadUncheckedResponseService
     }
 }
 
+public sealed class BadDefaultHeadersService
+{
+    public Task<HttpResponseMessage> SendAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        client.DefaultRequestHeaders.Add("X-Tenant", "northwind");
+        return client.GetAsync("https://example.com", cancellationToken);
+    }
+}
+
 public interface IServiceCollection
 {
 }
@@ -271,6 +281,7 @@ public static class HttpClientBuilderExtensions
         'HCR041',
         'HCR060',
         'HCR061',
+        'HCR062',
         'HCR080'
     )
 

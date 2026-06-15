@@ -64,6 +64,12 @@ public static class DiagnosticDescriptors
         "Check HTTP response success before reading content",
         DiagnosticCategories.ResponseLifetime);
 
+    public static readonly DiagnosticDescriptor HCR062 = Create(
+        DiagnosticIds.HCR062,
+        "Prefer per-request headers over mutating DefaultRequestHeaders",
+        "Prefer per-request headers over mutating DefaultRequestHeaders",
+        DiagnosticCategories.ResponseLifetime);
+
     public static readonly DiagnosticDescriptor HCR080 = Create(
         DiagnosticIds.HCR080,
         "High-concurrency HTTP fan-out should use bounded concurrency or connection limits",

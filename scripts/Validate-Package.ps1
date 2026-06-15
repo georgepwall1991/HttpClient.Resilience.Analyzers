@@ -71,7 +71,7 @@ try {
     Assert-MetadataText 'icon' 'icon.png'
     Assert-MetadataText 'readme' 'README.md'
     Assert-MetadataText 'projectUrl' 'https://github.com/georg-jung/HttpClient.Resilience.Analyzers'
-    Assert-MetadataText 'releaseNotes' 'Initial preview with production-safety diagnostics for HttpClient lifetime, typed clients, handlers, resilience retries, response correctness, response disposal, and outbound fan-out.'
+    Assert-MetadataText 'releaseNotes' 'Initial preview with production-safety diagnostics for HttpClient lifetime, typed clients, handlers, resilience retries, request/response correctness, response disposal, and outbound fan-out.'
     Assert-MetadataText 'developmentDependency' 'true'
 
     $license = $xml.SelectSingleNode('/n:package/n:metadata/n:license', $namespaceManager)

@@ -38,6 +38,7 @@ $requiredDiagnostics = @(
     'HCR041',
     'HCR060',
     'HCR061',
+    'HCR062',
     'HCR080'
 )
 
