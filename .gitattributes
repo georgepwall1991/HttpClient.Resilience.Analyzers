@@ -1,17 +1,17 @@
-* text=auto eol=lf
+* text=auto eol=crlf
 
-*.slnx text eol=lf
-*.cs text eol=lf
-*.csproj text eol=lf
-*.props text eol=lf
-*.targets text eol=lf
-*.editorconfig text eol=lf
-*.md text eol=lf
-*.ps1 text eol=lf
-*.yml text eol=lf
-*.yaml text eol=lf
+*.slnx text eol=crlf
+*.cs text eol=crlf
+*.csproj text eol=crlf
+*.props text eol=crlf
+*.targets text eol=crlf
+*.editorconfig text eol=crlf
+*.md text eol=crlf
+*.ps1 text eol=crlf
+*.yml text eol=crlf
+*.yaml text eol=crlf
 
 *.png binary
 *.nupkg binary
 *.snupkg binary
-*.trx text eol=lf
+*.trx text eol=crlf

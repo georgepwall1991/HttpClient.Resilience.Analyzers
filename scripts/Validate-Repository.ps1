@@ -157,7 +157,7 @@ foreach ($path in $requiredRepositoryFiles) {
     }
 }
 
-Assert-Contains '.gitattributes' '\*\s+text=auto\s+eol=lf' '.gitattributes must normalize text files to LF.'
+Assert-Contains '.gitattributes' '\*\s+text=auto\s+eol=crlf' '.gitattributes must normalize text files to CRLF.'
 Assert-Contains '.github\CODEOWNERS' '@georgepwall1991' 'CODEOWNERS must include the repository owner.'
 Assert-Contains '.github\dependabot.yml' 'package-ecosystem:\s+nuget' 'dependabot.yml must include NuGet updates.'
 Assert-Contains '.github\dependabot.yml' 'package-ecosystem:\s+github-actions' 'dependabot.yml must include GitHub Actions updates.'
