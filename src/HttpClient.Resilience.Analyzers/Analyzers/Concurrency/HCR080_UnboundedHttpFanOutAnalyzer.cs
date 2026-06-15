@@ -99,10 +99,79 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
+        expression = UnwrapParentheses(expression);
+
+        if (ExpressionContainsSelectWithHttpCall(expression, semanticModel, cancellationToken))
+        {
+            return true;
+        }
+
+        return expression is IdentifierNameSyntax identifier &&
+            LocalInitializerContainsSelectWithHttpCall(
+                identifier,
+                semanticModel,
+                cancellationToken);
+    }
+
+    private static bool ExpressionContainsSelectWithHttpCall(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
         return expression
             .DescendantNodesAndSelf()
             .OfType<InvocationExpressionSyntax>()
             .Any(invocation => IsSelectInvocationWithHttpCall(invocation, semanticModel, cancellationToken));
+    }
+
+    private static bool LocalInitializerContainsSelectWithHttpCall(
+        IdentifierNameSyntax identifier,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var containingBlock = identifier.FirstAncestorOrSelf<BlockSyntax>();
+        if (containingBlock is null ||
+            semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is not ILocalSymbol local)
+        {
+            return false;
+        }
+
+        return containingBlock
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Any(variable =>
+                variable.SpanStart < identifier.SpanStart &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetDeclaredSymbol(variable, cancellationToken),
+                    local) &&
+                variable.Initializer?.Value is { } initializer &&
+                !LocalIsReassignedBetweenDeclarationAndUse(
+                    containingBlock,
+                    variable,
+                    identifier,
+                    semanticModel,
+                    cancellationToken) &&
+                ContainsSelectWithHttpCall(initializer, semanticModel, cancellationToken));
+    }
+
+    private static bool LocalIsReassignedBetweenDeclarationAndUse(
+        BlockSyntax containingBlock,
+        VariableDeclaratorSyntax variable,
+        SyntaxNode context,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var localSymbol = semanticModel.GetDeclaredSymbol(variable, cancellationToken);
+
+        return containingBlock
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => assignment.SpanStart > variable.SpanStart &&
+                assignment.SpanStart < context.SpanStart &&
+                assignment.Left is IdentifierNameSyntax identifier &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol,
+                    localSymbol));
     }
 
     private static bool IsSelectInvocationWithHttpCall(
@@ -170,6 +239,16 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         }
 
         return SyntacticReceiverLooksLikeHttpClient(expression);
+    }
+
+    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    {
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
+        return expression;
     }
 
     private static bool SyntacticReceiverLooksLikeHttpClient(ExpressionSyntax expression)
