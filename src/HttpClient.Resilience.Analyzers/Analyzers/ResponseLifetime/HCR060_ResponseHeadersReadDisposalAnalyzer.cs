@@ -82,7 +82,8 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
     {
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
             !IsHttpResponseMethodName(memberAccess.Name.Identifier.ValueText) ||
-            !IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken))
+            !IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken) ||
+            !ReturnsHttpResponseMessage(invocation, semanticModel, cancellationToken))
         {
             return false;
         }
@@ -103,6 +104,49 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             "PostAsync" or
             "PutAsync" or
             "SendAsync";
+    }
+
+    private static bool ReturnsHttpResponseMessage(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is IMethodSymbol method)
+        {
+            return IsHttpResponseMessageOrTask(method.ReturnType);
+        }
+
+        var invocationType = semanticModel.GetTypeInfo(invocation, cancellationToken).Type;
+        if (invocationType is not null && invocationType is not IErrorTypeSymbol)
+        {
+            return IsHttpResponseMessageOrTask(invocationType);
+        }
+
+        return true;
+    }
+
+    private static bool IsHttpResponseMessageOrTask(ITypeSymbol type)
+    {
+        return IsHttpResponseMessage(type) ||
+            type is INamedTypeSymbol namedType &&
+            namedType.IsGenericType &&
+            namedType.TypeArguments.Length == 1 &&
+            IsTaskLike(namedType) &&
+            IsHttpResponseMessage(namedType.TypeArguments[0]);
+    }
+
+    private static bool IsTaskLike(INamedTypeSymbol type)
+    {
+        var fullName = type.ConstructedFrom.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        return fullName is
+            "global::System.Threading.Tasks.Task<TResult>" or
+            "global::System.Threading.Tasks.ValueTask<TResult>";
+    }
+
+    private static bool IsHttpResponseMessage(ITypeSymbol type)
+    {
+        return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::System.Net.Http.HttpResponseMessage";
     }
 
     private static bool IsHttpClientReceiver(

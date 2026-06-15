@@ -272,6 +272,43 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenHttpClientExtensionMethodDoesNotReturnHttpResponseMessage()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class HttpClientExtensions
+            {
+                public static Task<string> GetAsync(
+                    this HttpClient client,
+                    string path,
+                    HttpCompletionOption completionOption,
+                    CancellationToken cancellationToken)
+                {
+                    return Task.FromResult(path);
+                }
+            }
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var result = await client.GetAsync(
+                        "/events",
+                        HttpCompletionOption.ResponseHeadersRead,
+                        cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenResolvedTypeIsCustomHttpClient()
     {
         const string source = """
