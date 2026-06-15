@@ -6,7 +6,7 @@ Start with `profiles/brownfield-adoption.editorconfig` when introducing the anal
 
 1. Add the analyzer package without changing build gates.
 2. Copy `profiles/brownfield-adoption.editorconfig` into the repository or import its severities into the existing `.editorconfig`.
-3. Review `HCR040`, `HCR041`, `HCR060`, `HCR061`, `HCR062`, and `HCR063` first. These are intentionally kept visible in the brownfield profile because they point at retry and request/response-handling risks that can create incidents.
+3. Review `HCR040`, `HCR041`, `HCR060`, `HCR061`, `HCR062`, `HCR063`, and `HCR064` first. These are intentionally kept visible in the brownfield profile because they point at retry and request/response-handling risks that can create incidents.
 4. Fix or explicitly suppress existing findings with a reason.
 5. Move to `profiles/default.editorconfig` once new warnings are actionable for the team.
 6. Use `profiles/strict-ci.editorconfig` only after the current warning baseline is clean.
@@ -22,4 +22,4 @@ services.AddHttpClient<PaymentsClient>()
 #pragma warning restore HCR041
 ```
 
-For large services, start with `HCR041`, `HCR060`, `HCR061`, `HCR062`, and `HCR063` in the most critical outbound paths, then work through lifetime and DI findings.
+For large services, start with `HCR041`, `HCR060`, `HCR061`, `HCR062`, `HCR063`, and `HCR064` in the most critical outbound paths, then work through lifetime and DI findings.

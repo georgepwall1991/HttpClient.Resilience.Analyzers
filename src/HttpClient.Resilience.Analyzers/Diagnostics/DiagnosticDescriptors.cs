@@ -76,6 +76,12 @@ public static class DiagnosticDescriptors
         "Avoid sync-over-async around outbound HTTP",
         DiagnosticCategories.ResponseLifetime);
 
+    public static readonly DiagnosticDescriptor HCR064 = Create(
+        DiagnosticIds.HCR064,
+        "Use cancellation-aware HTTP APIs when a token is available",
+        "Use cancellation-aware HTTP APIs when a token is available",
+        DiagnosticCategories.ResponseLifetime);
+
     public static readonly DiagnosticDescriptor HCR080 = Create(
         DiagnosticIds.HCR080,
         "High-concurrency HTTP fan-out should use bounded concurrency or connection limits",

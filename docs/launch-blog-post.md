@@ -18,6 +18,7 @@ Most .NET services use `HttpClient`, but many production issues come from patter
 - Response content reads before visible success handling.
 - Shared `DefaultRequestHeaders` mutations for per-request data.
 - Sync-over-async around outbound HTTP calls.
+- Missing cancellation-token flow into outbound HTTP APIs.
 - Obvious unbounded `Task.WhenAll` outbound HTTP fan-out.
 
 ## Example

@@ -19,6 +19,7 @@ Compile-time safety for `.NET` `HttpClient`, `IHttpClientFactory`, typed clients
 - HTTP response content read before checking success.
 - Shared `DefaultRequestHeaders` mutated for per-request headers.
 - Sync-over-async around outbound HTTP calls.
+- HTTP calls that omit an available cancellation token.
 - Obvious unbounded outbound HTTP fan-out.
 
 ## Install
@@ -54,6 +55,7 @@ Implemented diagnostic slices:
 - `HCR061` for response content reads before visible status handling, including awaited `HttpClient` response locals, common `HttpContent` read methods, `EnsureSuccessStatusCode()`, `IsSuccessStatusCode`, and `StatusCode` recognition, reassignment-aware local tracking, and resolved custom-client filtering.
 - `HCR062` for mutating shared `HttpClient.DefaultRequestHeaders` instead of per-request `HttpRequestMessage.Headers`, including direct header mutations, nested collection mutations, property assignments, real `HttpClient` receiver validation, read-only access filtering, and custom-client filtering.
 - `HCR063` for sync-over-async around outbound HTTP, including `.Result`, `.Wait()`, and `.GetAwaiter().GetResult()` on visible `HttpClient` async calls, task locals initialized from those calls, and common `HttpContent` async reads, with reassignment and custom-client filtering.
+- `HCR064` for cancellation-aware outbound HTTP, including visible `HttpClient` async calls and common `HttpContent` async reads that omit an available `CancellationToken`, with method/lambda/local token discovery, overload validation, and custom-client filtering.
 - `HCR080` for obvious unbounded `Task.WhenAll` HTTP fan-out, including inline or visible unreassigned local LINQ `Select(...)` task sequences, with BCL `Task` and resolved `HttpClient` receiver validation plus symbol-aware same-receiver `SemaphoreSlim` gating, custom-client, and reassignment-aware local/member real `SocketsHttpHandler` connection-limit exclusions including `this.`-qualified members and shared handler fields.
 
 ## Example

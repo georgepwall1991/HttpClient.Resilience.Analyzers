@@ -1,0 +1,229 @@
+using HttpClient.Resilience.Analyzers.Analyzers.ResponseLifetime;
+using HttpClient.Resilience.Analyzers.Diagnostics;
+using HttpClient.Resilience.Analyzers.Tests.TestInfrastructure;
+
+namespace HttpClient.Resilience.Analyzers.Tests.ResponseLifetime;
+
+public sealed class HCR064_CancellationAwareHttpAnalyzerTests
+{
+    [Fact]
+    public async Task ReportsDiagnostic_WhenHttpClientAsyncCallOmitsAvailableCancellationToken()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    return client.GetAsync("https://example.com");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR064, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenHttpClientAsyncCallHasOtherOverloadArgumentButOmitsToken()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    return client.GetAsync("https://example.com", HttpCompletionOption.ResponseHeadersRead);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR064, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHttpClientAsyncCallPassesCancellationToken()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    return client.GetAsync("https://example.com", cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenNoCancellationTokenIsVisible()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    return client.GetAsync("https://example.com");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenCancellationTokenLocalIsNotVisible()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    Action initialize = () =>
+                    {
+                        var cancellationToken = CancellationToken.None;
+                    };
+
+                    initialize();
+                    return client.GetAsync("https://example.com");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenLambdaCancellationTokenIsVisible()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Func<CancellationToken, Task<HttpResponseMessage>> Create(HttpClient client)
+                {
+                    return ct => client.GetAsync("https://example.com");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR064, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenPriorLocalCancellationTokenIsVisible()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(HttpClient client, CancellationToken sourceToken)
+                {
+                    var cancellationToken = sourceToken;
+                    return client.GetAsync("https://example.com");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR064, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenHttpContentReadOmitsAvailableCancellationToken()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<string> ReadAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+                {
+                    return response.Content.ReadAsStringAsync();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR064, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenResolvedCustomHttpClientAsyncCallOmitsToken()
+    {
+        const string source = """
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<string> GetAsync(Custom.HttpClient client, CancellationToken cancellationToken)
+                {
+                    return client.GetAsync("https://example.com");
+                }
+            }
+
+            namespace Custom
+            {
+                public sealed class HttpClient
+                {
+                    public Task<string> GetAsync(string url)
+                    {
+                        return Task.FromResult(url);
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+}

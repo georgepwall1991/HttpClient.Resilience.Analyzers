@@ -141,6 +141,14 @@ public sealed class BadSyncOverAsyncService
     }
 }
 
+public sealed class BadMissingCancellationService
+{
+    public Task<HttpResponseMessage> SendAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        return client.GetAsync("https://example.com");
+    }
+}
+
 public interface IServiceCollection
 {
 }
