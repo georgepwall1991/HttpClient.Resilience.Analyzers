@@ -241,7 +241,8 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             IdentifierNameSyntax identifier => ParameterLooksLikeHttpClientFactory(identifier) ||
                 LocalLooksLikeHttpClientFactory(identifier) ||
                 FieldOrPropertyLooksLikeHttpClientFactory(identifier),
-            MemberAccessExpressionSyntax { Name: IdentifierNameSyntax name } => FieldOrPropertyLooksLikeHttpClientFactory(name),
+            MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax, Name: IdentifierNameSyntax name } =>
+                FieldOrPropertyLooksLikeHttpClientFactory(name),
             _ => false
         };
     }
