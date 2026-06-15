@@ -678,6 +678,28 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenResolvedSimpleBaseIsCustomDelegatingHandlerLookalike()
+    {
+        const string source = """
+            public sealed class UserHeaderHandler(IHttpContextAccessor accessor) : DelegatingHandler
+            {
+            }
+
+            public abstract class DelegatingHandler
+            {
+            }
+
+            public interface IHttpContextAccessor
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenQualifiedRequestScopedTypeNameIsCustomLookalike()
     {
         const string source = """

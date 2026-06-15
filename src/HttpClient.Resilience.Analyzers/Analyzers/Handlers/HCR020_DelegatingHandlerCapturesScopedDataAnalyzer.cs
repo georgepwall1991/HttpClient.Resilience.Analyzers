@@ -58,7 +58,11 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
         ISet<string> handlerTypes)
     {
         var classDeclaration = (ClassDeclarationSyntax)context.Node;
-        if (!DerivesFromDelegatingHandler(classDeclaration, handlerTypes))
+        if (!DerivesFromDelegatingHandler(
+                classDeclaration,
+                handlerTypes,
+                context.SemanticModel,
+                context.CancellationToken))
         {
             return;
         }
@@ -122,11 +126,39 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
 
     private static bool DerivesFromDelegatingHandler(
         ClassDeclarationSyntax classDeclaration,
-        ISet<string> handlerTypes)
+        ISet<string> handlerTypes,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         return classDeclaration.BaseList?.Types.Any(type =>
-            IsDelegatingHandlerTypeName(type.Type) ||
-            IsKnownDelegatingHandlerType(type.Type, handlerTypes)) == true;
+            IsDelegatingHandlerBaseType(
+                type.Type,
+                handlerTypes,
+                semanticModel,
+                cancellationToken)) == true;
+    }
+
+    private static bool IsDelegatingHandlerBaseType(
+        TypeSyntax type,
+        ISet<string> handlerTypes,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var resolvedType = semanticModel.GetTypeInfo(type, cancellationToken).Type;
+        if (resolvedType is not null && resolvedType is not IErrorTypeSymbol)
+        {
+            return IsDelegatingHandlerSymbol(resolvedType) ||
+                handlerTypes.Contains(NormalizeTypeName(resolvedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+        }
+
+        return IsDelegatingHandlerTypeName(type) ||
+            IsKnownDelegatingHandlerType(type, handlerTypes);
+    }
+
+    private static bool IsDelegatingHandlerSymbol(ITypeSymbol type)
+    {
+        return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::System.Net.Http.DelegatingHandler";
     }
 
     private static bool IsDelegatingHandlerTypeName(TypeSyntax type)
