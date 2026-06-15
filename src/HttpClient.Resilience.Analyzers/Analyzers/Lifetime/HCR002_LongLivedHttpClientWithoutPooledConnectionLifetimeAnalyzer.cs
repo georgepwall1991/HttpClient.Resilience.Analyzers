@@ -419,10 +419,44 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         return semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
         {
             IFieldSymbol field => SymbolInitializerHasPooledConnectionLifetime(field, semanticModel, cancellationToken),
-            ILocalSymbol local => SymbolInitializerHasPooledConnectionLifetime(local, semanticModel, cancellationToken),
+            ILocalSymbol local => LocalInitializerHasPooledConnectionLifetime(
+                expression,
+                local,
+                semanticModel,
+                cancellationToken),
             IPropertySymbol property => PropertyInitializerHasPooledConnectionLifetime(property, semanticModel, cancellationToken),
             _ => false
         };
+    }
+
+    private static bool LocalInitializerHasPooledConnectionLifetime(
+        ExpressionSyntax expression,
+        ILocalSymbol local,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var containingBlock = expression.FirstAncestorOrSelf<BlockSyntax>();
+        if (containingBlock is null)
+        {
+            return false;
+        }
+
+        return containingBlock
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .Any(variable =>
+                variable.SpanStart < expression.SpanStart &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetDeclaredSymbol(variable, cancellationToken),
+                    local) &&
+                variable.Initializer?.Value is BaseObjectCreationExpressionSyntax handlerCreation &&
+                !LocalIsReassignedBetweenDeclarationAndUse(
+                    containingBlock,
+                    variable,
+                    expression,
+                    semanticModel,
+                    cancellationToken) &&
+                IsConfiguredSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken));
     }
 
     private static bool SymbolInitializerHasPooledConnectionLifetime(

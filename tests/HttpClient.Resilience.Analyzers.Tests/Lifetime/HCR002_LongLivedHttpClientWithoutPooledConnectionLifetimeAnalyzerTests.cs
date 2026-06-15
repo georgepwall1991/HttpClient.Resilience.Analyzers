@@ -73,6 +73,36 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenStaticHttpClientUsesReassignedConfiguredLocalHandler()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static HttpClient Client = null!;
+
+                public static void Initialize()
+                {
+                    var handler = new SocketsHttpHandler
+                    {
+                        PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+                    };
+                    handler = new SocketsHttpHandler();
+
+                    Client = new HttpClient(handler);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR002, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenStaticHttpClientPropertyHasDefaultHandler()
     {
         const string source = """
@@ -178,6 +208,34 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
                     {
                         PooledConnectionLifetime = TimeSpan.FromMinutes(2)
                     });
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenStaticHttpClientUsesConfiguredLocalHandler()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static HttpClient Client = null!;
+
+                public static void Initialize()
+                {
+                    var handler = new SocketsHttpHandler
+                    {
+                        PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+                    };
+
+                    Client = new HttpClient(handler);
+                }
             }
             """;
 
