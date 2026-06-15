@@ -11,6 +11,18 @@ if (-not (Test-Path -LiteralPath $PackagePath)) {
 
 $resolvedPackage = (Resolve-Path -LiteralPath $PackagePath).Path
 $contents = tar -tf $resolvedPackage
+$repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
+$packageProjectPath = Join-Path $repoRoot 'src\HttpClient.Resilience.Analyzers.Package\HttpClient.Resilience.Analyzers.Package.csproj'
+[xml]$packageProject = Get-Content -LiteralPath $packageProjectPath
+
+function Get-PackageProjectProperty([string]$name) {
+    $node = $packageProject.SelectSingleNode("/Project/PropertyGroup/$name")
+    if ($null -eq $node) {
+        throw "Package project is missing property '$name'."
+    }
+
+    return $node.InnerText
+}
 
 $requiredPaths = @(
     'analyzers/dotnet/cs/HttpClient.Resilience.Analyzers.dll',
@@ -64,15 +76,15 @@ try {
         }
     }
 
-    Assert-MetadataText 'id' 'HttpClient.Resilience.Analyzers'
-    Assert-MetadataText 'version' '0.1.0-preview.1'
-    Assert-MetadataText 'authors' 'HttpClient.Resilience.Analyzers contributors'
-    Assert-MetadataText 'description' 'Roslyn analyzers for .NET HttpClient, IHttpClientFactory, and Microsoft.Extensions.Http.Resilience. Catches socket exhaustion risks, DNS-stale clients, typed-client lifetime bugs, unsafe retries, handler scope leaks, response disposal mistakes, and fragile outbound HTTP patterns at compile time.'
-    Assert-MetadataText 'icon' 'icon.png'
-    Assert-MetadataText 'readme' 'README.md'
-    Assert-MetadataText 'projectUrl' 'https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers'
-    Assert-MetadataText 'releaseNotes' 'Initial preview with production-safety diagnostics for HttpClient lifetime, typed clients, handlers, resilience retries, request/response correctness, response disposal, cancellation, stream ownership, outbound fan-out, and named-client hygiene.'
-    Assert-MetadataText 'developmentDependency' 'true'
+    Assert-MetadataText 'id' (Get-PackageProjectProperty 'PackageId')
+    Assert-MetadataText 'version' (Get-PackageProjectProperty 'Version')
+    Assert-MetadataText 'authors' (Get-PackageProjectProperty 'Authors')
+    Assert-MetadataText 'description' (Get-PackageProjectProperty 'Description')
+    Assert-MetadataText 'icon' (Get-PackageProjectProperty 'PackageIcon')
+    Assert-MetadataText 'readme' (Get-PackageProjectProperty 'PackageReadmeFile')
+    Assert-MetadataText 'projectUrl' (Get-PackageProjectProperty 'PackageProjectUrl')
+    Assert-MetadataText 'releaseNotes' (Get-PackageProjectProperty 'PackageReleaseNotes')
+    Assert-MetadataText 'developmentDependency' (Get-PackageProjectProperty 'DevelopmentDependency').ToLowerInvariant()
 
     $license = $xml.SelectSingleNode('/n:package/n:metadata/n:license', $namespaceManager)
     if ($null -eq $license -or $license.InnerText -ne 'MIT' -or $license.type -ne 'expression') {
