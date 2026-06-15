@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/georgepwall1991/HttpClient.Resilience.Analyzers/main/assets/logo.png" alt="HttpClient.Resilience.Analyzers logo" width="180">
+</p>
+
 # HttpClient.Resilience.Analyzers
 
 [![CI](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/actions/workflows/ci.yml/badge.svg)](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/actions/workflows/ci.yml)
@@ -17,7 +21,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 For explicit package references:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.0-preview.1" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.0-preview.2" PrivateAssets="all" />
 ```
 
 The package is analyzer-only. It adds no runtime dependency to your application.
