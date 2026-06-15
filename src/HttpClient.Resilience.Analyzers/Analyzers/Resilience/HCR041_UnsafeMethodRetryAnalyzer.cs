@@ -317,7 +317,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                 (ParameterLooksLikeServiceCollection(identifier) ||
                     LocalLooksLikeServiceCollection(identifier) ||
                     FieldOrPropertyLooksLikeServiceCollection(identifier)),
-            MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Services" } => true,
+            MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Services" } => false,
             _ => false
         };
     }
