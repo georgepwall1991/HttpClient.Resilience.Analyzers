@@ -34,12 +34,9 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
         }
 
         var diagnostic = context.Diagnostics[0];
-        var resultAccess = root.FindNode(diagnostic.Location.SourceSpan)
-            .FirstAncestorOrSelf<MemberAccessExpressionSyntax>();
-
-        if (resultAccess is null ||
-            resultAccess.Name.Identifier.ValueText != "Result" ||
-            !IsInsideAsyncFunction(resultAccess))
+        var node = root.FindNode(diagnostic.Location.SourceSpan);
+        var blockingExpression = GetBlockingExpression(node, out var operation);
+        if (blockingExpression is null || operation is null || !IsInsideAsyncFunction(blockingExpression))
         {
             return;
         }
@@ -47,17 +44,48 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
         context.RegisterCodeFix(
             CodeAction.Create(
                 "Await the HTTP operation",
-                cancellationToken => ReplaceResultWithAwaitAsync(
+                cancellationToken => ReplaceWithAwaitAsync(
                     context.Document,
-                    resultAccess,
+                    blockingExpression,
+                    operation,
                     cancellationToken),
                 nameof(HCR063_AwaitHttpOperationCodeFixProvider)),
             diagnostic);
     }
 
-    private static bool IsInsideAsyncFunction(MemberAccessExpressionSyntax resultAccess)
+    private static ExpressionSyntax? GetBlockingExpression(SyntaxNode node, out ExpressionSyntax? operation)
     {
-        return resultAccess.Ancestors()
+        var resultAccess = node.FirstAncestorOrSelf<MemberAccessExpressionSyntax>();
+        if (resultAccess?.Name.Identifier.ValueText == "Result")
+        {
+            operation = resultAccess.Expression;
+            return resultAccess;
+        }
+
+        var getResultInvocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
+        if (getResultInvocation?.Expression is MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "GetResult",
+                Expression: InvocationExpressionSyntax
+                {
+                    Expression: MemberAccessExpressionSyntax
+                    {
+                        Name.Identifier.ValueText: "GetAwaiter"
+                    } getAwaiterAccess
+                }
+            })
+        {
+            operation = getAwaiterAccess.Expression;
+            return getResultInvocation;
+        }
+
+        operation = null;
+        return null;
+    }
+
+    private static bool IsInsideAsyncFunction(ExpressionSyntax blockingExpression)
+    {
+        return blockingExpression.Ancestors()
             .FirstOrDefault(node => node is BaseMethodDeclarationSyntax or
                 LocalFunctionStatementSyntax or
                 AnonymousFunctionExpressionSyntax) switch
@@ -69,9 +97,10 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
         };
     }
 
-    private static async Task<Document> ReplaceResultWithAwaitAsync(
+    private static async Task<Document> ReplaceWithAwaitAsync(
         Document document,
-        MemberAccessExpressionSyntax resultAccess,
+        ExpressionSyntax blockingExpression,
+        ExpressionSyntax operation,
         CancellationToken cancellationToken)
     {
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
@@ -80,16 +109,16 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
             return document;
         }
 
-        ExpressionSyntax replacement = SyntaxFactory.AwaitExpression(resultAccess.Expression.WithoutTrivia());
-        if (resultAccess.Parent is MemberAccessExpressionSyntax or ElementAccessExpressionSyntax)
+        ExpressionSyntax replacement = SyntaxFactory.AwaitExpression(operation.WithoutTrivia());
+        if (blockingExpression.Parent is MemberAccessExpressionSyntax or ElementAccessExpressionSyntax)
         {
             replacement = SyntaxFactory.ParenthesizedExpression(replacement);
         }
 
         replacement = replacement
-            .WithTriviaFrom(resultAccess)
+            .WithTriviaFrom(blockingExpression)
             .WithAdditionalAnnotations(Formatter.Annotation);
 
-        return document.WithSyntaxRoot(root.ReplaceNode(resultAccess, replacement));
+        return document.WithSyntaxRoot(root.ReplaceNode(blockingExpression, replacement));
     }
 }
