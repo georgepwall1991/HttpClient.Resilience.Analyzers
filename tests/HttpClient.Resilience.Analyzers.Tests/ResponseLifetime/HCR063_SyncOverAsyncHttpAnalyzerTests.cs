@@ -381,4 +381,30 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
             fixedSource,
             StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task CodeFix_ReplacesBlockingContentCopyWithAwait()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response, Stream destination)
+                {
+                    response.Content.CopyToAsync(destination).GetAwaiter().GetResult();
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "await response.Content.CopyToAsync(destination);",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
 }
