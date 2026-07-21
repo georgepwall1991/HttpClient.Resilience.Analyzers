@@ -18,6 +18,7 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
         "DeleteAsync",
         "GetAsync",
         "GetByteArrayAsync",
+        "GetFromJsonAsync",
         "GetStreamAsync",
         "GetStringAsync",
         "LoadIntoBufferAsync",
