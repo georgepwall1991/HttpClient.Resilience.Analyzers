@@ -102,14 +102,24 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         return invocation.ArgumentList.Arguments
             .Select(argument => argument.Expression)
             .Any(expression => IsCancellationTokenExpression(expression, semanticModel, cancellationToken) &&
-                !IsCancellationTokenNone(expression, semanticModel, cancellationToken));
+                !IsNonCancelableTokenExpression(expression, semanticModel, cancellationToken));
     }
 
-    private static bool IsCancellationTokenNone(
+    private static bool IsNonCancelableTokenExpression(
         ExpressionSyntax expression,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
+        if (expression.IsKind(SyntaxKind.DefaultLiteralExpression) || expression is DefaultExpressionSyntax)
+        {
+            return true;
+        }
+
         if (expression is not MemberAccessExpressionSyntax
             {
                 Name.Identifier.ValueText: "None"
@@ -209,7 +219,8 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        var expressionType = semanticModel.GetTypeInfo(expression, cancellationToken).Type;
+        var typeInfo = semanticModel.GetTypeInfo(expression, cancellationToken);
+        var expressionType = typeInfo.Type ?? typeInfo.ConvertedType;
         if (expressionType is not null && expressionType is not IErrorTypeSymbol)
         {
             return IsCancellationToken(expressionType);
