@@ -383,6 +383,65 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_ReplacesGetFromJsonResultWithAwait()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<Order?> GetAsync(HttpClient client)
+                {
+                    return client.GetFromJsonAsync<Order>("https://example.com/orders").Result;
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "return await client.GetFromJsonAsync<Order>(\"https://example.com/orders\");",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DoesNotReportCustomGetFromJsonResult()
+    {
+        const string source = """
+            using System.Threading.Tasks;
+
+            public sealed class CustomClient
+            {
+                public Task<Order?> GetFromJsonAsync<T>(string uri) => Task.FromResult<Order?>(null);
+            }
+
+            public sealed class Client
+            {
+                public Order? Get(CustomClient client)
+                {
+                    return client.GetFromJsonAsync<Order>("https://example.com/orders").Result;
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task CodeFix_ReplacesBlockingContentCopyWithAwait()
     {
         const string source = """
