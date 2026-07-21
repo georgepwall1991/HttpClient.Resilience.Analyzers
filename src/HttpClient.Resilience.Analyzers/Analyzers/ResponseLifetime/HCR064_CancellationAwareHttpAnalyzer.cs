@@ -20,8 +20,11 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         "GetFromJsonAsync",
         "GetStreamAsync",
         "GetStringAsync",
+        "PatchAsJsonAsync",
         "PatchAsync",
+        "PostAsJsonAsync",
         "PostAsync",
+        "PutAsJsonAsync",
         "PutAsync",
         "Send",
         "SendAsync"
