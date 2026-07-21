@@ -20,6 +20,7 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
         "GetByteArrayAsync",
         "GetStreamAsync",
         "GetStringAsync",
+        "LoadIntoBufferAsync",
         "PatchAsync",
         "PostAsync",
         "PutAsync",
