@@ -229,6 +229,44 @@ public sealed class HCR064_CancellationAwareHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenCustomExtensionOnHttpClientHasTokenOverload()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class CustomExtensions
+            {
+                public static Task<string> GetAsync(this HttpClient client, int key)
+                {
+                    return Task.FromResult(key.ToString());
+                }
+
+                public static Task<string> GetAsync(
+                    this HttpClient client,
+                    int key,
+                    CancellationToken cancellationToken)
+                {
+                    return Task.FromResult(key.ToString());
+                }
+            }
+
+            public sealed class Client
+            {
+                public Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    return client.GetAsync(42);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task CodeFix_PassesVisibleMethodCancellationToken()
     {
         const string source = """
