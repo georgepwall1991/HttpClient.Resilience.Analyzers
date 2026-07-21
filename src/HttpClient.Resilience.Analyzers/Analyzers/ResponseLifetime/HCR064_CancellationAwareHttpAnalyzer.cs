@@ -101,7 +101,29 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
     {
         return invocation.ArgumentList.Arguments
             .Select(argument => argument.Expression)
-            .Any(expression => IsCancellationTokenExpression(expression, semanticModel, cancellationToken));
+            .Any(expression => IsCancellationTokenExpression(expression, semanticModel, cancellationToken) &&
+                !IsCancellationTokenNone(expression, semanticModel, cancellationToken));
+    }
+
+    private static bool IsCancellationTokenNone(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (expression is not MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "None"
+            } memberAccess)
+        {
+            return false;
+        }
+
+        if (semanticModel.GetSymbolInfo(memberAccess, cancellationToken).Symbol is IPropertySymbol property)
+        {
+            return IsCancellationToken(property.ContainingType) && IsCancellationToken(property.Type);
+        }
+
+        return memberAccess.Expression.ToString().EndsWith("CancellationToken", System.StringComparison.Ordinal);
     }
 
     private static bool VisibleCancellationTokenExists(

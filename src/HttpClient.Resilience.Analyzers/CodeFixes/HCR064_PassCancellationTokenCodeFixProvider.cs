@@ -41,6 +41,11 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
             return;
         }
 
+        var cancellationTokenNoneArgument = invocation.ArgumentList.Arguments
+            .FirstOrDefault(argument =>
+                IsCancellationToken(semanticModel.GetTypeInfo(argument.Expression, context.CancellationToken).Type) &&
+                IsCancellationTokenNone(argument.Expression, semanticModel, context.CancellationToken));
+
         var cancellationTokens = semanticModel.LookupSymbols(invocation.SpanStart)
             .Where(symbol => symbol is ILocalSymbol or IParameterSymbol)
             .Where(symbol => IsCancellationToken(symbol switch
@@ -89,20 +94,22 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
             context.RegisterCodeFix(
                 CodeAction.Create(
                     $"Pass '{tokenDisplayName}' cancellation token",
-                    cancellationToken => AddCancellationTokenAsync(
+                    cancellationToken => PassCancellationTokenAsync(
                         context.Document,
                         invocation,
                         tokenArgument,
+                        cancellationTokenNoneArgument,
                         cancellationToken),
                     $"{nameof(HCR064_PassCancellationTokenCodeFixProvider)}.{cancellationTokenSymbol.Name}"),
                 diagnostic);
         }
     }
 
-    private static async Task<Document> AddCancellationTokenAsync(
+    private static async Task<Document> PassCancellationTokenAsync(
         Document document,
         InvocationExpressionSyntax invocation,
         ArgumentSyntax tokenArgument,
+        ArgumentSyntax? cancellationTokenNoneArgument,
         CancellationToken cancellationToken)
     {
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
@@ -111,8 +118,13 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
             return document;
         }
 
+        var updatedArgumentList = cancellationTokenNoneArgument is null
+            ? invocation.ArgumentList.AddArguments(tokenArgument)
+            : invocation.ArgumentList.ReplaceNode(
+                cancellationTokenNoneArgument,
+                tokenArgument.WithTriviaFrom(cancellationTokenNoneArgument));
         var updatedInvocation = invocation
-            .WithArgumentList(invocation.ArgumentList.AddArguments(tokenArgument))
+            .WithArgumentList(updatedArgumentList)
             .WithAdditionalAnnotations(Formatter.Annotation);
 
         return document.WithSyntaxRoot(root.ReplaceNode(invocation, updatedInvocation));
@@ -134,5 +146,26 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
     {
         return type?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
             "global::System.Threading.CancellationTokenSource";
+    }
+
+    private static bool IsCancellationTokenNone(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        CancellationToken cancellationToken)
+    {
+        if (expression is not MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "None"
+            } memberAccess)
+        {
+            return false;
+        }
+
+        if (semanticModel.GetSymbolInfo(memberAccess, cancellationToken).Symbol is IPropertySymbol property)
+        {
+            return IsCancellationToken(property.ContainingType) && IsCancellationToken(property.Type);
+        }
+
+        return memberAccess.Expression.ToString().EndsWith("CancellationToken", System.StringComparison.Ordinal);
     }
 }
