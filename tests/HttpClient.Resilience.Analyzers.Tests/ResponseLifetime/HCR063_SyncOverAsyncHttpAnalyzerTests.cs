@@ -1,4 +1,5 @@
 using HttpClient.Resilience.Analyzers.Analyzers.ResponseLifetime;
+using HttpClient.Resilience.Analyzers.CodeFixes;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.Tests.TestInfrastructure;
 
@@ -185,5 +186,76 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
         var diagnostics = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
 
         Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task CodeFix_ReplacesResultWithAwaitInsideAsyncMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    return client.GetAsync("https://example.com").Result;
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "return await client.GetAsync(\"https://example.com\");",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedInsideSynchronousMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class Client
+            {
+                public HttpResponseMessage Get(HttpClient client)
+                {
+                    return client.GetAsync("https://example.com").Result;
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_ParenthesizesAwaitWhenAccessingResultMember()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<int> GetStatusAsync(HttpClient client)
+                {
+                    return (int)client.GetAsync("https://example.com").Result.StatusCode;
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "(await client.GetAsync(\"https://example.com\")).StatusCode",
+            fixedSource,
+            StringComparison.Ordinal);
     }
 }
