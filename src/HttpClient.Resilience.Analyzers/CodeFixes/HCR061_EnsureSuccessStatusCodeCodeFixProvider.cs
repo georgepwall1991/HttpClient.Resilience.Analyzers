@@ -52,7 +52,7 @@ public sealed class HCR061_EnsureSuccessStatusCodeCodeFixProvider : CodeFixProvi
             declaration is null ||
             block is null ||
             declaration.Declaration.Variables.Count != 1 ||
-            FindFirstSameBlockContentRead(block, declaration, variable.Identifier.ValueText) is not { } contentReadStatement)
+            !HasContentRead(block, declaration, variable.Identifier.ValueText))
         {
             return;
         }
@@ -63,14 +63,14 @@ public sealed class HCR061_EnsureSuccessStatusCodeCodeFixProvider : CodeFixProvi
                 cancellationToken => AddSuccessCheckAsync(
                     context.Document,
                     block,
-                    contentReadStatement,
+                    declaration,
                     variable.Identifier,
                     cancellationToken),
                 nameof(HCR061_EnsureSuccessStatusCodeCodeFixProvider)),
             diagnostic);
     }
 
-    private static StatementSyntax? FindFirstSameBlockContentRead(
+    private static bool HasContentRead(
         BlockSyntax block,
         LocalDeclarationStatementSyntax declaration,
         string responseName)
@@ -90,15 +90,13 @@ public sealed class HCR061_EnsureSuccessStatusCodeCodeFixProvider : CodeFixProvi
             } &&
                 responseIdentifier.Identifier.ValueText == responseName &&
                 ContentReadMethodNames.Contains(methodName.Identifier.ValueText, System.StringComparer.Ordinal))
-            .OrderBy(invocation => invocation.SpanStart)
-            .Select(invocation => invocation.FirstAncestorOrSelf<StatementSyntax>())
-            .FirstOrDefault(statement => statement?.Parent == block);
+            .Any();
     }
 
     private static async Task<Document> AddSuccessCheckAsync(
         Document document,
         BlockSyntax block,
-        StatementSyntax contentReadStatement,
+        LocalDeclarationStatementSyntax declaration,
         SyntaxToken responseIdentifier,
         CancellationToken cancellationToken)
     {
@@ -115,8 +113,8 @@ public sealed class HCR061_EnsureSuccessStatusCodeCodeFixProvider : CodeFixProvi
                         SyntaxFactory.IdentifierName(responseIdentifier.WithoutTrivia()),
                         SyntaxFactory.IdentifierName("EnsureSuccessStatusCode"))))
             .WithAdditionalAnnotations(Formatter.Annotation);
-        var statementIndex = block.Statements.IndexOf(contentReadStatement);
-        var updatedBlock = block.WithStatements(block.Statements.Insert(statementIndex, successCheck));
+        var declarationIndex = block.Statements.IndexOf(declaration);
+        var updatedBlock = block.WithStatements(block.Statements.Insert(declarationIndex + 1, successCheck));
 
         return document.WithSyntaxRoot(root.ReplaceNode(block, updatedBlock));
     }
