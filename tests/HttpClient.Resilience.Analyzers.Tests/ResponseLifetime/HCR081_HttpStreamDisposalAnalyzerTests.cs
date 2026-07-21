@@ -246,6 +246,70 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenCustomExtensionOnHttpClientReturnsStream()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class CustomExtensions
+            {
+                public static Task<Stream> GetStreamAsync(
+                    this global::System.Net.Http.HttpClient client,
+                    int key)
+                {
+                    return Task.FromResult<Stream>(new MemoryStream());
+                }
+            }
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(global::System.Net.Http.HttpClient client)
+                {
+                    var stream = await client.GetStreamAsync(42);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenCustomExtensionOnHttpContentReturnsStream()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class CustomExtensions
+            {
+                public static Task<Stream> ReadAsStreamAsync(
+                    this global::System.Net.Http.HttpContent content,
+                    int key)
+                {
+                    return Task.FromResult<Stream>(new MemoryStream());
+                }
+            }
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync(42);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task CodeFix_DisposesHttpContentStreamWithUsingDeclaration()
     {
         const string source = """
