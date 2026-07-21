@@ -441,6 +441,39 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
         Assert.Empty(diagnostics);
     }
 
+    [Theory]
+    [InlineData("PatchAsJsonAsync")]
+    [InlineData("PostAsJsonAsync")]
+    [InlineData("PutAsJsonAsync")]
+    public async Task CodeFix_ReplacesBlockingJsonWriteWithAwait(string methodName)
+    {
+        var source = $$"""
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> SendAsync(HttpClient client, Order order)
+                {
+                    return client.{{methodName}}("https://example.com/orders", order).Result;
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            $"return await client.{methodName}(\"https://example.com/orders\", order);",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task CodeFix_ReplacesBlockingContentCopyWithAwait()
     {
