@@ -76,11 +76,16 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
         System.Threading.CancellationToken cancellationToken)
     {
         initializer = UnwrapParentheses(initializer);
-        return initializer is AwaitExpressionSyntax awaitExpression &&
-            awaitExpression.Expression
+        if (initializer is AwaitExpressionSyntax awaitExpression)
+        {
+            return awaitExpression.Expression
                 .DescendantNodesAndSelf()
                 .OfType<InvocationExpressionSyntax>()
                 .Any(invocation => IsHttpStreamCall(invocation, semanticModel, cancellationToken));
+        }
+
+        return initializer is InvocationExpressionSyntax invocation &&
+            IsHttpStreamCall(invocation, semanticModel, cancellationToken);
     }
 
     private static bool IsHttpStreamCall(
@@ -97,6 +102,9 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
                 IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
                 ReturnsStreamLike(invocation, semanticModel, cancellationToken)) ||
             (memberAccess.Name.Identifier.ValueText == "ReadAsStreamAsync" &&
+                IsHttpContentReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
+                ReturnsStreamLike(invocation, semanticModel, cancellationToken)) ||
+            (memberAccess.Name.Identifier.ValueText == "ReadAsStream" &&
                 IsHttpContentReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
                 ReturnsStreamLike(invocation, semanticModel, cancellationToken));
     }

@@ -331,4 +331,30 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
 
         Assert.Empty(titles);
     }
+
+    [Fact]
+    public async Task CodeFix_DisposesSynchronousHttpContentStream()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+
+            public sealed class Client
+            {
+                public void Copy(HttpResponseMessage response, Stream destination)
+                {
+                    var stream = response.Content.ReadAsStream();
+                    stream.CopyTo(destination);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "using var stream = response.Content.ReadAsStream();",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
 }
