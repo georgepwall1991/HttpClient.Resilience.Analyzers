@@ -12,7 +12,7 @@ namespace HttpClient.Resilience.Analyzers.Analyzers.ResponseLifetime;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
 {
-    private static readonly string[] HttpClientAsyncMethodNames =
+    private static readonly string[] HttpClientMethodNames =
     {
         "DeleteAsync",
         "GetAsync",
@@ -22,6 +22,7 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         "PatchAsync",
         "PostAsync",
         "PutAsync",
+        "Send",
         "SendAsync"
     };
 
@@ -67,7 +68,7 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        return (HttpClientAsyncMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
+        return (HttpClientMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
                 IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
                 MethodHasCancellationTokenOverload(invocation, semanticModel, cancellationToken)) ||
             (HttpContentAsyncMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
