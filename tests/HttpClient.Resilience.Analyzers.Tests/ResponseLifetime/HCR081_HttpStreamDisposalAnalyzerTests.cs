@@ -1,4 +1,5 @@
 using HttpClient.Resilience.Analyzers.Analyzers.ResponseLifetime;
+using HttpClient.Resilience.Analyzers.CodeFixes;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.Tests.TestInfrastructure;
 
@@ -242,5 +243,59 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
         var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
 
         Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task CodeFix_DisposesHttpContentStreamWithUsingDeclaration()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response, Stream destination, CancellationToken cancellationToken)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    await stream.CopyToAsync(destination, cancellationToken);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedForAssignment()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response, Stream destination, CancellationToken cancellationToken)
+                {
+                    Stream stream;
+                    stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    await stream.CopyToAsync(destination, cancellationToken);
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
     }
 }
