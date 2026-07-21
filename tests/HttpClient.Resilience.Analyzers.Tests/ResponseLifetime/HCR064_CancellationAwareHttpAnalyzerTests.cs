@@ -559,4 +559,111 @@ public sealed class HCR064_CancellationAwareHttpAnalyzerTests
             StringComparison.Ordinal);
         Assert.DoesNotContain("CancellationToken.None", fixedSource, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenDefaultTokenIgnoresAvailableToken()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(
+                    HttpClient client,
+                    CancellationToken cancellationToken)
+                {
+                    return client.GetAsync("https://example.com", cancellationToken: default);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR064, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenTypedDefaultTokenIgnoresAvailableToken()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(
+                    HttpClient client,
+                    CancellationToken cancellationToken)
+                {
+                    return client.GetAsync("https://example.com", default(CancellationToken));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR064, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task CodeFix_ReplacesDefaultTokenWithAvailableToken()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(
+                    HttpClient client,
+                    CancellationToken cancellationToken)
+                {
+                    return client.GetAsync("https://example.com", cancellationToken: default);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR064_CancellationAwareHttpAnalyzer, HCR064_PassCancellationTokenCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "cancellationToken: cancellationToken",
+            fixedSource,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("default", fixedSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CodeFix_PreservesDefaultNonTokenArgument()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> PostAsync(
+                    HttpClient client,
+                    CancellationToken cancellationToken)
+                {
+                    return client.PostAsync("https://example.com", default);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR064_CancellationAwareHttpAnalyzer, HCR064_PassCancellationTokenCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "client.PostAsync(\"https://example.com\", default, cancellationToken: cancellationToken)",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
 }
