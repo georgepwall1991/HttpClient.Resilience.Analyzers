@@ -74,12 +74,33 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        return (HttpClientMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
+        return InvocationTargetsKnownHttpApi(invocation, semanticModel, cancellationToken) &&
+            ((HttpClientMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
                 IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
                 MethodHasCancellationTokenOverload(invocation, semanticModel, cancellationToken)) ||
             (HttpContentMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
                 IsHttpContentReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
-                MethodHasCancellationTokenOverload(invocation, semanticModel, cancellationToken));
+                MethodHasCancellationTokenOverload(invocation, semanticModel, cancellationToken)));
+    }
+
+    private static bool InvocationTargetsKnownHttpApi(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is not IMethodSymbol method)
+        {
+            return true;
+        }
+
+        var declaringType = (method.ReducedFrom ?? method).ContainingType
+            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+        return declaringType is
+            "global::System.Net.Http.HttpClient" or
+            "global::System.Net.Http.HttpContent" or
+            "global::System.Net.Http.Json.HttpClientJsonExtensions" or
+            "global::System.Net.Http.Json.HttpContentJsonExtensions";
     }
 
     private static bool MethodHasCancellationTokenOverload(
