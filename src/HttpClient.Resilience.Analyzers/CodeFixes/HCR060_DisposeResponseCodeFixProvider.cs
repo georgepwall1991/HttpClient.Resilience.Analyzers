@@ -36,9 +36,25 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
         var node = root.FindNode(diagnostic.Location.SourceSpan);
         var declaration = node.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>();
 
-        if (declaration is null ||
-            declaration.UsingKeyword != default ||
-            declaration.Declaration.Variables.Count != 1)
+        if (declaration is not null &&
+            declaration.UsingKeyword == default &&
+            declaration.Declaration.Variables.Count == 1)
+        {
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    "Dispose response with using declaration",
+                    cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
+                    nameof(HCR060_DisposeResponseCodeFixProvider)),
+                diagnostic);
+            return;
+        }
+
+        var assignment = node.FirstAncestorOrSelf<AssignmentExpressionSyntax>();
+        if (!TryGetAdjacentDeclaration(
+                assignment,
+                out var block,
+                out var adjacentDeclaration,
+                out var assignmentStatement))
         {
             return;
         }
@@ -46,9 +62,54 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
         context.RegisterCodeFix(
             CodeAction.Create(
                 "Dispose response with using declaration",
-                cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
+                cancellationToken => MergeDeclarationAndAssignmentAsync(
+                    context.Document,
+                    block,
+                    adjacentDeclaration,
+                    assignment!,
+                    assignmentStatement,
+                    cancellationToken),
                 nameof(HCR060_DisposeResponseCodeFixProvider)),
             diagnostic);
+    }
+
+    private static bool TryGetAdjacentDeclaration(
+        AssignmentExpressionSyntax? assignment,
+        out BlockSyntax block,
+        out LocalDeclarationStatementSyntax declaration,
+        out ExpressionStatementSyntax assignmentStatement)
+    {
+        block = null!;
+        declaration = null!;
+        assignmentStatement = null!;
+
+        if (assignment?.Left is not IdentifierNameSyntax identifier ||
+            assignment.Parent is not ExpressionStatementSyntax statement ||
+            statement.Parent is not BlockSyntax containingBlock)
+        {
+            return false;
+        }
+
+        var assignmentIndex = containingBlock.Statements.IndexOf(statement);
+        if (assignmentIndex <= 0 ||
+            containingBlock.Statements[assignmentIndex - 1] is not LocalDeclarationStatementSyntax previousDeclaration ||
+            previousDeclaration.UsingKeyword != default)
+        {
+            return false;
+        }
+
+        var variables = previousDeclaration.Declaration.Variables;
+        if (variables.Count != 1 ||
+            variables[0].Initializer is not null ||
+            variables[0].Identifier.ValueText != identifier.Identifier.ValueText)
+        {
+            return false;
+        }
+
+        block = containingBlock;
+        declaration = previousDeclaration;
+        assignmentStatement = statement;
+        return true;
     }
 
     private static async Task<Document> AddUsingDeclarationAsync(
@@ -67,5 +128,34 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
             .WithAdditionalAnnotations(Formatter.Annotation);
 
         return document.WithSyntaxRoot(root.ReplaceNode(declaration, usingDeclaration));
+    }
+
+    private static async Task<Document> MergeDeclarationAndAssignmentAsync(
+        Document document,
+        BlockSyntax block,
+        LocalDeclarationStatementSyntax declaration,
+        AssignmentExpressionSyntax assignment,
+        ExpressionStatementSyntax assignmentStatement,
+        CancellationToken cancellationToken)
+    {
+        var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        if (root is null)
+        {
+            return document;
+        }
+
+        var variable = declaration.Declaration.Variables[0]
+            .WithInitializer(SyntaxFactory.EqualsValueClause(assignment.Right.WithoutTrivia()));
+        var usingDeclaration = declaration
+            .WithDeclaration(declaration.Declaration.WithVariables(SyntaxFactory.SingletonSeparatedList(variable)))
+            .WithUsingKeyword(SyntaxFactory.Token(SyntaxKind.UsingKeyword).WithTrailingTrivia(SyntaxFactory.Space))
+            .WithTrailingTrivia(assignmentStatement.GetTrailingTrivia())
+            .WithAdditionalAnnotations(Formatter.Annotation);
+        var statements = block.Statements
+            .Replace(declaration, usingDeclaration)
+            .Remove(assignmentStatement);
+        var updatedBlock = block.WithStatements(statements);
+
+        return document.WithSyntaxRoot(root.ReplaceNode(block, updatedBlock));
     }
 }
