@@ -479,4 +479,30 @@ public sealed class HCR064_CancellationAwareHttpAnalyzerTests
             fixedSource,
             StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task CodeFix_PassesTokenToSynchronousStreamRead()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+
+            public sealed class Client
+            {
+                public Stream Open(HttpResponseMessage response, CancellationToken cancellationToken)
+                {
+                    return response.Content.ReadAsStream();
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR064_CancellationAwareHttpAnalyzer, HCR064_PassCancellationTokenCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "response.Content.ReadAsStream(cancellationToken: cancellationToken)",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
 }

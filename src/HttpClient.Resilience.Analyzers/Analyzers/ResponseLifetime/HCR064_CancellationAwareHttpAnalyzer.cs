@@ -26,13 +26,14 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         "SendAsync"
     };
 
-    private static readonly string[] HttpContentAsyncMethodNames =
+    private static readonly string[] HttpContentMethodNames =
     {
         "CopyToAsync",
         "LoadIntoBufferAsync",
         "ReadAsByteArrayAsync",
         "ReadFromJsonAsAsyncEnumerable",
         "ReadFromJsonAsync",
+        "ReadAsStream",
         "ReadAsStreamAsync",
         "ReadAsStringAsync"
     };
@@ -72,7 +73,7 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         return (HttpClientMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
                 IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
                 MethodHasCancellationTokenOverload(invocation, semanticModel, cancellationToken)) ||
-            (HttpContentAsyncMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
+            (HttpContentMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
                 IsHttpContentReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
                 MethodHasCancellationTokenOverload(invocation, semanticModel, cancellationToken));
     }
