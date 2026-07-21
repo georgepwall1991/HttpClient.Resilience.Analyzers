@@ -230,6 +230,70 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenCustomExtensionOnHttpClientReturnsResponse()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class CustomExtensions
+            {
+                public static Task<HttpResponseMessage> GetAsync(
+                    this global::System.Net.Http.HttpClient client,
+                    int key)
+                {
+                    return Task.FromResult(new HttpResponseMessage());
+                }
+            }
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(global::System.Net.Http.HttpClient client)
+                {
+                    var response = await client.GetAsync(42);
+                    return await response.Content.ReadAsStringAsync();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenCustomExtensionOnHttpContentReusesReadName()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class CustomExtensions
+            {
+                public static Task<string> ReadAsStringAsync(
+                    this global::System.Net.Http.HttpContent content,
+                    int key)
+                {
+                    return Task.FromResult(key.ToString());
+                }
+            }
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(global::System.Net.Http.HttpClient client)
+                {
+                    var response = await client.GetAsync("https://example.com");
+                    return await response.Content.ReadAsStringAsync(42);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task CodeFix_InsertsEnsureSuccessStatusCodeBeforeContentRead()
     {
         const string source = """
