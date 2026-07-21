@@ -39,6 +39,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
         context.RegisterSyntaxNodeAction(AnalyzeLocalDeclaration, SyntaxKind.LocalDeclarationStatement);
+        context.RegisterSyntaxNodeAction(AnalyzeAssignment, SyntaxKind.SimpleAssignmentExpression);
     }
 
     private static void AnalyzeLocalDeclaration(SyntaxNodeAnalysisContext context)
@@ -67,6 +68,28 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
                 DiagnosticDescriptors.HCR061,
                 variable.Identifier.GetLocation()));
         }
+    }
+
+    private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context)
+    {
+        var assignment = (AssignmentExpressionSyntax)context.Node;
+        if (assignment.Parent is not ExpressionStatementSyntax ||
+            assignment.Left is not IdentifierNameSyntax responseIdentifier ||
+            !InitializerAwaitsHttpResponse(assignment.Right, context.SemanticModel, context.CancellationToken) ||
+            context.SemanticModel.GetSymbolInfo(responseIdentifier, context.CancellationToken).Symbol is not ILocalSymbol responseLocal)
+        {
+            return;
+        }
+
+        if (FindFirstContentRead(assignment, responseLocal, context.SemanticModel, context.CancellationToken) is not { } contentRead ||
+            HasSuccessCheckBefore(assignment, responseLocal, contentRead.SpanStart, context.SemanticModel, context.CancellationToken))
+        {
+            return;
+        }
+
+        context.ReportDiagnostic(Diagnostic.Create(
+            DiagnosticDescriptors.HCR061,
+            responseIdentifier.GetLocation()));
     }
 
     private static bool InitializerAwaitsHttpResponse(
@@ -162,12 +185,12 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
     }
 
     private static InvocationExpressionSyntax? FindFirstContentRead(
-        VariableDeclaratorSyntax variable,
+        SyntaxNode origin,
         ILocalSymbol responseLocal,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        if (variable.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
+        if (origin.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
         {
             return null;
         }
@@ -175,12 +198,12 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         foreach (var invocation in block
             .DescendantNodes()
             .OfType<InvocationExpressionSyntax>()
-            .Where(invocation => invocation.SpanStart > variable.SpanStart)
+            .Where(invocation => invocation.SpanStart > origin.SpanStart)
             .OrderBy(invocation => invocation.SpanStart))
         {
             if (IsContentRead(invocation, responseLocal, semanticModel, cancellationToken))
             {
-                if (LocalIsReassignedBetween(block, responseLocal, variable.SpanStart, invocation.SpanStart, semanticModel, cancellationToken))
+                if (LocalIsReassignedBetween(block, responseLocal, origin.SpanStart, invocation.SpanStart, semanticModel, cancellationToken))
                 {
                     return null;
                 }
@@ -214,20 +237,20 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
     }
 
     private static bool HasSuccessCheckBefore(
-        VariableDeclaratorSyntax variable,
+        SyntaxNode origin,
         ILocalSymbol responseLocal,
         int contentReadStart,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        if (variable.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
+        if (origin.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
         {
             return false;
         }
 
         return block
             .DescendantNodes()
-            .Where(node => node.SpanStart > variable.SpanStart && node.SpanStart < contentReadStart)
+            .Where(node => node.SpanStart > origin.SpanStart && node.SpanStart < contentReadStart)
             .Any(node => node switch
             {
                 InvocationExpressionSyntax invocation => IsEnsureSuccessStatusCodeCall(

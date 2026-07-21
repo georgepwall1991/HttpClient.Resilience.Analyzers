@@ -290,4 +290,84 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzerTests
         Assert.True(successCheckIndex > declarationIndex);
         Assert.True(branchIndex > successCheckIndex);
     }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenAssignedResponseContentIsReadWithoutSuccessCheck()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    HttpResponseMessage response;
+                    response = await client.GetAsync("https://example.com", cancellationToken);
+                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR061, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenAssignedResponseIsCheckedBeforeContentRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    HttpResponseMessage response;
+                    response = await client.GetAsync("https://example.com", cancellationToken);
+                    response.EnsureSuccessStatusCode();
+                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task CodeFix_InsertsSuccessCheckAfterResponseAssignment()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    HttpResponseMessage response;
+                    response = await client.GetAsync("https://example.com", cancellationToken);
+                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer, HCR061_EnsureSuccessStatusCodeCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        var assignmentIndex = fixedSource.IndexOf("response = await", StringComparison.Ordinal);
+        var successCheckIndex = fixedSource.IndexOf("response.EnsureSuccessStatusCode();", StringComparison.Ordinal);
+        var contentReadIndex = fixedSource.IndexOf("response.Content.ReadAsStringAsync", StringComparison.Ordinal);
+
+        Assert.True(successCheckIndex > assignmentIndex);
+        Assert.True(contentReadIndex > successCheckIndex);
+    }
 }
