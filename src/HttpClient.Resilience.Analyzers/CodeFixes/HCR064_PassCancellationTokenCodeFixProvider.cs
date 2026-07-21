@@ -48,6 +48,11 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
                 ILocalSymbol local => local.Type,
                 IParameterSymbol parameter => parameter.Type,
                 _ => null
+            }) || IsCancellationTokenSource(symbol switch
+            {
+                ILocalSymbol local => local.Type,
+                IParameterSymbol parameter => parameter.Type,
+                _ => null
             }))
             .ToArray();
 
@@ -60,13 +65,30 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
                      symbol => symbol.Name,
                      System.StringComparer.Ordinal))
         {
-            var tokenExpression = CreateIdentifierName(cancellationTokenSymbol.Name);
+            var symbolType = cancellationTokenSymbol switch
+            {
+                ILocalSymbol local => local.Type,
+                IParameterSymbol parameter => parameter.Type,
+                _ => null
+            };
+            var tokenDisplayName = IsCancellationTokenSource(symbolType)
+                ? cancellationTokenSymbol.Name + ".Token"
+                : cancellationTokenSymbol.Name;
+            ExpressionSyntax tokenExpression = CreateIdentifierName(cancellationTokenSymbol.Name);
+            if (IsCancellationTokenSource(symbolType))
+            {
+                tokenExpression = SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    tokenExpression,
+                    SyntaxFactory.IdentifierName("Token"));
+            }
+
             var tokenArgument = SyntaxFactory.Argument(tokenExpression)
                 .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("cancellationToken")));
 
             context.RegisterCodeFix(
                 CodeAction.Create(
-                    $"Pass '{cancellationTokenSymbol.Name}' cancellation token",
+                    $"Pass '{tokenDisplayName}' cancellation token",
                     cancellationToken => AddCancellationTokenAsync(
                         context.Document,
                         invocation,
@@ -106,5 +128,11 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
     {
         return type?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
             "global::System.Threading.CancellationToken";
+    }
+
+    private static bool IsCancellationTokenSource(ITypeSymbol? type)
+    {
+        return type?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::System.Threading.CancellationTokenSource";
     }
 }

@@ -118,8 +118,8 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         return semanticModel.LookupSymbols(invocation.SpanStart)
             .Any(symbol => symbol switch
             {
-                ILocalSymbol local => IsCancellationToken(local.Type),
-                IParameterSymbol parameter => IsCancellationToken(parameter.Type),
+                ILocalSymbol local => IsCancellationToken(local.Type) || IsCancellationTokenSource(local.Type),
+                IParameterSymbol parameter => IsCancellationToken(parameter.Type) || IsCancellationTokenSource(parameter.Type),
                 _ => false
             });
     }
@@ -199,6 +199,12 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
     {
         return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
             "global::System.Threading.CancellationToken";
+    }
+
+    private static bool IsCancellationTokenSource(ITypeSymbol type)
+    {
+        return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::System.Threading.CancellationTokenSource";
     }
 
     private static bool TypeSyntaxLooksLikeCancellationToken(TypeSyntax type)
