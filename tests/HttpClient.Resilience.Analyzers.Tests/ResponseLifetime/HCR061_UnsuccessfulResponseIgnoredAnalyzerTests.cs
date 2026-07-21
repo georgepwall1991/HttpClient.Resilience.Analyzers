@@ -258,7 +258,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzerTests
     }
 
     [Fact]
-    public async Task CodeFix_IsNotOfferedWhenContentReadIsNested()
+    public async Task CodeFix_InsertsSuccessCheckWhenContentReadIsNested()
     {
         const string source = """
             using System.Net.Http;
@@ -280,9 +280,14 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzerTests
             }
             """;
 
-        var titles = await CodeFixVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer, HCR061_EnsureSuccessStatusCodeCodeFixProvider>
-            .GetCodeFixTitlesAsync(source);
+        var fixedSource = await CodeFixVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer, HCR061_EnsureSuccessStatusCodeCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
 
-        Assert.Empty(titles);
+        var declarationIndex = fixedSource.IndexOf("var response =", StringComparison.Ordinal);
+        var successCheckIndex = fixedSource.IndexOf("response.EnsureSuccessStatusCode();", StringComparison.Ordinal);
+        var branchIndex = fixedSource.IndexOf("if (readContent)", StringComparison.Ordinal);
+
+        Assert.True(successCheckIndex > declarationIndex);
+        Assert.True(branchIndex > successCheckIndex);
     }
 }
