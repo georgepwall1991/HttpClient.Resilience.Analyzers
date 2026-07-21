@@ -274,7 +274,7 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
     }
 
     [Fact]
-    public async Task CodeFix_IsNotOfferedForAssignment()
+    public async Task CodeFix_MergesAdjacentDeclarationAndAssignment()
     {
         const string source = """
             using System.IO;
@@ -289,6 +289,39 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
                     Stream stream;
                     stream = await response.Content.ReadAsStreamAsync(cancellationToken);
                     await stream.CopyToAsync(destination, cancellationToken);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);",
+            fixedSource,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("Stream stream;", fixedSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedForNestedAssignment()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response, Stream destination, CancellationToken cancellationToken)
+                {
+                    Stream stream;
+                    if (destination.CanWrite)
+                    {
+                        stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                        await stream.CopyToAsync(destination, cancellationToken);
+                    }
                 }
             }
             """;
