@@ -916,6 +916,32 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
         Assert.Empty(titles);
     }
 
+    [Fact]
+    public async Task CodeFix_DisposesSynchronousResponseHeadersReadResult()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+
+            public sealed class Client
+            {
+                public void Send(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = client.Send(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    _ = response.Content;
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "using var response = client.Send(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
     private static string NormalizeLineEndings(string value)
     {
         return value.Replace("\r\n", "\n");
