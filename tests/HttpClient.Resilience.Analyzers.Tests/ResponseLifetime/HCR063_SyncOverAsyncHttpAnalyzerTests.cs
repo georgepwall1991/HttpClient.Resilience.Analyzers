@@ -351,4 +351,34 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
 
         Assert.Empty(titles);
     }
+
+    [Fact]
+    public async Task CodeFix_ReplacesJsonContentResultWithAwait()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<Order?> ReadAsync(HttpResponseMessage response)
+                {
+                    return response.Content.ReadFromJsonAsync<Order>().Result;
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "return await response.Content.ReadFromJsonAsync<Order>();",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
 }
