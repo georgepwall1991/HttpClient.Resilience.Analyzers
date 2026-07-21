@@ -27,6 +27,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         "CopyToAsync",
         "LoadIntoBufferAsync",
         "ReadAsByteArrayAsync",
+        "ReadFromJsonAsync",
         "ReadAsStreamAsync",
         "ReadAsStringAsync"
     };
@@ -228,7 +229,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
                 Name.Identifier.ValueText: "Content",
                 Expression: IdentifierNameSyntax responseIdentifier
             },
-            Name: IdentifierNameSyntax methodName
+            Name: SimpleNameSyntax methodName
         } &&
             ContentReadMethodNames.Contains(methodName.Identifier.ValueText, System.StringComparer.Ordinal) &&
             SymbolEqualityComparer.Default.Equals(
