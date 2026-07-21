@@ -432,4 +432,33 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzerTests
         Assert.True(successCheckIndex > sendIndex);
         Assert.True(contentReadIndex > successCheckIndex);
     }
+
+    [Fact]
+    public async Task CodeFix_InsertsSuccessCheckBeforeSynchronousStreamRead()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<Stream> OpenAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    return response.Content.ReadAsStream(cancellationToken);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer, HCR061_EnsureSuccessStatusCodeCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        var successCheckIndex = fixedSource.IndexOf("response.EnsureSuccessStatusCode();", StringComparison.Ordinal);
+        var streamReadIndex = fixedSource.IndexOf("response.Content.ReadAsStream", StringComparison.Ordinal);
+
+        Assert.True(successCheckIndex >= 0);
+        Assert.True(streamReadIndex > successCheckIndex);
+    }
 }
