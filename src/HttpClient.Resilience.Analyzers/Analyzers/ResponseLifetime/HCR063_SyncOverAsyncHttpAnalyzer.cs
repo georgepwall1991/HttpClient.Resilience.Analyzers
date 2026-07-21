@@ -14,6 +14,7 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
 {
     private static readonly string[] HttpAsyncMethodNames =
     {
+        "CopyToAsync",
         "DeleteAsync",
         "GetAsync",
         "GetByteArrayAsync",
