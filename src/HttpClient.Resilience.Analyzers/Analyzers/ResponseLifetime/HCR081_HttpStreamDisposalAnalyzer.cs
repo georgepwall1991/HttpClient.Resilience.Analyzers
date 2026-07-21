@@ -99,14 +99,40 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
         }
 
         return (memberAccess.Name.Identifier.ValueText == "GetStreamAsync" &&
+                InvocationTargetsType(invocation, "global::System.Net.Http.HttpClient", semanticModel, cancellationToken) &&
                 IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
                 ReturnsStreamLike(invocation, semanticModel, cancellationToken)) ||
             (memberAccess.Name.Identifier.ValueText == "ReadAsStreamAsync" &&
+                InvocationTargetsType(invocation, "global::System.Net.Http.HttpContent", semanticModel, cancellationToken) &&
                 IsHttpContentReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
                 ReturnsStreamLike(invocation, semanticModel, cancellationToken)) ||
             (memberAccess.Name.Identifier.ValueText == "ReadAsStream" &&
+                InvocationTargetsType(invocation, "global::System.Net.Http.HttpContent", semanticModel, cancellationToken) &&
                 IsHttpContentReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
                 ReturnsStreamLike(invocation, semanticModel, cancellationToken));
+    }
+
+    private static bool InvocationTargetsType(
+        InvocationExpressionSyntax invocation,
+        string expectedType,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return MethodTargetsType(method, expectedType);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 ||
+            candidateMethods.All(candidate => MethodTargetsType(candidate, expectedType));
+    }
+
+    private static bool MethodTargetsType(IMethodSymbol method, string expectedType)
+    {
+        return (method.ReducedFrom ?? method).ContainingType
+            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == expectedType;
     }
 
     private static bool ReturnsStreamLike(
