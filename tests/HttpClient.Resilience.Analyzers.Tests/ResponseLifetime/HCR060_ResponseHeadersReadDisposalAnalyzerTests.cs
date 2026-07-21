@@ -859,6 +859,63 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
         Assert.Equal(NormalizeLineEndings(expected), NormalizeLineEndings(fixedSource));
     }
 
+    [Fact]
+    public async Task CodeFix_MergesAdjacentDeclarationAndAssignment()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    HttpResponseMessage response;
+                    response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    _ = await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "using HttpResponseMessage response = await client.SendAsync",
+            fixedSource,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("HttpResponseMessage response;", fixedSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedForNestedAssignment()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client, HttpRequestMessage request, bool send, CancellationToken cancellationToken)
+                {
+                    HttpResponseMessage response;
+                    if (send)
+                    {
+                        response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                        _ = await response.Content.ReadAsStringAsync(cancellationToken);
+                    }
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
     private static string NormalizeLineEndings(string value)
     {
         return value.Replace("\r\n", "\n");
