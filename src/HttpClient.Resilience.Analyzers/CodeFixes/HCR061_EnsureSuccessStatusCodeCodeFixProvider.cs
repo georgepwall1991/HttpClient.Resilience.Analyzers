@@ -23,6 +23,7 @@ public sealed class HCR061_EnsureSuccessStatusCodeCodeFixProvider : CodeFixProvi
         "LoadIntoBufferAsync",
         "ReadAsByteArrayAsync",
         "ReadFromJsonAsync",
+        "ReadAsStream",
         "ReadAsStreamAsync",
         "ReadAsStringAsync"
     };

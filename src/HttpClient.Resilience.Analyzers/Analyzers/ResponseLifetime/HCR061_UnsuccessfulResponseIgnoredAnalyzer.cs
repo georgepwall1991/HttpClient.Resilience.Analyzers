@@ -29,6 +29,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         "LoadIntoBufferAsync",
         "ReadAsByteArrayAsync",
         "ReadFromJsonAsync",
+        "ReadAsStream",
         "ReadAsStreamAsync",
         "ReadAsStringAsync"
     };
