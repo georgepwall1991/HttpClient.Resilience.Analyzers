@@ -216,6 +216,35 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenCustomExtensionOnHttpClientReusesKnownMethodName()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class CustomExtensions
+            {
+                public static Task<string> GetAsync(this HttpClient client, int key)
+                {
+                    return Task.FromResult(key.ToString());
+                }
+            }
+
+            public sealed class Client
+            {
+                public string Get(HttpClient client)
+                {
+                    return client.GetAsync(42).Result;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task CodeFix_ReplacesResultWithAwaitInsideAsyncMethod()
     {
         const string source = """

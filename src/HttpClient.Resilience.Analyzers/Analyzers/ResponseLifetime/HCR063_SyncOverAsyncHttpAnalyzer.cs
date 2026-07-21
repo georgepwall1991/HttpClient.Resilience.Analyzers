@@ -155,13 +155,34 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
         System.Threading.CancellationToken cancellationToken)
     {
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
-            !HttpAsyncMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal))
+            !HttpAsyncMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) ||
+            !InvocationTargetsKnownHttpApi(invocation, semanticModel, cancellationToken))
         {
             return false;
         }
 
         return IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken) ||
             IsHttpContentReceiver(memberAccess.Expression, semanticModel, cancellationToken);
+    }
+
+    private static bool InvocationTargetsKnownHttpApi(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is not IMethodSymbol method)
+        {
+            return true;
+        }
+
+        var declaringType = (method.ReducedFrom ?? method).ContainingType
+            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+        return declaringType is
+            "global::System.Net.Http.HttpClient" or
+            "global::System.Net.Http.HttpContent" or
+            "global::System.Net.Http.Json.HttpClientJsonExtensions" or
+            "global::System.Net.Http.Json.HttpContentJsonExtensions";
     }
 
     private static bool IsHttpClientReceiver(
