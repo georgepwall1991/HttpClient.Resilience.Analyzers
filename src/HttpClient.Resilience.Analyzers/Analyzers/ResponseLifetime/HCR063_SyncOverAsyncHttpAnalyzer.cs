@@ -23,6 +23,7 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
         "PostAsync",
         "PutAsync",
         "ReadAsByteArrayAsync",
+        "ReadFromJsonAsync",
         "ReadAsStreamAsync",
         "ReadAsStringAsync",
         "SendAsync"
