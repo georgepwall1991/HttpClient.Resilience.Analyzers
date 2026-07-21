@@ -19,6 +19,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         "PatchAsync",
         "PostAsync",
         "PutAsync",
+        "Send",
         "SendAsync"
     };
 
@@ -49,7 +50,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         foreach (var variable in declaration.Declaration.Variables)
         {
             if (variable.Initializer?.Value is not { } initializer ||
-                !InitializerAwaitsHttpResponse(initializer, context.SemanticModel, context.CancellationToken) ||
+                !InitializerMaterializesHttpResponse(initializer, context.SemanticModel, context.CancellationToken) ||
                 context.SemanticModel.GetDeclaredSymbol(variable, context.CancellationToken) is not ILocalSymbol responseLocal)
             {
                 continue;
@@ -76,7 +77,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         var assignment = (AssignmentExpressionSyntax)context.Node;
         if (assignment.Parent is not ExpressionStatementSyntax ||
             assignment.Left is not IdentifierNameSyntax responseIdentifier ||
-            !InitializerAwaitsHttpResponse(assignment.Right, context.SemanticModel, context.CancellationToken) ||
+            !InitializerMaterializesHttpResponse(assignment.Right, context.SemanticModel, context.CancellationToken) ||
             context.SemanticModel.GetSymbolInfo(responseIdentifier, context.CancellationToken).Symbol is not ILocalSymbol responseLocal)
         {
             return;
@@ -93,17 +94,26 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
             responseIdentifier.GetLocation()));
     }
 
-    private static bool InitializerAwaitsHttpResponse(
+    private static bool InitializerMaterializesHttpResponse(
         ExpressionSyntax initializer,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
         initializer = UnwrapParentheses(initializer);
-        return initializer is AwaitExpressionSyntax awaitExpression &&
-            awaitExpression.Expression
+        if (initializer is AwaitExpressionSyntax awaitExpression)
+        {
+            return awaitExpression.Expression
                 .DescendantNodesAndSelf()
                 .OfType<InvocationExpressionSyntax>()
                 .Any(invocation => IsHttpResponseCall(invocation, semanticModel, cancellationToken));
+        }
+
+        return initializer is InvocationExpressionSyntax invocation &&
+            invocation.Expression is MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "Send"
+            } &&
+            IsHttpResponseCall(invocation, semanticModel, cancellationToken);
     }
 
     private static bool IsHttpResponseCall(
