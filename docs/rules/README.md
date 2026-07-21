@@ -52,7 +52,7 @@ Each rule page includes:
 | [`HCR061`](HCR061.md) | Check HTTP response success before reading content | Warning | Guide |
 | [`HCR062`](HCR062.md) | Prefer per-request headers over mutating `DefaultRequestHeaders` | Warning | Guide |
 | [`HCR063`](HCR063.md) | Avoid sync-over-async around outbound HTTP | Warning | Guide |
-| [`HCR064`](HCR064.md) | Use cancellation-aware HTTP APIs when a token is available | Warning | Guide |
+| [`HCR064`](HCR064.md) | Use cancellation-aware HTTP APIs when a token is available | Warning | Yes |
 | [`HCR081`](HCR081.md) | Dispose streams returned from HTTP content | Warning | Guide |
 
 ### Concurrency
