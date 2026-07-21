@@ -31,6 +31,7 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         "CopyToAsync",
         "LoadIntoBufferAsync",
         "ReadAsByteArrayAsync",
+        "ReadFromJsonAsAsyncEnumerable",
         "ReadFromJsonAsync",
         "ReadAsStreamAsync",
         "ReadAsStringAsync"

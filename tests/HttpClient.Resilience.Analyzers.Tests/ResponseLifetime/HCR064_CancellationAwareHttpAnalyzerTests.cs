@@ -420,6 +420,39 @@ public sealed class HCR064_CancellationAwareHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_PassesTokenToJsonStreamingRead()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading;
+
+            public sealed class Client
+            {
+                public IAsyncEnumerable<Order?> Stream(
+                    HttpResponseMessage response,
+                    CancellationToken cancellationToken)
+                {
+                    return response.Content.ReadFromJsonAsAsyncEnumerable<Order>();
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR064_CancellationAwareHttpAnalyzer, HCR064_PassCancellationTokenCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "response.Content.ReadFromJsonAsAsyncEnumerable<Order>(cancellationToken: cancellationToken)",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CodeFix_PassesTokenToSynchronousSend()
     {
         const string source = """
