@@ -1,4 +1,5 @@
 using HttpClient.Resilience.Analyzers.Analyzers.ResponseLifetime;
+using HttpClient.Resilience.Analyzers.CodeFixes;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.Tests.TestInfrastructure;
 
@@ -226,5 +227,62 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzerTests
         var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
 
         Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task CodeFix_InsertsEnsureSuccessStatusCodeBeforeContentRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer, HCR061_EnsureSuccessStatusCodeCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        var successCheckIndex = fixedSource.IndexOf("response.EnsureSuccessStatusCode();", StringComparison.Ordinal);
+        var contentReadIndex = fixedSource.IndexOf("response.Content.ReadAsStringAsync", StringComparison.Ordinal);
+
+        Assert.True(successCheckIndex >= 0);
+        Assert.True(contentReadIndex > successCheckIndex);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedWhenContentReadIsNested()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, bool readContent, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    if (readContent)
+                    {
+                        return await response.Content.ReadAsStringAsync(cancellationToken);
+                    }
+
+                    return string.Empty;
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer, HCR061_EnsureSuccessStatusCodeCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
     }
 }
