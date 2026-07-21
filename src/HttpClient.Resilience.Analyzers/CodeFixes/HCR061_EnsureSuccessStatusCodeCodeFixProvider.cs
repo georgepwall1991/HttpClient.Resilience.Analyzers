@@ -43,28 +43,53 @@ public sealed class HCR061_EnsureSuccessStatusCodeCodeFixProvider : CodeFixProvi
         }
 
         var diagnostic = context.Diagnostics[0];
-        var variable = root.FindNode(diagnostic.Location.SourceSpan)
+        var node = root.FindNode(diagnostic.Location.SourceSpan);
+        var variable = node
             .FirstAncestorOrSelf<VariableDeclaratorSyntax>();
         var declaration = variable?.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>();
         var block = declaration?.Parent as BlockSyntax;
 
-        if (variable is null ||
-            declaration is null ||
+        if (variable is not null &&
+            declaration is not null &&
+            block is not null &&
+            declaration.Declaration.Variables.Count == 1 &&
+            HasContentRead(block, declaration, variable.Identifier.ValueText))
+        {
+            RegisterCodeFix(context, diagnostic, block, declaration, variable.Identifier);
+            return;
+        }
+
+        var responseIdentifier = node.FirstAncestorOrSelf<IdentifierNameSyntax>();
+        var assignment = responseIdentifier?.FirstAncestorOrSelf<AssignmentExpressionSyntax>();
+        var assignmentStatement = assignment?.Parent as ExpressionStatementSyntax;
+        block = assignmentStatement?.Parent as BlockSyntax;
+        if (responseIdentifier is null ||
+            assignment?.Left != responseIdentifier ||
+            assignmentStatement is null ||
             block is null ||
-            declaration.Declaration.Variables.Count != 1 ||
-            !HasContentRead(block, declaration, variable.Identifier.ValueText))
+            !HasContentRead(block, assignmentStatement, responseIdentifier.Identifier.ValueText))
         {
             return;
         }
 
+        RegisterCodeFix(context, diagnostic, block, assignmentStatement, responseIdentifier.Identifier);
+    }
+
+    private static void RegisterCodeFix(
+        CodeFixContext context,
+        Diagnostic diagnostic,
+        BlockSyntax block,
+        StatementSyntax responseAcquisition,
+        SyntaxToken responseIdentifier)
+    {
         context.RegisterCodeFix(
             CodeAction.Create(
-                $"Call '{variable.Identifier.ValueText}.EnsureSuccessStatusCode()'",
+                $"Call '{responseIdentifier.ValueText}.EnsureSuccessStatusCode()'",
                 cancellationToken => AddSuccessCheckAsync(
                     context.Document,
                     block,
-                    declaration,
-                    variable.Identifier,
+                    responseAcquisition,
+                    responseIdentifier,
                     cancellationToken),
                 nameof(HCR061_EnsureSuccessStatusCodeCodeFixProvider)),
             diagnostic);
@@ -72,13 +97,13 @@ public sealed class HCR061_EnsureSuccessStatusCodeCodeFixProvider : CodeFixProvi
 
     private static bool HasContentRead(
         BlockSyntax block,
-        LocalDeclarationStatementSyntax declaration,
+        StatementSyntax responseAcquisition,
         string responseName)
     {
         return block
             .DescendantNodes()
             .OfType<InvocationExpressionSyntax>()
-            .Where(invocation => invocation.SpanStart > declaration.SpanStart)
+            .Where(invocation => invocation.SpanStart > responseAcquisition.SpanStart)
             .Where(invocation => invocation.Expression is MemberAccessExpressionSyntax
             {
                 Expression: MemberAccessExpressionSyntax
@@ -96,7 +121,7 @@ public sealed class HCR061_EnsureSuccessStatusCodeCodeFixProvider : CodeFixProvi
     private static async Task<Document> AddSuccessCheckAsync(
         Document document,
         BlockSyntax block,
-        LocalDeclarationStatementSyntax declaration,
+        StatementSyntax responseAcquisition,
         SyntaxToken responseIdentifier,
         CancellationToken cancellationToken)
     {
@@ -113,8 +138,8 @@ public sealed class HCR061_EnsureSuccessStatusCodeCodeFixProvider : CodeFixProvi
                         SyntaxFactory.IdentifierName(responseIdentifier.WithoutTrivia()),
                         SyntaxFactory.IdentifierName("EnsureSuccessStatusCode"))))
             .WithAdditionalAnnotations(Formatter.Annotation);
-        var declarationIndex = block.Statements.IndexOf(declaration);
-        var updatedBlock = block.WithStatements(block.Statements.Insert(declarationIndex + 1, successCheck));
+        var acquisitionIndex = block.Statements.IndexOf(responseAcquisition);
+        var updatedBlock = block.WithStatements(block.Statements.Insert(acquisitionIndex + 1, successCheck));
 
         return document.WithSyntaxRoot(root.ReplaceNode(block, updatedBlock));
     }

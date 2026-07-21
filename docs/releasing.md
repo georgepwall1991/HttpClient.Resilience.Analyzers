@@ -31,8 +31,8 @@ $package = Get-ChildItem artifacts\packages\*.nupkg | Sort-Object LastWriteTime 
 For the current preview version, create and push a matching `v<package-version>` tag:
 
 ```powershell
-git tag v0.1.0-preview.2
-git push origin v0.1.0-preview.2
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 The release workflow will restore, format-check, build, test, pack, validate the package, upload artifacts, and push the `.nupkg` to NuGet.org.
