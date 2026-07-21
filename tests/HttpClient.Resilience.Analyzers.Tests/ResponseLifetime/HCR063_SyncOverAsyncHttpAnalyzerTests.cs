@@ -258,4 +258,50 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
             fixedSource,
             StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task CodeFix_ReplacesGetAwaiterGetResultInsideAsyncMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    return client.GetAsync("https://example.com").GetAwaiter().GetResult();
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "return await client.GetAsync(\"https://example.com\");",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedForGetAwaiterGetResultInsideSynchronousMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class Client
+            {
+                public HttpResponseMessage Get(HttpClient client)
+                {
+                    return client.GetAsync("https://example.com").GetAwaiter().GetResult();
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
 }
