@@ -22,6 +22,7 @@ public sealed class HCR061_EnsureSuccessStatusCodeCodeFixProvider : CodeFixProvi
         "CopyToAsync",
         "LoadIntoBufferAsync",
         "ReadAsByteArrayAsync",
+        "ReadFromJsonAsync",
         "ReadAsStreamAsync",
         "ReadAsStringAsync"
     };
@@ -111,7 +112,7 @@ public sealed class HCR061_EnsureSuccessStatusCodeCodeFixProvider : CodeFixProvi
                     Expression: IdentifierNameSyntax responseIdentifier,
                     Name.Identifier.ValueText: "Content"
                 },
-                Name: IdentifierNameSyntax methodName
+                Name: SimpleNameSyntax methodName
             } &&
                 responseIdentifier.Identifier.ValueText == responseName &&
                 ContentReadMethodNames.Contains(methodName.Identifier.ValueText, System.StringComparer.Ordinal))

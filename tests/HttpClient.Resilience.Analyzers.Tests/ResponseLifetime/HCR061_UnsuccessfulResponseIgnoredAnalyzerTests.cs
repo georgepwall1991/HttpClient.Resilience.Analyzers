@@ -370,4 +370,37 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzerTests
         Assert.True(successCheckIndex > assignmentIndex);
         Assert.True(contentReadIndex > successCheckIndex);
     }
+
+    [Fact]
+    public async Task CodeFix_InsertsSuccessCheckBeforeJsonContentRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<Order?> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com/order", cancellationToken);
+                    return await response.Content.ReadFromJsonAsync<Order>(cancellationToken);
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer, HCR061_EnsureSuccessStatusCodeCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        var successCheckIndex = fixedSource.IndexOf("response.EnsureSuccessStatusCode();", StringComparison.Ordinal);
+        var jsonReadIndex = fixedSource.IndexOf("response.Content.ReadFromJsonAsync", StringComparison.Ordinal);
+
+        Assert.True(successCheckIndex >= 0);
+        Assert.True(jsonReadIndex > successCheckIndex);
+    }
 }
