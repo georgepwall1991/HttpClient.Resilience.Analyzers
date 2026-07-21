@@ -39,7 +39,10 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                 continue;
             }
 
-            if (!InitializerMaterializesResponse(variable.Initializer.Value) ||
+            if (!InitializerMaterializesResponse(
+                    variable.Initializer.Value,
+                    context.SemanticModel,
+                    context.CancellationToken) ||
                 !IsResponseHeadersReadHttpCall(
                 variable.Initializer.Value,
                 context.SemanticModel,
@@ -64,7 +67,10 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         var assignment = (AssignmentExpressionSyntax)context.Node;
         if (assignment.Left is not IdentifierNameSyntax identifier ||
             context.SemanticModel.GetSymbolInfo(identifier, context.CancellationToken).Symbol is not ILocalSymbol ||
-            !InitializerMaterializesResponse(assignment.Right) ||
+            !InitializerMaterializesResponse(
+                assignment.Right,
+                context.SemanticModel,
+                context.CancellationToken) ||
             !IsResponseHeadersReadHttpCall(
                 assignment.Right,
                 context.SemanticModel,
@@ -83,10 +89,28 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             identifier.GetLocation()));
     }
 
-    private static bool InitializerMaterializesResponse(ExpressionSyntax expression)
+    private static bool InitializerMaterializesResponse(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         expression = UnwrapParentheses(expression);
-        return expression is AwaitExpressionSyntax;
+        if (expression is AwaitExpressionSyntax)
+        {
+            return true;
+        }
+
+        var expressionType = semanticModel.GetTypeInfo(expression, cancellationToken).Type;
+        return expressionType is not null &&
+                expressionType is not IErrorTypeSymbol &&
+                IsHttpResponseMessage(expressionType) ||
+            expression is InvocationExpressionSyntax
+            {
+                Expression: MemberAccessExpressionSyntax
+                {
+                    Name.Identifier.ValueText: "Send"
+                }
+            };
     }
 
     private static bool IsResponseHeadersReadHttpCall(
@@ -128,6 +152,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             "PatchAsync" or
             "PostAsync" or
             "PutAsync" or
+            "Send" or
             "SendAsync";
     }
 
