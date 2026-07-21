@@ -51,25 +51,30 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
             }))
             .ToArray();
 
-        if (cancellationTokens.Length != 1)
+        if (cancellationTokens.Length == 0)
         {
             return;
         }
 
-        var tokenExpression = CreateIdentifierName(cancellationTokens[0].Name);
-        var tokenArgument = SyntaxFactory.Argument(tokenExpression)
-            .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("cancellationToken")));
+        foreach (var cancellationTokenSymbol in cancellationTokens.OrderBy(
+                     symbol => symbol.Name,
+                     System.StringComparer.Ordinal))
+        {
+            var tokenExpression = CreateIdentifierName(cancellationTokenSymbol.Name);
+            var tokenArgument = SyntaxFactory.Argument(tokenExpression)
+                .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("cancellationToken")));
 
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                $"Pass '{cancellationTokens[0].Name}' cancellation token",
-                cancellationToken => AddCancellationTokenAsync(
-                    context.Document,
-                    invocation,
-                    tokenArgument,
-                    cancellationToken),
-                nameof(HCR064_PassCancellationTokenCodeFixProvider)),
-            diagnostic);
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    $"Pass '{cancellationTokenSymbol.Name}' cancellation token",
+                    cancellationToken => AddCancellationTokenAsync(
+                        context.Document,
+                        invocation,
+                        tokenArgument,
+                        cancellationToken),
+                    $"{nameof(HCR064_PassCancellationTokenCodeFixProvider)}.{cancellationTokenSymbol.Name}"),
+                diagnostic);
+        }
     }
 
     private static async Task<Document> AddCancellationTokenAsync(

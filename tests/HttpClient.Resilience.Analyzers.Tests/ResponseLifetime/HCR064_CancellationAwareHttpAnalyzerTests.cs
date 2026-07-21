@@ -282,7 +282,7 @@ public sealed class HCR064_CancellationAwareHttpAnalyzerTests
     }
 
     [Fact]
-    public async Task CodeFix_IsNotOffered_WhenMultipleCancellationTokensAreVisible()
+    public async Task CodeFix_OffersEachVisibleCancellationToken_WhenMultipleAreVisible()
     {
         const string source = """
             using System.Net.Http;
@@ -304,6 +304,8 @@ public sealed class HCR064_CancellationAwareHttpAnalyzerTests
         var titles = await CodeFixVerifier<HCR064_CancellationAwareHttpAnalyzer, HCR064_PassCancellationTokenCodeFixProvider>
             .GetCodeFixTitlesAsync(source);
 
-        Assert.Empty(titles);
+        Assert.Equal(2, titles.Count);
+        Assert.Contains("Pass 'callerToken' cancellation token", titles);
+        Assert.Contains("Pass 'timeoutToken' cancellation token", titles);
     }
 }
