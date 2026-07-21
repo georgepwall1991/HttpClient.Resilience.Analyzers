@@ -63,6 +63,20 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
         }
 
         var getResultInvocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
+        if (getResultInvocation is
+            {
+                ArgumentList.Arguments.Count: 0,
+                Parent: ExpressionStatementSyntax,
+                Expression: MemberAccessExpressionSyntax
+                {
+                    Name.Identifier.ValueText: "Wait"
+                } waitAccess
+            })
+        {
+            operation = waitAccess.Expression;
+            return getResultInvocation;
+        }
+
         if (getResultInvocation?.Expression is MemberAccessExpressionSyntax
             {
                 Name.Identifier.ValueText: "GetResult",
