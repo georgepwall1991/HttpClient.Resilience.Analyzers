@@ -21,7 +21,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 For explicit package references:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.0-preview.3" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.0-preview.4" PrivateAssets="all" />
 ```
 
 The package is analyzer-only. It adds no runtime dependency to your application.
@@ -84,7 +84,7 @@ The default profile keeps production-safety rules visible as warnings and leaves
 | [`HCR063`](docs/rules/HCR063.md) | Response lifetime | Sync-over-async around outbound HTTP | Warning | Guide |
 | [`HCR064`](docs/rules/HCR064.md) | Response lifetime | HTTP calls that omit an available `CancellationToken` | Warning | Yes |
 | [`HCR080`](docs/rules/HCR080.md) | Concurrency | Obvious unbounded `Task.WhenAll` HTTP fan-out | Suggestion | Guide |
-| [`HCR081`](docs/rules/HCR081.md) | Response lifetime | Undisposed streams returned from HTTP content | Warning | Guide |
+| [`HCR081`](docs/rules/HCR081.md) | Response lifetime | Undisposed streams returned from HTTP content | Warning | Partial |
 | [`HCR082`](docs/rules/HCR082.md) | Resilience | Per-request resilience pipeline construction | Warning | Guide |
 | [`HCR083`](docs/rules/HCR083.md) | Typed clients | Typed clients using relative URLs without `BaseAddress` | Warning | Guide |
 | [`HCR084`](docs/rules/HCR084.md) | Typed clients | Duplicated string literals for named `HttpClient` names | Warning | Guide |
