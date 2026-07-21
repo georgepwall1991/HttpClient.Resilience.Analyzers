@@ -403,4 +403,33 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzerTests
         Assert.True(successCheckIndex >= 0);
         Assert.True(jsonReadIndex > successCheckIndex);
     }
+
+    [Fact]
+    public async Task CodeFix_InsertsSuccessCheckAfterSynchronousSend()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<string> SendAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = client.Send(request, cancellationToken);
+                    return response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer, HCR061_EnsureSuccessStatusCodeCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        var sendIndex = fixedSource.IndexOf("response = client.Send", StringComparison.Ordinal);
+        var successCheckIndex = fixedSource.IndexOf("response.EnsureSuccessStatusCode();", StringComparison.Ordinal);
+        var contentReadIndex = fixedSource.IndexOf("response.Content.ReadAsStringAsync", StringComparison.Ordinal);
+
+        Assert.True(successCheckIndex > sendIndex);
+        Assert.True(contentReadIndex > successCheckIndex);
+    }
 }
