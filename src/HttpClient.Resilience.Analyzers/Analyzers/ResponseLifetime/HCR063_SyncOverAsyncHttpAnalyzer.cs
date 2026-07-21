@@ -104,10 +104,10 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
         }
 
         return expression is IdentifierNameSyntax identifier &&
-            LocalInitializerIsHttpAsyncOperation(identifier, semanticModel, cancellationToken);
+            LatestLocalValueIsHttpAsyncOperation(identifier, semanticModel, cancellationToken);
     }
 
-    private static bool LocalInitializerIsHttpAsyncOperation(
+    private static bool LatestLocalValueIsHttpAsyncOperation(
         IdentifierNameSyntax identifier,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
@@ -118,17 +118,35 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
-        return block
+        var initializerValues = block
             .DescendantNodes()
             .OfType<VariableDeclaratorSyntax>()
-            .Any(variable =>
-                variable.SpanStart < identifier.SpanStart &&
+            .Where(variable =>
+                variable.Initializer?.Value is { } value &&
+                value.Span.End < identifier.SpanStart &&
                 SymbolEqualityComparer.Default.Equals(
                     semanticModel.GetDeclaredSymbol(variable, cancellationToken),
-                    local) &&
-                variable.Initializer?.Value is { } initializer &&
-                !LocalIsReassignedBetween(block, local, variable.SpanStart, identifier.SpanStart, semanticModel, cancellationToken) &&
-                ExpressionIsHttpAsyncOperation(initializer, semanticModel, cancellationToken));
+                    local))
+            .Select(variable => variable.Initializer!.Value);
+
+        var assignmentValues = block
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Where(assignment =>
+                assignment.Span.End < identifier.SpanStart &&
+                assignment.Left is IdentifierNameSyntax left &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetSymbolInfo(left, cancellationToken).Symbol,
+                    local))
+            .Select(assignment => assignment.Right);
+
+        var latestValue = initializerValues
+            .Concat(assignmentValues)
+            .OrderByDescending(value => value.Span.End)
+            .FirstOrDefault();
+
+        return latestValue is not null &&
+            ExpressionIsHttpAsyncOperation(latestValue, semanticModel, cancellationToken);
     }
 
     private static bool IsHttpAsyncCall(
@@ -195,25 +213,6 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
     {
         return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
             "global::System.Net.Http.HttpContent";
-    }
-
-    private static bool LocalIsReassignedBetween(
-        BlockSyntax block,
-        ILocalSymbol local,
-        int start,
-        int end,
-        SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
-    {
-        return block
-            .DescendantNodes()
-            .OfType<AssignmentExpressionSyntax>()
-            .Any(assignment => assignment.SpanStart > start &&
-                assignment.SpanStart < end &&
-                assignment.Left is IdentifierNameSyntax identifier &&
-                SymbolEqualityComparer.Default.Equals(
-                    semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol,
-                    local));
     }
 
     private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)

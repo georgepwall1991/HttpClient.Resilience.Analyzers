@@ -93,6 +93,33 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_ReplacesAssignedHttpTaskResultWithAwait()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    Task<HttpResponseMessage> responseTask;
+                    responseTask = client.GetAsync("https://example.com");
+                    return responseTask.Result;
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "return await responseTask;",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenHttpContentAsyncResultIsRead()
     {
         const string source = """
