@@ -505,4 +505,58 @@ public sealed class HCR064_CancellationAwareHttpAnalyzerTests
             fixedSource,
             StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenCancellationTokenNoneIgnoresAvailableToken()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(
+                    HttpClient client,
+                    CancellationToken cancellationToken)
+                {
+                    return client.GetAsync("https://example.com", CancellationToken.None);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR064, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task CodeFix_ReplacesCancellationTokenNoneWithAvailableToken()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(
+                    HttpClient client,
+                    CancellationToken cancellationToken)
+                {
+                    return client.GetAsync("https://example.com", CancellationToken.None);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR064_CancellationAwareHttpAnalyzer, HCR064_PassCancellationTokenCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "client.GetAsync(\"https://example.com\", cancellationToken: cancellationToken)",
+            fixedSource,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("CancellationToken.None", fixedSource, StringComparison.Ordinal);
+    }
 }
