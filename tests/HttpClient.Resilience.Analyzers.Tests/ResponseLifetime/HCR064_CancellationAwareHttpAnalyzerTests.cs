@@ -359,4 +359,63 @@ public sealed class HCR064_CancellationAwareHttpAnalyzerTests
             fixedSource,
             StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenJsonContentReadOmitsAvailableCancellationToken()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<Order?> ReadAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+                {
+                    return response.Content.ReadFromJsonAsync<Order>();
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR064, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task CodeFix_PassesTokenToJsonContentRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<Order?> ReadAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+                {
+                    return response.Content.ReadFromJsonAsync<Order>();
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR064_CancellationAwareHttpAnalyzer, HCR064_PassCancellationTokenCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "response.Content.ReadFromJsonAsync<Order>(cancellationToken: cancellationToken)",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
 }
