@@ -125,8 +125,31 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
     {
         return invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
             HttpResponseMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
+            InvocationTargetsHttpClient(invocation, semanticModel, cancellationToken) &&
             IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
             ReturnsHttpResponseMessage(invocation, semanticModel, cancellationToken);
+    }
+
+    private static bool InvocationTargetsHttpClient(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsHttpClientMethod(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsHttpClientMethod);
+    }
+
+    private static bool IsHttpClientMethod(IMethodSymbol method)
+    {
+        return (method.ReducedFrom ?? method).ContainingType
+            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::System.Net.Http.HttpClient";
     }
 
     private static bool IsHttpClientReceiver(
@@ -244,9 +267,35 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
             Name: SimpleNameSyntax methodName
         } &&
             ContentReadMethodNames.Contains(methodName.Identifier.ValueText, System.StringComparer.Ordinal) &&
+            InvocationTargetsHttpContentApi(invocation, semanticModel, cancellationToken) &&
             SymbolEqualityComparer.Default.Equals(
                 semanticModel.GetSymbolInfo(responseIdentifier, cancellationToken).Symbol,
                 responseLocal);
+    }
+
+    private static bool InvocationTargetsHttpContentApi(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsHttpContentMethod(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsHttpContentMethod);
+    }
+
+    private static bool IsHttpContentMethod(IMethodSymbol method)
+    {
+        var declaringType = (method.ReducedFrom ?? method).ContainingType
+            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+        return declaringType is
+            "global::System.Net.Http.HttpContent" or
+            "global::System.Net.Http.Json.HttpContentJsonExtensions";
     }
 
     private static bool HasSuccessCheckBefore(
