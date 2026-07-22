@@ -26,6 +26,8 @@ $package = Get-ChildItem artifacts\packages\*.nupkg | Sort-Object LastWriteTime 
 ./scripts/Validate-PackageConsumption.ps1 -PackagePath $package.FullName
 ```
 
+CI and release workflows also pass `-ExpectedRepositoryCommit` so the package's repository commit metadata must match the exact checked-out Git SHA before publishing.
+
 ## Preview Release
 
 For the current preview version, create and push a matching `v<package-version>` tag:
