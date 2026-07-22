@@ -7,19 +7,6 @@ namespace HttpClient.Resilience.Analyzers.Models;
 
 internal static class ServiceRegistrationCollector
 {
-    public static IReadOnlyList<ServiceRegistrationModel> Collect(SyntaxNode root)
-    {
-        return CollectCore(root, semanticModel: null, default);
-    }
-
-    public static IReadOnlyList<ServiceRegistrationModel> Collect(
-        SyntaxNode root,
-        SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
-    {
-        return CollectCore(root, semanticModel, cancellationToken);
-    }
-
     public static IReadOnlyList<ServiceRegistrationModel> CollectFrameworkRegistrations(
         SyntaxNode root,
         SemanticModel semanticModel,
