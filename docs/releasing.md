@@ -28,13 +28,15 @@ $package = Get-ChildItem artifacts\packages\*.nupkg | Sort-Object LastWriteTime 
 
 CI and release workflows also pass `-ExpectedRepositoryCommit` so the package's repository commit metadata must match the exact checked-out Git SHA before publishing.
 
-## Preview Release
+## Stable Release
 
-For the current preview version, create and push a matching `v<package-version>` tag:
+After merging the release commit to `main`, read the stable package version and create a matching `v<package-version>` tag on that exact merge commit:
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+[xml]$project = Get-Content src\HttpClient.Resilience.Analyzers.Package\HttpClient.Resilience.Analyzers.Package.csproj
+$version = $project.Project.PropertyGroup.Version
+git tag -a "v$version" (git rev-parse origin/main) -m "Release v$version"
+git push origin "v$version"
 ```
 
 The release workflow will restore, format-check, build, test, pack, validate the package, upload artifacts, and push the `.nupkg` to NuGet.org.

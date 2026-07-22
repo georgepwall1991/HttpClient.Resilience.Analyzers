@@ -157,6 +157,24 @@ foreach ($path in $requiredRepositoryFiles) {
     }
 }
 
+[xml]$packageProject = Get-Text 'src\HttpClient.Resilience.Analyzers.Package\HttpClient.Resilience.Analyzers.Package.csproj'
+$packageVersion = [string]($packageProject.Project.PropertyGroup.Version | Select-Object -First 1)
+if ($packageVersion -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') {
+    throw "Package version '$packageVersion' must be a stable three-part semantic version."
+}
+
+$escapedPackageVersion = [regex]::Escape($packageVersion)
+Assert-Contains 'README.md' `
+    "<PackageReference Include=\x22HttpClient\.Resilience\.Analyzers\x22 Version=\x22$escapedPackageVersion\x22" `
+    "README.md package version does not match package project version $packageVersion."
+
+$releaseDocumentation = Get-Text 'docs\releasing.md'
+if ($releaseDocumentation -match '(?i)\bpreview release\b') {
+    throw 'docs/releasing.md must describe stable releases only.'
+}
+
+Assert-Contains 'docs\releasing.md' '(?m)^## Stable Release\r?$' 'docs/releasing.md must document the stable release process.'
+
 Assert-Contains '.gitattributes' '\*\s+text=auto\s+eol=crlf' '.gitattributes must normalize text files to CRLF.'
 Assert-Contains '.github\CODEOWNERS' '@georgepwall1991' 'CODEOWNERS must include the repository owner.'
 Assert-Contains '.github\dependabot.yml' 'package-ecosystem:\s+nuget' 'dependabot.yml must include NuGet updates.'
