@@ -469,6 +469,36 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_ReplacesDeleteFromJsonResultWithAwait()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<Order?> DeleteAsync(HttpClient client)
+                {
+                    return client.DeleteFromJsonAsync<Order>("https://example.com/orders/42").Result;
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "return await client.DeleteFromJsonAsync<Order>(\"https://example.com/orders/42\");",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DoesNotReportCustomGetFromJsonResult()
     {
         const string source = """
