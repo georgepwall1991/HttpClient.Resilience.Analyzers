@@ -214,6 +214,8 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
     public async Task DoesNotReport_WhenQualifiedLookalikeBuilderNameIsNotMicrosoftBuilder()
     {
         const string source = """
+            using Custom;
+
             public static class Registrations
             {
                 public static Custom.IHttpClientBuilder Configure(Custom.IHttpClientBuilder builder)

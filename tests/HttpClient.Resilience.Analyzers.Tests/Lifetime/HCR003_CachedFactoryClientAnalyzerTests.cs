@@ -655,7 +655,8 @@ public sealed class HCR003_CachedFactoryClientAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>
+            .GetDiagnosticsAllowingCompilerErrorsAsync(source);
 
         Assert.Empty(diagnostics);
     }

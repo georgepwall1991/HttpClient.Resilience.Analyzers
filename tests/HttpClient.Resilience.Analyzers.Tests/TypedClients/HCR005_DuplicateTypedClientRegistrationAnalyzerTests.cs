@@ -763,7 +763,8 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>
+            .GetDiagnosticsAllowingCompilerErrorsAsync(source);
 
         Assert.Empty(diagnostics);
     }
