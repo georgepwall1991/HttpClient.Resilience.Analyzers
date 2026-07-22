@@ -7,8 +7,8 @@
     <PackageId>HttpClient.Resilience.Analyzers</PackageId>
     <Version>0.1.119</Version>
     <Authors>HttpClient.Resilience.Analyzers contributors</Authors>
-    <Description>Roslyn analyzers for .NET HttpClient, IHttpClientFactory, and Microsoft.Extensions.Http.Resilience. Catches socket exhaustion risks, DNS-stale clients, typed-client lifetime bugs, unsafe retries, handler scope leaks, response disposal mistakes, and fragile outbound HTTP patterns at compile time.</Description>
-    <PackageTags>httpclient;ihttpclientfactory;resilience;polly;dotnet;csharp;roslyn;analyzer;analyser;aspnetcore;static-analysis;socket-exhaustion;typed-client;retry;resilience-pipeline</PackageTags>
+    <Description>Production-focused Roslyn analyzers and code fixes for .NET HttpClient, IHttpClientFactory, typed clients, Polly, and Microsoft.Extensions.Http.Resilience. Catch socket exhaustion, stale DNS, DI lifetime bugs, unsafe retries, missing cancellation, and response disposal mistakes at compile time.</Description>
+    <PackageTags>httpclient;ihttpclientfactory;httpclientfactory;resilience;polly;dotnet;csharp;roslyn;analyzer;analyser;code-fix;aspnetcore;static-analysis;socket-exhaustion;dns;typed-client;named-client;retry;cancellation-token;response-disposal;resilience-pipeline</PackageTags>
     <PackageProjectUrl>https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers</PackageProjectUrl>
     <RepositoryUrl>https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
