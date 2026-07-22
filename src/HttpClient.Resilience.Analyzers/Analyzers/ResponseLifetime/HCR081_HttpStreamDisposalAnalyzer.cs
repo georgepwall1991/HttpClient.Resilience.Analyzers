@@ -399,33 +399,72 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
         {
             [variableName] = ownershipStart
         };
+        var localNames = new HashSet<string>(
+            containingBlock.Statements
+                .OfType<LocalDeclarationStatementSyntax>()
+                .SelectMany(statement => statement.Declaration.Variables)
+                .Select(variable => variable.Identifier.ValueText),
+            System.StringComparer.Ordinal);
 
-        foreach (var statement in containingBlock.Statements
-            .OfType<LocalDeclarationStatementSyntax>()
-            .Where(statement => statement.SpanStart > ownershipStart))
+        foreach (var statement in containingBlock.Statements.Where(statement => statement.SpanStart > ownershipStart))
         {
-            foreach (var variable in statement.Declaration.Variables)
+            if (statement is LocalDeclarationStatementSyntax declaration)
             {
-                if (variable.Initializer?.Value is not { } initializer)
+                foreach (var variable in declaration.Declaration.Variables)
                 {
-                    continue;
+                    if (variable.Initializer?.Value is { } initializer)
+                    {
+                        TrackStreamAlias(
+                            containingBlock,
+                            aliases,
+                            variable.Identifier.ValueText,
+                            initializer,
+                            variable.SpanStart);
+                    }
                 }
 
-                initializer = UnwrapParentheses(initializer);
-                if (initializer is IdentifierNameSyntax source &&
-                    aliases.TryGetValue(source.Identifier.ValueText, out var sourceStart) &&
-                    !IsVariableReassignedBetween(
-                        containingBlock,
-                        source.Identifier.ValueText,
-                        sourceStart,
-                        variable.SpanStart))
+                continue;
+            }
+
+            if (statement is ExpressionStatementSyntax
                 {
-                    aliases[variable.Identifier.ValueText] = variable.SpanStart;
-                }
+                    Expression: AssignmentExpressionSyntax
+                    {
+                        Left: IdentifierNameSyntax target
+                    } assignment
+                } &&
+                assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                localNames.Contains(target.Identifier.ValueText))
+            {
+                TrackStreamAlias(
+                    containingBlock,
+                    aliases,
+                    target.Identifier.ValueText,
+                    assignment.Right,
+                    assignment.SpanStart);
             }
         }
 
         return aliases;
+    }
+
+    private static void TrackStreamAlias(
+        BlockSyntax containingBlock,
+        Dictionary<string, int> aliases,
+        string targetName,
+        ExpressionSyntax value,
+        int assignmentStart)
+    {
+        value = UnwrapParentheses(value);
+        if (value is IdentifierNameSyntax source &&
+            AliasIsValidAt(
+                containingBlock,
+                aliases,
+                source.Identifier.ValueText,
+                assignmentStart))
+        {
+            aliases[targetName] = assignmentStart;
+        }
     }
 
     private static bool AliasIsValidAt(

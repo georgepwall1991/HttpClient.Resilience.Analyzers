@@ -186,6 +186,61 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenAssignedStreamAliasIsDisposed()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response, Stream destination, CancellationToken cancellationToken)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    Stream ownedStream;
+                    ownedStream = stream;
+                    await ownedStream.CopyToAsync(destination, cancellationToken);
+                    ownedStream.Dispose();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenAssignedStreamAliasIsOverwrittenBeforeDisposal()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    Stream ownedStream;
+                    ownedStream = stream;
+                    ownedStream = Stream.Null;
+                    ownedStream.Dispose();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR081, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenChainedStreamAliasUsesUsingDeclaration()
     {
         const string source = """
@@ -278,6 +333,32 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
                 {
                     var stream = await client.GetStreamAsync("https://example.com", cancellationToken);
                     var result = stream;
+                    return result;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenAssignedStreamAliasIsReturned()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<Stream> OpenAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var stream = await client.GetStreamAsync("https://example.com", cancellationToken);
+                    Stream result;
+                    result = stream;
                     return result;
                 }
             }
