@@ -237,7 +237,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
             .Where(invocation => invocation.SpanStart > origin.SpanStart)
             .OrderBy(invocation => invocation.SpanStart))
         {
-            if (IsContentRead(invocation, responseLocal, semanticModel, cancellationToken))
+            if (IsContentRead(invocation, responseLocal, origin.SpanStart, semanticModel, cancellationToken))
             {
                 if (LocalIsReassignedBetween(block, responseLocal, origin.SpanStart, invocation.SpanStart, semanticModel, cancellationToken))
                 {
@@ -254,23 +254,81 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
     private static bool IsContentRead(
         InvocationExpressionSyntax invocation,
         ILocalSymbol responseLocal,
+        int originStart,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
         return invocation.Expression is MemberAccessExpressionSyntax
         {
-            Expression: MemberAccessExpressionSyntax
-            {
-                Name.Identifier.ValueText: "Content",
-                Expression: IdentifierNameSyntax responseIdentifier
-            },
+            Expression: ExpressionSyntax contentReceiver,
             Name: SimpleNameSyntax methodName
         } &&
             ContentReadMethodNames.Contains(methodName.Identifier.ValueText, System.StringComparer.Ordinal) &&
             InvocationTargetsHttpContentApi(invocation, semanticModel, cancellationToken) &&
+            (IsResponseContentAccess(contentReceiver, responseLocal, semanticModel, cancellationToken) ||
+                IsResponseContentAlias(
+                    contentReceiver,
+                    responseLocal,
+                    originStart,
+                    invocation.SpanStart,
+                    semanticModel,
+                    cancellationToken));
+    }
+
+    private static bool IsResponseContentAccess(
+        ExpressionSyntax expression,
+        ILocalSymbol responseLocal,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return expression is MemberAccessExpressionSyntax
+        {
+            Name.Identifier.ValueText: "Content",
+            Expression: IdentifierNameSyntax responseIdentifier
+        } &&
             SymbolEqualityComparer.Default.Equals(
                 semanticModel.GetSymbolInfo(responseIdentifier, cancellationToken).Symbol,
                 responseLocal);
+    }
+
+    private static bool IsResponseContentAlias(
+        ExpressionSyntax expression,
+        ILocalSymbol responseLocal,
+        int originStart,
+        int contentReadStart,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (expression is not IdentifierNameSyntax aliasIdentifier ||
+            semanticModel.GetSymbolInfo(aliasIdentifier, cancellationToken).Symbol is not ILocalSymbol aliasLocal ||
+            expression.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
+        {
+            return false;
+        }
+
+        var aliasDeclaration = block
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .FirstOrDefault(variable => variable.SpanStart > originStart &&
+                variable.SpanStart < contentReadStart &&
+                variable.Initializer?.Value is { } initializer &&
+                IsResponseContentAccess(
+                    UnwrapParentheses(initializer),
+                    responseLocal,
+                    semanticModel,
+                    cancellationToken) &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetDeclaredSymbol(variable, cancellationToken),
+                    aliasLocal));
+
+        return aliasDeclaration is not null &&
+            !LocalIsReassignedBetween(
+                block,
+                aliasLocal,
+                aliasDeclaration.SpanStart,
+                contentReadStart,
+                semanticModel,
+                cancellationToken);
     }
 
     private static bool InvocationTargetsHttpContentApi(
