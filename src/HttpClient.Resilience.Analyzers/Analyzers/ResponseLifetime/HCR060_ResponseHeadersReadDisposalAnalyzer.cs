@@ -426,21 +426,55 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                     alias.SpanStart)))
         {
             var aliasName = alias.Identifier.ValueText;
-            if (containingBlock.Statements
-                .OfType<ExpressionStatementSyntax>()
-                .Any(statement => statement.SpanStart > alias.SpanStart &&
-                    IsDisposeInvocation(statement.Expression, aliasName) &&
-                    !IsVariableReassignedBetween(
-                        containingBlock,
-                        aliasName,
-                        alias.SpanStart,
-                        statement.SpanStart)))
+            if (AliasIsDirectlyDisposed(containingBlock, aliasName, alias.SpanStart))
+            {
+                return true;
+            }
+        }
+
+        foreach (var aliasAssignment in containingBlock.Statements
+            .OfType<ExpressionStatementSyntax>()
+            .Where(statement => statement.SpanStart > declarationStart)
+            .Select(statement => statement.Expression)
+            .OfType<AssignmentExpressionSyntax>()
+            .Where(assignment => assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                assignment.Left is IdentifierNameSyntax aliasIdentifier &&
+                IsDirectVariableReference(assignment.Right, variableName) &&
+                containingBlock.Statements
+                    .OfType<LocalDeclarationStatementSyntax>()
+                    .Any(statement => statement.SpanStart < assignment.SpanStart &&
+                        statement.Declaration.Variables.Any(variable =>
+                            variable.Identifier.ValueText == aliasIdentifier.Identifier.ValueText)) &&
+                !IsVariableReassignedBetween(
+                    containingBlock,
+                    variableName,
+                    declarationStart,
+                    assignment.SpanStart)))
+        {
+            var aliasName = ((IdentifierNameSyntax)aliasAssignment.Left).Identifier.ValueText;
+            if (AliasIsDirectlyDisposed(containingBlock, aliasName, aliasAssignment.SpanStart))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static bool AliasIsDirectlyDisposed(
+        BlockSyntax containingBlock,
+        string aliasName,
+        int aliasStart)
+    {
+        return containingBlock.Statements
+            .OfType<ExpressionStatementSyntax>()
+            .Any(statement => statement.SpanStart > aliasStart &&
+                IsDisposeInvocation(statement.Expression, aliasName) &&
+                !IsVariableReassignedBetween(
+                    containingBlock,
+                    aliasName,
+                    aliasStart,
+                    statement.SpanStart));
     }
 
     private static bool IsDisposedInFinally(BlockSyntax containingBlock, string variableName, int declarationStart)
