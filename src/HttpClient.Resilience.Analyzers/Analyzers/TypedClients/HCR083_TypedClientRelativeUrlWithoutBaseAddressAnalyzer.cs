@@ -362,6 +362,16 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
                 urlExpression = constructorCandidate;
                 return true;
             }
+
+            if (TryGetRelativeUriCreationArgument(
+                constructorCandidate,
+                semanticModel,
+                cancellationToken,
+                out var uriCandidate))
+            {
+                urlExpression = uriCandidate;
+                return true;
+            }
         }
 
         return TryGetRelativeRequestUriInitializer(
