@@ -340,9 +340,32 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
             Name.Identifier.ValueText: "EnsureSuccessStatusCode",
             Expression: IdentifierNameSyntax responseIdentifier
         } &&
+            InvocationTargetsHttpResponseMessage(invocation, semanticModel, cancellationToken) &&
             SymbolEqualityComparer.Default.Equals(
                 semanticModel.GetSymbolInfo(responseIdentifier, cancellationToken).Symbol,
                 responseLocal);
+    }
+
+    private static bool InvocationTargetsHttpResponseMessage(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return MethodTargetsHttpResponseMessage(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(MethodTargetsHttpResponseMessage);
+    }
+
+    private static bool MethodTargetsHttpResponseMessage(IMethodSymbol method)
+    {
+        return (method.ReducedFrom ?? method).ContainingType
+            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::System.Net.Http.HttpResponseMessage";
     }
 
     private static bool IsSuccessStatusCheck(
