@@ -93,7 +93,12 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
             invocation.ArgumentList.Arguments.Count == 0 ||
             !IsServiceCollectionReceiver(memberAccess.Expression, semanticModel, cancellationToken) ||
             !ReturnsHttpClientBuilder(invocation, semanticModel, cancellationToken) ||
-            !TryGetStringLiteral(invocation.ArgumentList.Arguments[0].Expression, out name))
+            !TryGetVisibleStringLiteral(
+                invocation.ArgumentList.Arguments[0].Expression,
+                semanticModel,
+                cancellationToken,
+                out name,
+                out _))
         {
             return false;
         }
