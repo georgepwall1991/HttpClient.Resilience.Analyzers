@@ -143,9 +143,9 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
         System.Threading.CancellationToken cancellationToken)
     {
         var type = semanticModel.GetTypeInfo(expression, cancellationToken).Type;
-        if (IsServiceCollectionType(type))
+        if (type is not null && type.TypeKind != TypeKind.Error)
         {
-            return true;
+            return IsServiceCollectionType(type);
         }
 
         return semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
@@ -164,17 +164,17 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
         System.Threading.CancellationToken cancellationToken)
     {
         var type = semanticModel.GetTypeInfo(expression, cancellationToken).Type;
-        if (HttpClientSymbols.IsHttpClientFactory(type))
+        if (type is not null && type.TypeKind != TypeKind.Error)
         {
-            return true;
+            return IsHttpClientFactoryType(type);
         }
 
         return semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
         {
-            ILocalSymbol local => HttpClientSymbols.IsHttpClientFactory(local.Type) || SyntacticDeclarationLooksLikeHttpClientFactory(local),
-            IParameterSymbol parameter => HttpClientSymbols.IsHttpClientFactory(parameter.Type) || SyntacticDeclarationLooksLikeHttpClientFactory(parameter),
-            IFieldSymbol field => HttpClientSymbols.IsHttpClientFactory(field.Type) || SyntacticDeclarationLooksLikeHttpClientFactory(field),
-            IPropertySymbol property => HttpClientSymbols.IsHttpClientFactory(property.Type) || SyntacticDeclarationLooksLikeHttpClientFactory(property),
+            ILocalSymbol local => IsHttpClientFactoryType(local.Type) || SyntacticDeclarationLooksLikeHttpClientFactory(local),
+            IParameterSymbol parameter => IsHttpClientFactoryType(parameter.Type) || SyntacticDeclarationLooksLikeHttpClientFactory(parameter),
+            IFieldSymbol field => IsHttpClientFactoryType(field.Type) || SyntacticDeclarationLooksLikeHttpClientFactory(field),
+            IPropertySymbol property => IsHttpClientFactoryType(property.Type) || SyntacticDeclarationLooksLikeHttpClientFactory(property),
             _ => false
         } || SyntacticReceiverLooksLikeHttpClientFactory(expression);
     }
@@ -182,8 +182,17 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
     private static bool IsServiceCollectionType(ITypeSymbol? type)
     {
         return type is not null &&
-            type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
-            "global::Microsoft.Extensions.DependencyInjection.IServiceCollection";
+            (type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                "global::Microsoft.Extensions.DependencyInjection.IServiceCollection" ||
+            type.Name == "IServiceCollection" && type.ContainingNamespace.IsGlobalNamespace);
+    }
+
+    private static bool IsHttpClientFactoryType(ITypeSymbol? type)
+    {
+        return type is not null &&
+            (type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                "global::System.Net.Http.IHttpClientFactory" ||
+            type.Name == "IHttpClientFactory" && type.ContainingNamespace.IsGlobalNamespace);
     }
 
     private static bool SyntacticDeclarationLooksLikeServiceCollection(ISymbol symbol)
