@@ -335,14 +335,14 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
 
         urlExpression = expression;
         if (expression is IdentifierNameSyntax identifier &&
-            TryGetUnreassignedLocalInitializer(
+            TryGetVisibleLocalValue(
                 identifier,
                 semanticModel,
                 cancellationToken,
-                out var initializer))
+                out var localValue))
         {
             return TryGetRequestMessageRelativeUrl(
-                initializer,
+                localValue,
                 semanticModel,
                 cancellationToken,
                 out urlExpression);
@@ -366,31 +366,49 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         return true;
     }
 
-    private static bool TryGetUnreassignedLocalInitializer(
+    private static bool TryGetVisibleLocalValue(
         IdentifierNameSyntax identifier,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken,
-        out ExpressionSyntax initializer)
+        out ExpressionSyntax value)
     {
-        initializer = identifier;
+        value = identifier;
         if (semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is not ILocalSymbol local ||
             identifier.FirstAncestorOrSelf<BlockSyntax>() is not { } containingBlock)
         {
             return false;
         }
 
-        var declaration = containingBlock
-            .DescendantNodes()
-            .OfType<VariableDeclaratorSyntax>()
+        var declaration = containingBlock.Statements
+            .OfType<LocalDeclarationStatementSyntax>()
+            .SelectMany(statement => statement.Declaration.Variables)
             .FirstOrDefault(variable => variable.SpanStart < identifier.SpanStart &&
-                variable.Initializer is not null &&
                 SymbolEqualityComparer.Default.Equals(
                     semanticModel.GetDeclaredSymbol(variable, cancellationToken),
                     local));
-        if (declaration?.Initializer is not { Value: { } value } ||
+        if (declaration is null)
+        {
+            return false;
+        }
+
+        var assignment = containingBlock.Statements
+            .OfType<ExpressionStatementSyntax>()
+            .Select(statement => statement.Expression)
+            .OfType<AssignmentExpressionSyntax>()
+            .Where(candidate => candidate.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SimpleAssignmentExpression) &&
+                candidate.SpanStart > declaration.Span.End &&
+                candidate.SpanStart < identifier.SpanStart &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetSymbolInfo(candidate.Left, cancellationToken).Symbol,
+                    local))
+            .LastOrDefault();
+
+        var origin = assignment?.Right ?? declaration.Initializer?.Value;
+        var originEnd = assignment?.Span.End ?? declaration.Span.End;
+        if (origin is null ||
             LocalIsReassignedBetween(
                 local,
-                declaration.Span.End,
+                originEnd,
                 identifier.SpanStart,
                 containingBlock,
                 semanticModel,
@@ -399,7 +417,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
             return false;
         }
 
-        initializer = value;
+        value = origin;
         return true;
     }
 
