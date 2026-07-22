@@ -474,7 +474,8 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                     containingBlock,
                     aliasName,
                     aliasStart,
-                    statement.SpanStart));
+                    statement.SpanStart)) ||
+            IsAliasDirectlyDisposedInBlock(containingBlock, aliasName, aliasStart);
     }
 
     private static bool IsDisposedInFinally(BlockSyntax containingBlock, string variableName, int declarationStart)
