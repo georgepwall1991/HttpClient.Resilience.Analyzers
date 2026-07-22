@@ -46,20 +46,23 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
             return false;
         }
 
-        return IsAddStandardResilienceHandlerInvocation(invocation) &&
-            (CountStandardResilienceHandlersInChain(invocation) > 1 ||
+        return IsAddStandardResilienceHandlerInvocation(invocation, semanticModel, cancellationToken) &&
+            (CountStandardResilienceHandlersInChain(invocation, semanticModel, cancellationToken) > 1 ||
                 IsDuplicateStandardHandlerOnSameBuilderInBlock(invocation, semanticModel, cancellationToken)) ||
             IsDuplicateNamedResilienceHandlerInChain(invocation, semanticModel, cancellationToken);
     }
 
-    private static int CountStandardResilienceHandlersInChain(ExpressionSyntax expression)
+    private static int CountStandardResilienceHandlersInChain(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         var count = 0;
         var current = expression;
 
         while (current is InvocationExpressionSyntax invocation)
         {
-            if (IsAddStandardResilienceHandlerInvocation(invocation))
+            if (IsAddStandardResilienceHandlerInvocation(invocation, semanticModel, cancellationToken))
             {
                 count++;
             }
@@ -76,12 +79,42 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
         return count;
     }
 
-    private static bool IsAddStandardResilienceHandlerInvocation(InvocationExpressionSyntax invocation)
+    private static bool IsAddStandardResilienceHandlerInvocation(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
-        return invocation.Expression is MemberAccessExpressionSyntax
+        if (invocation.Expression is not MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "AddStandardResilienceHandler"
+            })
         {
-            Name.Identifier.ValueText: "AddStandardResilienceHandler"
-        };
+            return false;
+        }
+
+        return IsFrameworkResilienceExtension(invocation, semanticModel, cancellationToken);
+    }
+
+    private static bool IsFrameworkResilienceExtension(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsFrameworkResilienceExtension(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkResilienceExtension);
+    }
+
+    private static bool IsFrameworkResilienceExtension(IMethodSymbol method)
+    {
+        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
+        return containingNamespace.IsGlobalNamespace ||
+            containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
     }
 
     private static bool IsDuplicateStandardHandlerOnSameBuilderInBlock(
@@ -100,8 +133,8 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
             .DescendantNodes()
             .OfType<InvocationExpressionSyntax>()
             .Where(candidate => candidate.SpanStart < invocation.SpanStart)
-            .Any(candidate => candidate.Expression is MemberAccessExpressionSyntax candidateMemberAccess &&
-                candidateMemberAccess.Name.Identifier.ValueText == "AddStandardResilienceHandler" &&
+            .Any(candidate => IsAddStandardResilienceHandlerInvocation(candidate, semanticModel, cancellationToken) &&
+                candidate.Expression is MemberAccessExpressionSyntax candidateMemberAccess &&
                 ReceiverMatches(
                     memberAccess.Expression,
                     candidateMemberAccess.Expression,

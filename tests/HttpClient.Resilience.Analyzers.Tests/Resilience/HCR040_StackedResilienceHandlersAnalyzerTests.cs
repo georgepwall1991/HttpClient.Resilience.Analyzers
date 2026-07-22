@@ -211,6 +211,60 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenCustomStandardHandlerExtensionUsesHttpClientBuilder()
+    {
+        const string source = """
+            using Custom;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<GitHubClient>()
+                        .AddStandardResilienceHandler()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services)
+                {
+                    return null!;
+                }
+            }
+
+            namespace Custom
+            {
+                public static class ResilienceExtensions
+                {
+                    public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder)
+                    {
+                        return builder;
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenQualifiedLookalikeBuilderNameIsNotMicrosoftBuilder()
     {
         const string source = """
