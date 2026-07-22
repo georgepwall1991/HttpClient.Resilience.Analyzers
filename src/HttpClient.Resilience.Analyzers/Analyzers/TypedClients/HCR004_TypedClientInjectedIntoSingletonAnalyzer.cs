@@ -156,7 +156,11 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
                 TypeArgumentList.Arguments.Count: 1
             } genericName
         } &&
-        IsServiceProviderFactoryParameter(receiver, containingFactory) &&
+        IsServiceProviderFactoryParameter(
+            receiver,
+            containingFactory,
+            compilation,
+            cancellationToken) &&
         IsFrameworkServiceProviderResolution(invocation, compilation, cancellationToken) &&
         TypeMatchesTypedClient(
             genericName.TypeArgumentList.Arguments[0],
@@ -190,20 +194,38 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
 
     private static bool IsServiceProviderFactoryParameter(
         IdentifierNameSyntax receiver,
-        ExpressionSyntax containingFactory)
+        ExpressionSyntax containingFactory,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
         return containingFactory switch
         {
-            SimpleLambdaExpressionSyntax simple => ParameterMatchesServiceProvider(simple.Parameter, receiver),
+            SimpleLambdaExpressionSyntax simple => ParameterMatchesServiceProvider(
+                simple.Parameter,
+                receiver,
+                compilation,
+                cancellationToken),
             ParenthesizedLambdaExpressionSyntax parenthesized => parenthesized.ParameterList.Parameters
-                .Any(parameter => ParameterMatchesServiceProvider(parameter, receiver)),
+                .Any(parameter => ParameterMatchesServiceProvider(
+                    parameter,
+                    receiver,
+                    compilation,
+                    cancellationToken)),
             AnonymousMethodExpressionSyntax { ParameterList: { } parameterList } => parameterList.Parameters
-                .Any(parameter => ParameterMatchesServiceProvider(parameter, receiver)),
+                .Any(parameter => ParameterMatchesServiceProvider(
+                    parameter,
+                    receiver,
+                    compilation,
+                    cancellationToken)),
             _ => false
         };
     }
 
-    private static bool ParameterMatchesServiceProvider(ParameterSyntax parameter, IdentifierNameSyntax receiver)
+    private static bool ParameterMatchesServiceProvider(
+        ParameterSyntax parameter,
+        IdentifierNameSyntax receiver,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
         if (parameter.Identifier.ValueText != receiver.Identifier.ValueText)
         {
@@ -212,12 +234,28 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
 
         return parameter.Type is null
             ? IsLikelyServiceProviderParameterName(parameter.Identifier.ValueText)
-            : IsServiceProviderTypeName(parameter.Type);
+            : IsServiceProviderType(parameter.Type, compilation, cancellationToken);
     }
 
     private static bool IsLikelyServiceProviderParameterName(string name)
     {
         return name is "provider" or "serviceProvider" or "sp";
+    }
+
+    private static bool IsServiceProviderType(
+        TypeSyntax type,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var semanticModel = GetSemanticModel(compilation, type.SyntaxTree);
+        var resolvedType = semanticModel.GetTypeInfo(type, cancellationToken).Type;
+        if (resolvedType is not null && resolvedType is not IErrorTypeSymbol)
+        {
+            return resolvedType.Name == "IServiceProvider" &&
+                resolvedType.ContainingNamespace.ToDisplayString() == "System";
+        }
+
+        return IsServiceProviderTypeName(type);
     }
 
     private static bool IsServiceProviderTypeName(TypeSyntax type)
