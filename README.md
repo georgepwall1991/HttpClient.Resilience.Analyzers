@@ -21,7 +21,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 For explicit package references:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.64" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.65" PrivateAssets="all" />
 ```
 
 The package is analyzer-only. It adds no runtime dependency to your application.

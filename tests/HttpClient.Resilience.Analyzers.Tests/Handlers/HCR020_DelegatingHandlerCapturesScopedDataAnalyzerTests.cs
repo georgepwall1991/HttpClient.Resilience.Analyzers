@@ -1023,4 +1023,50 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
 
         Assert.Empty(diagnostics);
     }
+
+    [Fact]
+    public async Task DoesNotReport_WhenScopedRegistrationMethodIsOwnedByCustomNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+            using Custom.DependencyInjection;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<IUserContext, UserContext>();
+                }
+            }
+
+            public sealed class UserHeaderHandler(IUserContext userContext) : DelegatingHandler
+            {
+            }
+
+            public interface IUserContext
+            {
+            }
+
+            public sealed class UserContext : IUserContext
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            namespace Custom.DependencyInjection
+            {
+                public static class ServiceCollectionExtensions
+                {
+                    public static global::IServiceCollection AddScoped<TService, TImplementation>(
+                        this global::IServiceCollection services) => services;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
 }

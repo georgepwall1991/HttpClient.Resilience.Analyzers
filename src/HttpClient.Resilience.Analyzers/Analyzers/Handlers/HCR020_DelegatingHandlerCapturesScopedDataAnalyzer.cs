@@ -242,6 +242,10 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
                     GetSemanticModel(compilation, root.SyntaxTree),
                     cancellationToken))
                 .Where(registration => registration.Kind == ServiceRegistrationKind.Scoped)
+                .Where(registration => IsFrameworkServiceCollectionRegistration(
+                    registration,
+                    compilation,
+                    cancellationToken))
                 .SelectMany(registration => new[]
                 {
                     registration.ServiceTypeName,
@@ -250,6 +254,29 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
                 .Where(typeName => typeName is not null)
                 .SelectMany(typeName => TypeNameUtilities.GetComparableNames(typeName!)),
             System.StringComparer.Ordinal);
+    }
+
+    private static bool IsFrameworkServiceCollectionRegistration(
+        ServiceRegistrationModel registration,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var semanticModel = GetSemanticModel(compilation, registration.Invocation.SyntaxTree);
+        var symbolInfo = semanticModel.GetSymbolInfo(registration.Invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsFrameworkServiceCollectionRegistration(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkServiceCollectionRegistration);
+    }
+
+    private static bool IsFrameworkServiceCollectionRegistration(IMethodSymbol method)
+    {
+        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
+        return containingNamespace.IsGlobalNamespace ||
+            containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
     }
 
 #pragma warning disable RS1030 // HCR020 performs compilation-wide scoped-service matching and needs cross-tree semantic type checks.
