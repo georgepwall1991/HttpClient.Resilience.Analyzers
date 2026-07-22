@@ -629,7 +629,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         var declaration = containingBlock.Statements
             .OfType<LocalDeclarationStatementSyntax>()
             .SelectMany(statement => statement.Declaration.Variables)
-            .FirstOrDefault(variable => variable.SpanStart < identifier.SpanStart &&
+            .FirstOrDefault(variable => variable.Span.End <= identifier.SpanStart &&
                 SymbolEqualityComparer.Default.Equals(
                     semanticModel.GetDeclaredSymbol(variable, cancellationToken),
                     local));
@@ -644,7 +644,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
             .OfType<AssignmentExpressionSyntax>()
             .Where(candidate => candidate.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SimpleAssignmentExpression) &&
                 candidate.SpanStart > declaration.Span.End &&
-                candidate.SpanStart < identifier.SpanStart &&
+                candidate.Span.End <= identifier.SpanStart &&
                 SymbolEqualityComparer.Default.Equals(
                     semanticModel.GetSymbolInfo(candidate.Left, cancellationToken).Symbol,
                     local))
@@ -680,7 +680,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
             .DescendantNodes()
             .OfType<AssignmentExpressionSyntax>()
             .Any(assignment => assignment.SpanStart > start &&
-                assignment.SpanStart < end &&
+                assignment.Span.End <= end &&
                 SymbolEqualityComparer.Default.Equals(
                     semanticModel.GetSymbolInfo(assignment.Left, cancellationToken).Symbol,
                     local));
