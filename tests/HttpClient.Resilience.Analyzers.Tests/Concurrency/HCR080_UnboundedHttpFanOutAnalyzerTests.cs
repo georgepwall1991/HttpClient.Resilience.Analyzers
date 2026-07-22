@@ -31,6 +31,114 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
         Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
     }
 
+    [Theory]
+    [InlineData("DeleteFromJsonAsync")]
+    [InlineData("GetFromJsonAsync")]
+    public async Task ReportsDiagnostic_WhenTaskWhenAllFansOutJsonReads(string methodName)
+    {
+        var source = $$"""
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(
+                    HttpClient client,
+                    IEnumerable<string> urls,
+                    CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(urls.Select(url =>
+                        client.{{methodName}}<Order>(url, cancellationToken)));
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
+    }
+
+    [Theory]
+    [InlineData("PatchAsJsonAsync")]
+    [InlineData("PostAsJsonAsync")]
+    [InlineData("PutAsJsonAsync")]
+    public async Task ReportsDiagnostic_WhenTaskWhenAllFansOutJsonWrites(string methodName)
+    {
+        var source = $$"""
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(
+                    HttpClient client,
+                    IEnumerable<Order> orders,
+                    CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(orders.Select(order =>
+                        client.{{methodName}}("/orders", order, cancellationToken)));
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenTaskWhenAllFansOutCustomJsonExtension()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class CustomHttpClientExtensions
+            {
+                public static Task<T?> GetFromJsonAsync<T>(this HttpClient client, int key)
+                {
+                    return Task.FromResult(default(T));
+                }
+            }
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(HttpClient client, IEnumerable<int> keys)
+                {
+                    return Task.WhenAll(keys.Select(key => client.GetFromJsonAsync<Order>(key)));
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
     [Fact]
     public async Task ReportsDiagnostic_WhenFullyQualifiedTaskWhenAllFansOutHttpCalls()
     {

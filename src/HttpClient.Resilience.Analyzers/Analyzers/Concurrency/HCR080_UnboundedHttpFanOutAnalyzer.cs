@@ -16,9 +16,14 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
     private static readonly string[] HttpCallMethodNames =
     {
         "DeleteAsync",
+        "DeleteFromJsonAsync",
         "GetAsync",
+        "GetFromJsonAsync",
+        "PatchAsJsonAsync",
         "PatchAsync",
+        "PostAsJsonAsync",
         "PostAsync",
+        "PutAsJsonAsync",
         "PutAsync",
         "SendAsync"
     };
@@ -258,8 +263,9 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
     private static bool MethodTargetsHttpClient(IMethodSymbol method)
     {
         return (method.ReducedFrom ?? method).ContainingType
-            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
-            "global::System.Net.Http.HttpClient";
+            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) is
+            "global::System.Net.Http.HttpClient" or
+            "global::System.Net.Http.Json.HttpClientJsonExtensions";
     }
 
     private static bool IsUnboundedHttpCall(
