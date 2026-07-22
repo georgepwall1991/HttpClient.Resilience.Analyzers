@@ -79,6 +79,7 @@ public sealed class HCR082_PerRequestResiliencePipelineAnalyzer : DiagnosticAnal
         var invocation = (InvocationExpressionSyntax)context.Node;
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
             memberAccess.Name.Identifier.ValueText != "Build" ||
+            !IsResiliencePipelineBuildMethod(invocation, context.SemanticModel, context.CancellationToken) ||
             !ReceiverLooksLikeResiliencePipelineBuilder(
                 memberAccess.Expression,
                 context.SemanticModel,
@@ -93,6 +94,30 @@ public sealed class HCR082_PerRequestResiliencePipelineAnalyzer : DiagnosticAnal
         context.ReportDiagnostic(Diagnostic.Create(
             DiagnosticDescriptors.HCR082,
             memberAccess.Name.GetLocation()));
+    }
+
+    private static bool IsResiliencePipelineBuildMethod(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsResiliencePipelineBuilderMethod(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0
+            ? invocation.ArgumentList.Arguments.Count == 0
+            : candidateMethods.All(IsResiliencePipelineBuilderMethod);
+    }
+
+    private static bool IsResiliencePipelineBuilderMethod(IMethodSymbol method)
+    {
+        var declaringType = (method.ReducedFrom ?? method).ContainingType;
+        return declaringType.Name == "ResiliencePipelineBuilder" &&
+            declaringType.ContainingNamespace.ToDisplayString() == "Polly";
     }
 
     private static bool ReceiverLooksLikeResiliencePipelineBuilder(
