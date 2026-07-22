@@ -228,16 +228,20 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
-        var httpMethods = assignment.Right
+        var httpMethodMembers = assignment.Right
             .DescendantNodes()
             .OfType<MemberAccessExpressionSyntax>()
             .Where(memberAccess => memberAccess.Expression.ToString() == "HttpMethod" &&
                 IsFrameworkHttpMethodMember(memberAccess, semanticModel, cancellationToken))
-            .Select(memberAccess => memberAccess.Name.Identifier.ValueText)
             .ToArray();
 
-        return httpMethods.Any(method => SafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal)) &&
-            !httpMethods.Any(method => UnsafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal));
+        return httpMethodMembers.Any(memberAccess =>
+                SafeHttpMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
+                memberAccess.Parent is BinaryExpressionSyntax binary &&
+                binary.IsKind(SyntaxKind.EqualsExpression)) &&
+            !httpMethodMembers.Any(memberAccess => UnsafeHttpMethodNames.Contains(
+                memberAccess.Name.Identifier.ValueText,
+                System.StringComparer.Ordinal));
     }
 
     private static bool IsFrameworkShouldHandleProperty(
