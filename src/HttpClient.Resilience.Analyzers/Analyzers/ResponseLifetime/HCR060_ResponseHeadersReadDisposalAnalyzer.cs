@@ -94,7 +94,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
         if (expression is AwaitExpressionSyntax)
         {
             return true;
@@ -255,7 +255,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         var symbol = semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol;
         if (symbol is IFieldSymbol field)
@@ -340,14 +340,23 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             }) == true;
     }
 
-    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        while (true)
         {
-            expression = parenthesized.Expression;
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix
+                    when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
         }
-
-        return expression;
     }
 
     private static bool OwnershipIsTransferredOrDisposed(VariableDeclaratorSyntax variable)
@@ -520,16 +529,16 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
 
     private static bool IsDisposeInvocation(ExpressionSyntax expression, string variableName)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         return expression is InvocationExpressionSyntax
         {
             Expression: MemberAccessExpressionSyntax
             {
-                Expression: IdentifierNameSyntax identifier,
+                Expression: { } disposedExpression,
                 Name.Identifier.ValueText: "Dispose"
             }
-        } && identifier.Identifier.ValueText == variableName;
+        } && IsDirectVariableReference(disposedExpression, variableName);
     }
 
     private static bool IsOwnedByUsingStatement(BlockSyntax containingBlock, string variableName, int declarationStart)
@@ -546,8 +555,8 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             .DescendantNodes()
             .OfType<UsingStatementSyntax>()
             .Any(usingStatement => usingStatement.SpanStart > aliasStart &&
-                usingStatement.Expression is IdentifierNameSyntax identifier &&
-                identifier.Identifier.ValueText == aliasName &&
+                usingStatement.Expression is { } expression &&
+                IsDirectVariableReference(expression, aliasName) &&
                 !IsVariableReassignedBetween(containingBlock, aliasName, aliasStart, usingStatement.SpanStart)) ||
             IsAliasOwnershipTransferredInBlock(
                 containingBlock,
@@ -570,7 +579,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
 
     private static bool IsDirectVariableReference(ExpressionSyntax expression, string variableName)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         return expression is IdentifierNameSyntax identifier &&
             identifier.Identifier.ValueText == variableName;
@@ -583,6 +592,8 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         int declarationStart,
         int evidenceStart)
     {
+        expression = UnwrapTransparentExpressions(expression);
+
         return expression switch
         {
             IdentifierNameSyntax identifier => identifier.Identifier.ValueText == variableName &&
@@ -592,12 +603,6 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                     identifier.Identifier.ValueText,
                     variableName,
                     declarationStart),
-            ParenthesizedExpressionSyntax parenthesized => TransfersResponseOwnership(
-                parenthesized.Expression,
-                variableName,
-                containingBlock,
-                declarationStart,
-                evidenceStart),
             ObjectCreationExpressionSyntax objectCreation => ObjectCreationTransfersResponseOwnership(
                 objectCreation,
                 variableName) &&
@@ -632,6 +637,8 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
 
     private static bool InitializerCreatesResponseOwner(ExpressionSyntax expression, string responseVariableName)
     {
+        expression = UnwrapTransparentExpressions(expression);
+
         return expression switch
         {
             ObjectCreationExpressionSyntax objectCreation => ObjectCreationTransfersResponseOwnership(
@@ -640,7 +647,6 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             ImplicitObjectCreationExpressionSyntax implicitObjectCreation => ObjectCreationTransfersResponseOwnership(
                 implicitObjectCreation,
                 responseVariableName),
-            ParenthesizedExpressionSyntax parenthesized => InitializerCreatesResponseOwner(parenthesized.Expression, responseVariableName),
             _ => false
         };
     }
@@ -657,8 +663,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
     {
         return argumentList?.Arguments
             .Select(argument => argument.Expression)
-            .OfType<IdentifierNameSyntax>()
-            .Any(identifier => identifier.Identifier.ValueText == variableName) == true;
+            .Any(expression => IsDirectVariableReference(expression, variableName)) == true;
     }
 
     private static bool HasDirectResponseInitializer(InitializerExpressionSyntax? initializer, string variableName)
@@ -666,8 +671,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         return initializer?.Expressions
             .OfType<AssignmentExpressionSyntax>()
             .Select(assignment => assignment.Right)
-            .OfType<IdentifierNameSyntax>()
-            .Any(identifier => identifier.Identifier.ValueText == variableName) == true;
+            .Any(expression => IsDirectVariableReference(expression, variableName)) == true;
     }
 
     private static bool IsVariableReassignedBetween(
