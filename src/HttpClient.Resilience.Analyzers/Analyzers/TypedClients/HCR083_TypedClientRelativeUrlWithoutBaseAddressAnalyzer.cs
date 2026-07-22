@@ -302,11 +302,19 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         }
 
         var candidate = invocation.ArgumentList.Arguments[0].Expression;
-        if (RelativeUrlHttpMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
-            IsRelativeStringUrl(candidate, semanticModel, cancellationToken))
+        if (RelativeUrlHttpMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal))
         {
-            urlExpression = candidate;
-            return true;
+            if (IsRelativeStringUrl(candidate, semanticModel, cancellationToken))
+            {
+                urlExpression = candidate;
+                return true;
+            }
+
+            return TryGetRelativeUriCreationArgument(
+                candidate,
+                semanticModel,
+                cancellationToken,
+                out urlExpression);
         }
 
         if (memberAccess.Name.Identifier.ValueText is not ("Send" or "SendAsync") ||
