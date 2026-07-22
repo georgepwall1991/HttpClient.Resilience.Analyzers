@@ -190,13 +190,36 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
     {
         expression = UnwrapParentheses(expression);
 
-        return expression is InvocationExpressionSyntax
-        {
-            Expression: MemberAccessExpressionSyntax
+        return expression is InvocationExpressionSyntax invocation &&
+            invocation is
             {
-                Name.Identifier.ValueText: "CreateClient"
-            } memberAccess
-        } && IsHttpClientFactoryReceiver(memberAccess.Expression, semanticModel, cancellationToken);
+                Expression: MemberAccessExpressionSyntax
+                {
+                    Name.Identifier.ValueText: "CreateClient"
+                } memberAccess
+            } &&
+            IsHttpClientFactoryReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
+            IsHttpClientFactoryCreateClientMethod(invocation, semanticModel, cancellationToken);
+    }
+
+    private static bool IsHttpClientFactoryCreateClientMethod(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsHttpClientFactoryMethod(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsHttpClientFactoryMethod);
+    }
+
+    private static bool IsHttpClientFactoryMethod(IMethodSymbol method)
+    {
+        return IsHttpClientFactoryType((method.ReducedFrom ?? method).ContainingType);
     }
 
     private static bool IsHttpClientFactoryReceiver(
