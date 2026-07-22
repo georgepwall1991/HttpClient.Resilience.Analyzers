@@ -66,6 +66,8 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
             throw new InvalidOperationException("Compilation could not be created.");
         }
 
+        TestCompilationFactory.EnsureNoCompilerErrors(compilation);
+
         var diagnostics = await compilation
             .WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new TAnalyzer()))
             .GetAnalyzerDiagnosticsAsync()

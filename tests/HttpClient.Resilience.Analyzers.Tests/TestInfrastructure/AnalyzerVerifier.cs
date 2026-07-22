@@ -14,7 +14,23 @@ internal static class AnalyzerVerifier<TAnalyzer>
 
     public static async Task<ImmutableArray<Diagnostic>> GetDiagnosticsAsync(params string[] sources)
     {
+        return await GetDiagnosticsCoreAsync(validateCompilerErrors: true, sources);
+    }
+
+    public static async Task<ImmutableArray<Diagnostic>> GetDiagnosticsAllowingCompilerErrorsAsync(string source)
+    {
+        return await GetDiagnosticsCoreAsync(validateCompilerErrors: false, new[] { source });
+    }
+
+    private static async Task<ImmutableArray<Diagnostic>> GetDiagnosticsCoreAsync(
+        bool validateCompilerErrors,
+        string[] sources)
+    {
         var compilation = TestCompilationFactory.Create("AnalyzerTests", sources);
+        if (validateCompilerErrors)
+        {
+            TestCompilationFactory.EnsureNoCompilerErrors(compilation);
+        }
 
         var compilationWithAnalyzers = compilation.WithAnalyzers(
             ImmutableArray.Create<DiagnosticAnalyzer>(new TAnalyzer()));

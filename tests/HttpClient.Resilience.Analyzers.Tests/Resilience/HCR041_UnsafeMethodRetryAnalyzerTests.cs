@@ -907,7 +907,8 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
             }
             """;
 
-        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>
+            .GetDiagnosticsAllowingCompilerErrorsAsync(source);
 
         Assert.Empty(diagnostics);
     }
