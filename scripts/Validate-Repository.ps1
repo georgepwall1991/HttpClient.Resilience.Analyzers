@@ -108,7 +108,9 @@ foreach ($diagnosticId in $diagnosticIds) {
 }
 
 $requiredTopLevelDocs = @(
+    'CODE_OF_CONDUCT.md',
     'CONTRIBUTING.md',
+    'PACKAGE_README.md',
     'SECURITY.md',
     'SUPPORT.md',
     'docs\adoption.md',
@@ -143,13 +145,16 @@ $requiredRepositoryFiles = @(
     '.gitattributes',
     '.github\CODEOWNERS',
     '.github\dependabot.yml',
+    '.github\release.yml',
     '.github\pull_request_template.md',
     '.github\ISSUE_TEMPLATE\bug_report.yml',
     '.github\ISSUE_TEMPLATE\config.yml',
     '.github\ISSUE_TEMPLATE\false_positive.yml',
     '.github\ISSUE_TEMPLATE\feature_request.yml',
+    '.github\ISSUE_TEMPLATE\question.yml',
     '.github\workflows\ci.yml',
-    '.github\workflows\release.yml'
+    '.github\workflows\release.yml',
+    'assets\social-preview.png'
 )
 
 foreach ($path in $requiredRepositoryFiles) {
@@ -169,6 +174,10 @@ Assert-Contains 'README.md' `
     "<PackageReference Include=\x22HttpClient\.Resilience\.Analyzers\x22 Version=\x22$escapedPackageVersion\x22" `
     "README.md package version does not match package project version $packageVersion."
 
+Assert-Contains 'PACKAGE_README.md' `
+    "<PackageReference Include=\x22HttpClient\.Resilience\.Analyzers\x22 Version=\x22$escapedPackageVersion\x22" `
+    "PACKAGE_README.md package version does not match package project version $packageVersion."
+
 $releaseDocumentation = Get-Text 'docs\releasing.md'
 if ($releaseDocumentation -match '(?i)\bpreview release\b') {
     throw 'docs/releasing.md must describe stable releases only.'
@@ -182,6 +191,9 @@ Assert-Contains '.github\dependabot.yml' 'package-ecosystem:\s+nuget' 'dependabo
 Assert-Contains '.github\dependabot.yml' 'package-ecosystem:\s+github-actions' 'dependabot.yml must include GitHub Actions updates.'
 Assert-Contains '.github\pull_request_template.md' 'Validate-Repository\.ps1' 'Pull request template must include repository validation.'
 Assert-Contains '.github\workflows\release.yml' 'Validate-ReleaseVersion\.ps1' 'Release workflow must validate tag and package version alignment.'
+Assert-Contains '.github\workflows\release.yml' 'gh release create' 'Release workflow must publish a matching GitHub Release.'
+Assert-Contains '.github\release.yml' 'changelog:' '.github/release.yml must configure generated release notes.'
+Assert-Contains 'CODE_OF_CONDUCT.md' 'Our Standards' 'CODE_OF_CONDUCT.md must describe community standards.'
 Assert-Contains 'SECURITY.md' 'Reporting a Vulnerability' 'SECURITY.md must document vulnerability reporting.'
 Assert-Contains 'CONTRIBUTING.md' 'Diagnostic Quality Bar' 'CONTRIBUTING.md must document diagnostic quality expectations.'
 Assert-Contains 'SUPPORT.md' 'False positives' 'SUPPORT.md must document support paths for false positives.'

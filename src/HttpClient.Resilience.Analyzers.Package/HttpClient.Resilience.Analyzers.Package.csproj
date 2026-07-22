@@ -5,17 +5,19 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>HttpClient.Resilience.Analyzers</PackageId>
-    <Version>0.1.119</Version>
-    <Authors>HttpClient.Resilience.Analyzers contributors</Authors>
-    <Description>Production-focused Roslyn analyzers and code fixes for .NET HttpClient, IHttpClientFactory, typed clients, Polly, and Microsoft.Extensions.Http.Resilience. Catch socket exhaustion, stale DNS, DI lifetime bugs, unsafe retries, missing cancellation, and response disposal mistakes at compile time.</Description>
-    <PackageTags>httpclient;ihttpclientfactory;httpclientfactory;resilience;polly;dotnet;csharp;roslyn;analyzer;analyser;code-fix;aspnetcore;static-analysis;socket-exhaustion;dns;typed-client;named-client;retry;cancellation-token;response-disposal;resilience-pipeline</PackageTags>
+    <Version>0.1.120</Version>
+    <Title>HttpClient Resilience Analyzers for .NET</Title>
+    <Authors>George Wall</Authors>
+    <Copyright>Copyright (c) George Wall and contributors 2026</Copyright>
+    <Description>Production-focused Roslyn analyzers and code fixes for .NET and ASP.NET Core HttpClient, IHttpClientFactory, typed clients, named clients, Polly, and Microsoft.Extensions.Http.Resilience. Catch socket exhaustion, stale DNS, DI lifetime bugs, unsafe retries, missing cancellation tokens, and response disposal mistakes at compile time.</Description>
+    <PackageTags>httpclient;ihttpclientfactory;httpclientfactory;resilience;http-resilience;polly;dotnet;csharp;roslyn;analyzer;analyser;dotnet-analyzers;code-fix;compiler;aspnetcore;static-analysis;dependency-injection;delegatinghandler;socketshttphandler;socket-exhaustion;dns;typed-client;named-client;retry;cancellationtoken;cancellation-token;response-disposal;resilience-pipeline;microsoft-extensions-http-resilience</PackageTags>
     <PackageProjectUrl>https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers</PackageProjectUrl>
     <RepositoryUrl>https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Block tag-triggered releases when the Git tag does not exactly match the package version.</PackageReleaseNotes>
+    <PackageReleaseNotes>Improve NuGet and GitHub discoverability with richer package metadata, a dedicated NuGet README, complete community files, and automated GitHub Releases.</PackageReleaseNotes>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
@@ -25,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\PACKAGE_README.md" Pack="true" PackagePath="\README.md" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
     <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" />
     <None Include="..\..\profiles\*.editorconfig" Pack="true" PackagePath="contentFiles/any/any/profiles" />

@@ -80,7 +80,9 @@ try {
 
     Assert-MetadataText 'id' (Get-PackageProjectProperty 'PackageId')
     Assert-MetadataText 'version' (Get-PackageProjectProperty 'Version')
+    Assert-MetadataText 'title' (Get-PackageProjectProperty 'Title')
     Assert-MetadataText 'authors' (Get-PackageProjectProperty 'Authors')
+    Assert-MetadataText 'copyright' (Get-PackageProjectProperty 'Copyright')
     Assert-MetadataText 'description' (Get-PackageProjectProperty 'Description')
     Assert-MetadataText 'icon' (Get-PackageProjectProperty 'PackageIcon')
     Assert-MetadataText 'readme' (Get-PackageProjectProperty 'PackageReadmeFile')
@@ -130,7 +132,11 @@ try {
         'socket-exhaustion',
         'typed-client',
         'retry',
-        'resilience-pipeline'
+        'resilience-pipeline',
+        'dependency-injection',
+        'delegatinghandler',
+        'socketshttphandler',
+        'microsoft-extensions-http-resilience'
     )
 
     foreach ($tag in $requiredTags) {
