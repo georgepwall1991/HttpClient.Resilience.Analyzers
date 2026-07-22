@@ -24,6 +24,17 @@ public sealed class CodeFixVerifierTests
         Assert.Contains("MissingSymbol", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ApplyFirstCodeFixAsync_RejectsFixedSourceThatRetainsDiagnostic()
+    {
+        const string source = "public sealed class ValidTestSource { }";
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => CodeFixVerifier<TestAnalyzer, IneffectiveCodeFixProvider>.ApplyFirstCodeFixAsync(source));
+
+        Assert.Contains("still reports diagnostic TEST001", exception.Message, StringComparison.Ordinal);
+    }
+
     private sealed class TestAnalyzer : DiagnosticAnalyzer
     {
         private static readonly DiagnosticDescriptor Descriptor = new(
@@ -66,6 +77,30 @@ public sealed class CodeFixVerifierTests
                     _ => Task.FromResult(context.Document.WithText(SourceText.From(
                         "public sealed class InvalidFixedSource { public int Value => MissingSymbol; }"))),
                     equivalenceKey: "IntroduceCompilerError"),
+                context.Diagnostics.Single());
+
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class IneffectiveCodeFixProvider : CodeFixProvider
+    {
+        public override ImmutableArray<string> FixableDiagnosticIds { get; } =
+            ImmutableArray.Create("TEST001");
+
+        public override FixAllProvider? GetFixAllProvider()
+        {
+            return null;
+        }
+
+        public override Task RegisterCodeFixesAsync(CodeFixContext context)
+        {
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    "Leave diagnostic behind",
+                    _ => Task.FromResult(context.Document.WithText(SourceText.From(
+                        "// Attempted fix\npublic sealed class ValidTestSource { }"))),
+                    equivalenceKey: "LeaveDiagnosticBehind"),
                 context.Diagnostics.Single());
 
             return Task.CompletedTask;
