@@ -44,7 +44,10 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
         var roots = context.Compilation.SyntaxTrees
             .Select(tree => tree.GetRoot(context.CancellationToken))
             .ToArray();
-        var scopedTypes = GetKnownScopedTypes(roots);
+        var scopedTypes = GetKnownScopedTypes(
+            roots,
+            context.Compilation,
+            context.CancellationToken);
         var handlerTypes = GetKnownDelegatingHandlerTypes(roots);
 
         context.RegisterSyntaxNodeAction(
@@ -228,10 +231,16 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
             : namespaceName + "." + classDeclaration.Identifier.ValueText;
     }
 
-    private static ISet<string> GetKnownScopedTypes(IEnumerable<SyntaxNode> roots)
+    private static ISet<string> GetKnownScopedTypes(
+        IEnumerable<SyntaxNode> roots,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
         return new HashSet<string>(
-            roots.SelectMany(ServiceRegistrationCollector.Collect)
+            roots.SelectMany(root => ServiceRegistrationCollector.Collect(
+                    root,
+                    GetSemanticModel(compilation, root.SyntaxTree),
+                    cancellationToken))
                 .Where(registration => registration.Kind == ServiceRegistrationKind.Scoped)
                 .SelectMany(registration => new[]
                 {
@@ -242,6 +251,13 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
                 .SelectMany(typeName => TypeNameUtilities.GetComparableNames(typeName!)),
             System.StringComparer.Ordinal);
     }
+
+#pragma warning disable RS1030 // HCR020 performs compilation-wide scoped-service matching and needs cross-tree semantic type checks.
+    private static SemanticModel GetSemanticModel(Compilation compilation, SyntaxTree syntaxTree)
+    {
+        return compilation.GetSemanticModel(syntaxTree);
+    }
+#pragma warning restore RS1030
 
     private static IEnumerable<ParameterSyntax> GetConstructorParameters(ClassDeclarationSyntax classDeclaration)
     {
