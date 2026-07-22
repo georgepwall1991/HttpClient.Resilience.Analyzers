@@ -349,17 +349,93 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         }
 
         if (expression is not BaseObjectCreationExpressionSyntax requestCreation ||
-            requestCreation.ArgumentList is null ||
-            requestCreation.ArgumentList.Arguments.Count < 2 ||
             !IsHttpRequestMessageCreation(requestCreation, semanticModel, cancellationToken))
         {
             return false;
         }
 
-        var candidate = requestCreation.ArgumentList.Arguments[1].Expression;
+        if (requestCreation.ArgumentList is { Arguments.Count: >= 2 } argumentList)
+        {
+            var constructorCandidate = argumentList.Arguments[1].Expression;
+            if (IsRelativeStringUrl(constructorCandidate, semanticModel, cancellationToken))
+            {
+                urlExpression = constructorCandidate;
+                return true;
+            }
+        }
+
+        return TryGetRelativeRequestUriInitializer(
+            requestCreation,
+            semanticModel,
+            cancellationToken,
+            out urlExpression);
+    }
+
+    private static bool TryGetRelativeRequestUriInitializer(
+        BaseObjectCreationExpressionSyntax requestCreation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        out ExpressionSyntax urlExpression)
+    {
+        urlExpression = requestCreation;
+        if (requestCreation.Initializer is null)
+        {
+            return false;
+        }
+
+        foreach (var assignment in requestCreation.Initializer.Expressions.OfType<AssignmentExpressionSyntax>())
+        {
+            if (semanticModel.GetSymbolInfo(assignment.Left, cancellationToken).Symbol is not IPropertySymbol
+                {
+                    Name: "RequestUri",
+                    ContainingType: { } containingType,
+                } ||
+                containingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) !=
+                    "global::System.Net.Http.HttpRequestMessage" ||
+                !TryGetRelativeUriCreationArgument(
+                    assignment.Right,
+                    semanticModel,
+                    cancellationToken,
+                    out var candidate))
+            {
+                continue;
+            }
+
+            urlExpression = candidate;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetRelativeUriCreationArgument(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        out ExpressionSyntax urlExpression)
+    {
+        urlExpression = expression;
+        if (expression is not BaseObjectCreationExpressionSyntax uriCreation ||
+            uriCreation.ArgumentList is not { Arguments.Count: >= 1 } argumentList ||
+            semanticModel.GetTypeInfo(uriCreation, cancellationToken).Type is not { } uriType ||
+            uriType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) != "global::System.Uri")
+        {
+            return false;
+        }
+
+        var candidate = argumentList.Arguments[0].Expression;
         if (!IsRelativeStringUrl(candidate, semanticModel, cancellationToken))
         {
             return false;
+        }
+
+        if (argumentList.Arguments.Count >= 2)
+        {
+            var kind = semanticModel.GetConstantValue(argumentList.Arguments[1].Expression, cancellationToken);
+            if (!kind.HasValue || kind.Value is not 0 and not 2)
+            {
+                return false;
+            }
         }
 
         urlExpression = candidate;
