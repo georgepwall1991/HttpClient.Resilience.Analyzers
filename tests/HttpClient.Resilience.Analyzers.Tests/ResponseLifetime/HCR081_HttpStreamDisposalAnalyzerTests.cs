@@ -33,6 +33,31 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenNullForgivingHttpContentStreamIsNotDisposed()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response, Stream destination, CancellationToken cancellationToken)
+                {
+                    var stream = (await response.Content.ReadAsStreamAsync(cancellationToken))!;
+                    await stream.CopyToAsync(destination, cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR081, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenHttpClientGetStreamResultIsNotDisposed()
     {
         const string source = """
@@ -176,6 +201,32 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
                     var ownedStream = stream;
                     await ownedStream.CopyToAsync(destination, cancellationToken);
                     ownedStream.Dispose();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenNullForgivingStreamAliasIsDisposed()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response, Stream destination, CancellationToken cancellationToken)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    var ownedStream = stream!;
+                    await ownedStream.CopyToAsync(destination, cancellationToken);
+                    ownedStream!.Dispose();
                 }
             }
             """;
@@ -501,6 +552,34 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
                 {
                     var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
                     return new StreamOwner(stream);
+                }
+            }
+
+            public sealed class StreamOwner(Stream stream)
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenNullForgivingStreamIsTransferredToReturnedOwner()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<StreamOwner> OpenAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    return new StreamOwner(stream!);
                 }
             }
 
