@@ -263,6 +263,45 @@ public sealed class HCR082_PerRequestResiliencePipelineAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenCustomExtensionBuildsFromPollyBuilder()
+    {
+        const string source = """
+            using Custom;
+            using Polly;
+
+            public sealed class PaymentsController
+            {
+                public void Post()
+                {
+                    var pipeline = new ResiliencePipelineBuilder().Build();
+                }
+            }
+
+            namespace Polly
+            {
+                public sealed class ResiliencePipelineBuilder
+                {
+                }
+            }
+
+            namespace Custom
+            {
+                public static class BuilderExtensions
+                {
+                    public static object Build(this ResiliencePipelineBuilder builder)
+                    {
+                        return new object();
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR082_PerRequestResiliencePipelineAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_InTestContext()
     {
         const string source = """
