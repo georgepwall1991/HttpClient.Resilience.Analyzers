@@ -306,26 +306,41 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
             return false;
         }
 
-        var aliasDeclaration = block
+        var aliasOrigin = block
             .DescendantNodes()
-            .OfType<VariableDeclaratorSyntax>()
-            .FirstOrDefault(variable => variable.SpanStart > originStart &&
-                variable.SpanStart < contentReadStart &&
-                variable.Initializer?.Value is { } initializer &&
-                IsResponseContentAccess(
-                    UnwrapParentheses(initializer),
-                    responseLocal,
-                    semanticModel,
-                    cancellationToken) &&
-                SymbolEqualityComparer.Default.Equals(
-                    semanticModel.GetDeclaredSymbol(variable, cancellationToken),
-                    aliasLocal));
+            .Where(node => node.SpanStart > originStart && node.SpanStart < contentReadStart)
+            .Where(node => node switch
+            {
+                VariableDeclaratorSyntax variable => variable.Initializer?.Value is { } initializer &&
+                    IsResponseContentAccess(
+                        UnwrapParentheses(initializer),
+                        responseLocal,
+                        semanticModel,
+                        cancellationToken) &&
+                    SymbolEqualityComparer.Default.Equals(
+                        semanticModel.GetDeclaredSymbol(variable, cancellationToken),
+                        aliasLocal),
+                AssignmentExpressionSyntax assignment =>
+                    assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                    assignment.Left is IdentifierNameSyntax assignmentTarget &&
+                    SymbolEqualityComparer.Default.Equals(
+                        semanticModel.GetSymbolInfo(assignmentTarget, cancellationToken).Symbol,
+                        aliasLocal) &&
+                    IsResponseContentAccess(
+                        UnwrapParentheses(assignment.Right),
+                        responseLocal,
+                        semanticModel,
+                        cancellationToken),
+                _ => false
+            })
+            .OrderByDescending(node => node.SpanStart)
+            .FirstOrDefault();
 
-        return aliasDeclaration is not null &&
+        return aliasOrigin is not null &&
             !LocalIsReassignedBetween(
                 block,
                 aliasLocal,
-                aliasDeclaration.SpanStart,
+                aliasOrigin.SpanStart,
                 contentReadStart,
                 semanticModel,
                 cancellationToken);
