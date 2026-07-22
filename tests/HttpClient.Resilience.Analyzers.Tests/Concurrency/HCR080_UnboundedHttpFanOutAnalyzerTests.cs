@@ -284,6 +284,58 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenTaskWhenAllUsesNullForgivingTaskSequence()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(HttpClient client, IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    var tasks = urls.Select(url => client.GetAsync(url, cancellationToken));
+                    return Task.WhenAll(tasks!);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenTaskSequenceInitializerIsNullForgiving()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(HttpClient client, IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    var tasks = urls.Select(url => client.GetAsync(url, cancellationToken))!;
+                    return Task.WhenAll(tasks);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenLocalHttpSelectTasksUseStandaloneAssignment()
     {
         const string source = """

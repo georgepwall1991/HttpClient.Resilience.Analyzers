@@ -121,7 +121,7 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         System.Threading.CancellationToken cancellationToken,
         ImmutableHashSet<ISymbol> visitedLocals)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         if (ExpressionContainsSelectWithHttpCall(expression, semanticModel, cancellationToken))
         {
@@ -360,14 +360,23 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         return SyntacticReceiverLooksLikeHttpClient(expression);
     }
 
-    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        while (true)
         {
-            expression = parenthesized.Expression;
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix
+                    when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
         }
-
-        return expression;
     }
 
     private static bool SyntacticReceiverLooksLikeHttpClient(ExpressionSyntax expression)
