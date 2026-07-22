@@ -739,6 +739,39 @@ public sealed class HCR064_CancellationAwareHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_PassesTokenToDeleteFromJsonAsync()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<Order?> DeleteAsync(
+                    HttpClient client,
+                    CancellationToken cancellationToken)
+                {
+                    return client.DeleteFromJsonAsync<Order>("https://example.com/orders/42");
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR064_CancellationAwareHttpAnalyzer, HCR064_PassCancellationTokenCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "client.DeleteFromJsonAsync<Order>(\"https://example.com/orders/42\", cancellationToken: cancellationToken)",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CodeFix_PassesTokenToGetFromJsonAsAsyncEnumerable()
     {
         const string source = """

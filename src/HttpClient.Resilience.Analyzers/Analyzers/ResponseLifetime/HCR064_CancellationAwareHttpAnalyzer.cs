@@ -15,6 +15,7 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
     private static readonly string[] HttpClientMethodNames =
     {
         "DeleteAsync",
+        "DeleteFromJsonAsync",
         "GetAsync",
         "GetByteArrayAsync",
         "GetFromJsonAsAsyncEnumerable",
