@@ -216,6 +216,9 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
                     when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
                     expression = postfix.Operand;
                     continue;
+                case CastExpressionSyntax cast:
+                    expression = cast.Expression;
+                    continue;
                 default:
                     return expression;
             }
