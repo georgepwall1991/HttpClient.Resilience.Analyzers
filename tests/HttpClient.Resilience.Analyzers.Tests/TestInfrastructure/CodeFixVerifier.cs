@@ -17,7 +17,7 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
     {
         return await WithCodeFixContextAsync(
             source,
-            (_, actions) => Task.FromResult<IReadOnlyList<string>>(
+            (_, _, actions) => Task.FromResult<IReadOnlyList<string>>(
                 actions.Select(action => action.Title).ToArray()))
             .ConfigureAwait(false);
     }
@@ -29,6 +29,7 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
 
     private static async Task<string> ApplyFirstCodeFixAsync(
         Document document,
+        Diagnostic diagnostic,
         IReadOnlyList<CodeAction> actions)
     {
         var action = actions.Single();
@@ -49,13 +50,24 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
 
         TestCompilationFactory.EnsureNoCompilerErrors(changedCompilation);
 
+        var remainingDiagnostics = await changedCompilation
+            .WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new TAnalyzer()))
+            .GetAnalyzerDiagnosticsAsync()
+            .ConfigureAwait(false);
+
+        if (remainingDiagnostics.Any(remaining => remaining.Id == diagnostic.Id))
+        {
+            throw new InvalidOperationException(
+                $"Code fix output still reports diagnostic {diagnostic.Id}.");
+        }
+
         var fixedText = await changedDocument.GetTextAsync().ConfigureAwait(false);
         return fixedText.ToString();
     }
 
     private static async Task<TResult> WithCodeFixContextAsync<TResult>(
         string source,
-        Func<Document, IReadOnlyList<CodeAction>, Task<TResult>> action)
+        Func<Document, Diagnostic, IReadOnlyList<CodeAction>, Task<TResult>> action)
     {
         using var workspace = new AdhocWorkspace();
 
@@ -91,6 +103,6 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
 
         await new TCodeFix().RegisterCodeFixesAsync(context).ConfigureAwait(false);
 
-        return await action(document, actions).ConfigureAwait(false);
+        return await action(document, diagnostic, actions).ConfigureAwait(false);
     }
 }
