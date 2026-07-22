@@ -283,8 +283,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         var httpMethodMembers = binary
             .ChildNodes()
             .OfType<MemberAccessExpressionSyntax>()
-            .Where(memberAccess => memberAccess.Expression.ToString() == "HttpMethod" &&
-                IsFrameworkHttpMethodMember(memberAccess, semanticModel, cancellationToken))
+            .Where(memberAccess => IsFrameworkHttpMethodMember(memberAccess, semanticModel, cancellationToken))
             .Select(memberAccess => memberAccess.Name.Identifier.ValueText)
             .ToArray();
 
