@@ -351,6 +351,172 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzerTests
         Assert.Empty(diagnostics);
     }
 
+    [Theory]
+    [InlineData("DeleteFromJsonAsync")]
+    [InlineData("GetFromJsonAsync")]
+    public async Task ReportsDiagnostic_WhenJsonReadUsesRelativeUrl(string methodName)
+    {
+        var source = $$"""
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient client)
+            {
+                public Task<Order?> SendAsync(CancellationToken cancellationToken)
+                {
+                    return client.{{methodName}}<Order>("/payments", cancellationToken);
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
+    }
+
+    [Theory]
+    [InlineData("PatchAsJsonAsync")]
+    [InlineData("PostAsJsonAsync")]
+    [InlineData("PutAsJsonAsync")]
+    public async Task ReportsDiagnostic_WhenJsonWriteUsesRelativeUrl(string methodName)
+    {
+        var source = $$"""
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient client)
+            {
+                public Task<HttpResponseMessage> SendAsync(Order order, CancellationToken cancellationToken)
+                {
+                    return client.{{methodName}}("/payments", order, cancellationToken);
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenCustomJsonExtensionUsesRelativeUrl()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public static class CustomHttpClientExtensions
+            {
+                public static Task<T?> GetFromJsonAsync<T>(this HttpClient client, string value, int marker)
+                {
+                    return Task.FromResult(default(T));
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient client)
+            {
+                public Task<Order?> SendAsync()
+                {
+                    return client.GetFromJsonAsync<Order>("/payments", 42);
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
     [Fact]
     public async Task ReportsDiagnostic_WhenSendAsyncUsesInlineRequestWithRelativeUrl()
     {
