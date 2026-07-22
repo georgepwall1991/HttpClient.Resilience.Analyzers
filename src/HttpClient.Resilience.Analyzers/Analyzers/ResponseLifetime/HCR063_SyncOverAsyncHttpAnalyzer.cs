@@ -320,6 +320,9 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
                     when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
                     expression = postfix.Operand;
                     continue;
+                case CastExpressionSyntax cast:
+                    expression = cast.Expression;
+                    continue;
                 default:
                     return expression;
             }
