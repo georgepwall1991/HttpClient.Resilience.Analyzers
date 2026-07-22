@@ -57,6 +57,57 @@ public sealed class HCR084_StringlyNamedClientAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenNamedClientNamesUseNullForgivingSyntax()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient("payments"!);
+                }
+            }
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory factory)
+                {
+                    var name = "payments";
+                    return factory.CreateClient(name!);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR084_StringlyNamedClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR084, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenRegistrationUsesInlineConstantConcatenation()
     {
         const string source = """

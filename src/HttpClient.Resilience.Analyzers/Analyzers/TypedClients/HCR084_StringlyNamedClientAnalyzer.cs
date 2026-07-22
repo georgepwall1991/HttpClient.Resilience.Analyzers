@@ -172,7 +172,7 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
 
     private static bool TryGetStringLiteral(ExpressionSyntax expression, out string value)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
         if (expression is LiteralExpressionSyntax literal &&
             literal.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.StringLiteralExpression))
         {
@@ -191,7 +191,7 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
         out string value,
         out ExpressionSyntax valueExpression)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
         valueExpression = expression;
         if (TryGetInlineStringConstant(
             expression,
@@ -268,7 +268,7 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
             return true;
         }
 
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
         if (IsSupportedInlineConstantExpression(expression) &&
             semanticModel.GetConstantValue(expression, cancellationToken) is { HasValue: true, Value: string constantValue })
         {
@@ -451,14 +451,23 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        while (true)
         {
-            expression = parenthesized.Expression;
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix
+                    when postfix.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
         }
-
-        return expression;
     }
 
 #pragma warning disable RS1030 // HCR084 performs compilation-wide named-client matching and needs cross-tree semantic type checks.
