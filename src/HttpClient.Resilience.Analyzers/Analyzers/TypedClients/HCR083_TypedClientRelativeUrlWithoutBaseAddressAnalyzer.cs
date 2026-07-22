@@ -310,7 +310,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         }
 
         if (memberAccess.Name.Identifier.ValueText is not ("Send" or "SendAsync") ||
-            !TryGetInlineRequestMessageRelativeUrl(
+            !TryGetRequestMessageRelativeUrl(
                 candidate,
                 semanticModel,
                 cancellationToken,
@@ -322,7 +322,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         return true;
     }
 
-    private static bool TryGetInlineRequestMessageRelativeUrl(
+    private static bool TryGetRequestMessageRelativeUrl(
         ExpressionSyntax expression,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken,
@@ -334,6 +334,20 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         }
 
         urlExpression = expression;
+        if (expression is IdentifierNameSyntax identifier &&
+            TryGetUnreassignedLocalInitializer(
+                identifier,
+                semanticModel,
+                cancellationToken,
+                out var initializer))
+        {
+            return TryGetRequestMessageRelativeUrl(
+                initializer,
+                semanticModel,
+                cancellationToken,
+                out urlExpression);
+        }
+
         if (expression is not BaseObjectCreationExpressionSyntax requestCreation ||
             requestCreation.ArgumentList is null ||
             requestCreation.ArgumentList.Arguments.Count < 2 ||
@@ -350,6 +364,61 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
 
         urlExpression = candidate;
         return true;
+    }
+
+    private static bool TryGetUnreassignedLocalInitializer(
+        IdentifierNameSyntax identifier,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        out ExpressionSyntax initializer)
+    {
+        initializer = identifier;
+        if (semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is not ILocalSymbol local ||
+            identifier.FirstAncestorOrSelf<BlockSyntax>() is not { } containingBlock)
+        {
+            return false;
+        }
+
+        var declaration = containingBlock
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .FirstOrDefault(variable => variable.SpanStart < identifier.SpanStart &&
+                variable.Initializer is not null &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetDeclaredSymbol(variable, cancellationToken),
+                    local));
+        if (declaration?.Initializer is not { Value: { } value } ||
+            LocalIsReassignedBetween(
+                local,
+                declaration.Span.End,
+                identifier.SpanStart,
+                containingBlock,
+                semanticModel,
+                cancellationToken))
+        {
+            return false;
+        }
+
+        initializer = value;
+        return true;
+    }
+
+    private static bool LocalIsReassignedBetween(
+        ILocalSymbol local,
+        int start,
+        int end,
+        BlockSyntax containingBlock,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return containingBlock
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => assignment.SpanStart > start &&
+                assignment.SpanStart < end &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetSymbolInfo(assignment.Left, cancellationToken).Symbol,
+                    local));
     }
 
     private static bool IsHttpRequestMessageCreation(
