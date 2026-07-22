@@ -404,7 +404,43 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         return containingBlock.Statements
             .OfType<ExpressionStatementSyntax>()
             .Any(statement => IsDisposeInvocation(statement.Expression, variableName) &&
-                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, statement.SpanStart));
+                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, statement.SpanStart)) ||
+            IsAliasDirectlyDisposedInBlock(containingBlock, variableName, declarationStart);
+    }
+
+    private static bool IsAliasDirectlyDisposedInBlock(
+        BlockSyntax containingBlock,
+        string variableName,
+        int declarationStart)
+    {
+        foreach (var alias in containingBlock.Statements
+            .OfType<LocalDeclarationStatementSyntax>()
+            .Where(statement => statement.SpanStart > declarationStart)
+            .SelectMany(statement => statement.Declaration.Variables)
+            .Where(alias => alias.Initializer?.Value is { } initializer &&
+                IsDirectVariableReference(initializer, variableName) &&
+                !IsVariableReassignedBetween(
+                    containingBlock,
+                    variableName,
+                    declarationStart,
+                    alias.SpanStart)))
+        {
+            var aliasName = alias.Identifier.ValueText;
+            if (containingBlock.Statements
+                .OfType<ExpressionStatementSyntax>()
+                .Any(statement => statement.SpanStart > alias.SpanStart &&
+                    IsDisposeInvocation(statement.Expression, aliasName) &&
+                    !IsVariableReassignedBetween(
+                        containingBlock,
+                        aliasName,
+                        alias.SpanStart,
+                        statement.SpanStart)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsDisposedInFinally(BlockSyntax containingBlock, string variableName, int declarationStart)
