@@ -101,7 +101,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        initializer = UnwrapParentheses(initializer);
+        initializer = UnwrapTransparentExpressions(initializer);
         if (initializer is AwaitExpressionSyntax awaitExpression)
         {
             return awaitExpression.Expression
@@ -289,6 +289,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
+        expression = UnwrapTransparentExpressions(expression);
         return expression is MemberAccessExpressionSyntax
         {
             Name.Identifier.ValueText: "Content",
@@ -311,7 +312,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
         if (expression is not IdentifierNameSyntax responseIdentifier)
         {
             return false;
@@ -386,6 +387,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
+        expression = UnwrapTransparentExpressions(expression);
         if (expression is not IdentifierNameSyntax aliasIdentifier ||
             semanticModel.GetSymbolInfo(aliasIdentifier, cancellationToken).Symbol is not ILocalSymbol aliasLocal ||
             expression.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
@@ -437,7 +439,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
             return false;
         }
 
-        aliasValue = UnwrapParentheses(aliasValue);
+        aliasValue = UnwrapTransparentExpressions(aliasValue);
         return IsResponseContentAccess(
                 aliasValue,
                 responseLocal,
@@ -592,14 +594,23 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
                     responseLocal));
     }
 
-    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        while (true)
         {
-            expression = parenthesized.Expression;
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix
+                    when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
         }
-
-        return expression;
     }
 
     private static bool SyntacticReceiverLooksLikeHttpClient(ExpressionSyntax expression)
