@@ -304,9 +304,12 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         var candidate = invocation.ArgumentList.Arguments[0].Expression;
         if (RelativeUrlHttpMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal))
         {
-            if (IsRelativeStringUrl(candidate, semanticModel, cancellationToken))
+            if (TryGetRelativeStringExpression(
+                candidate,
+                semanticModel,
+                cancellationToken,
+                out urlExpression))
             {
-                urlExpression = candidate;
                 return true;
             }
 
@@ -380,9 +383,13 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         if (requestCreation.ArgumentList is { Arguments.Count: >= 2 } argumentList)
         {
             var constructorCandidate = argumentList.Arguments[1].Expression;
-            if (IsRelativeStringUrl(constructorCandidate, semanticModel, cancellationToken))
+            if (TryGetRelativeStringExpression(
+                constructorCandidate,
+                semanticModel,
+                cancellationToken,
+                out var stringCandidate))
             {
-                urlExpression = constructorCandidate;
+                urlExpression = stringCandidate;
                 return true;
             }
 
@@ -545,7 +552,11 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         }
 
         var candidate = argumentList.Arguments[0].Expression;
-        if (!IsRelativeStringUrl(candidate, semanticModel, cancellationToken))
+        if (!TryGetRelativeStringExpression(
+            candidate,
+            semanticModel,
+            cancellationToken,
+            out urlExpression))
         {
             return false;
         }
@@ -559,8 +570,41 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
             }
         }
 
-        urlExpression = candidate;
         return true;
+    }
+
+    private static bool TryGetRelativeStringExpression(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        out ExpressionSyntax urlExpression)
+    {
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
+        urlExpression = expression;
+        if (IsRelativeStringUrl(expression, semanticModel, cancellationToken))
+        {
+            return true;
+        }
+
+        if (expression is not IdentifierNameSyntax identifier ||
+            !TryGetVisibleLocalValue(
+                identifier,
+                semanticModel,
+                cancellationToken,
+                out var localValue))
+        {
+            return false;
+        }
+
+        return TryGetRelativeStringExpression(
+            localValue,
+            semanticModel,
+            cancellationToken,
+            out urlExpression);
     }
 
     private static bool TryGetVisibleLocalValue(
