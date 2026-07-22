@@ -5,7 +5,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>HttpClient.Resilience.Analyzers</PackageId>
-    <Version>0.1.123</Version>
+    <Version>0.1.124</Version>
     <Title>HttpClient Resilience Analyzers for .NET</Title>
     <Authors>George Wall</Authors>
     <Copyright>Copyright (c) George Wall and contributors 2026</Copyright>
@@ -17,7 +17,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Track HCR061 unchecked HTTP responses and content through explicit response or content casts.</PackageReleaseNotes>
+    <PackageReleaseNotes>Track HCR060 ResponseHeadersRead ownership and disposal through explicit response casts.</PackageReleaseNotes>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
