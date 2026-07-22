@@ -367,10 +367,10 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
             .DescendantNodes()
             .OfType<UsingStatementSyntax>()
             .Any(usingStatement => usingStatement.Expression is IdentifierNameSyntax identifier &&
-                aliases.TryGetValue(identifier.Identifier.ValueText, out var aliasStart) &&
                 AliasIsValidAt(
                     containingBlock,
-                    new KeyValuePair<string, int>(identifier.Identifier.ValueText, aliasStart),
+                    aliases,
+                    identifier.Identifier.ValueText,
                     usingStatement.SpanStart));
     }
 
@@ -383,10 +383,10 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
             .Any(statement => statement.UsingKeyword.IsKind(SyntaxKind.UsingKeyword) &&
                 statement.SpanStart > declarationStart &&
                 statement.Declaration.Variables.Any(variable =>
-                    aliases.TryGetValue(variable.Identifier.ValueText, out var aliasStart) &&
                     AliasIsValidAt(
                         containingBlock,
-                        new KeyValuePair<string, int>(variable.Identifier.ValueText, aliasStart),
+                        aliases,
+                        variable.Identifier.ValueText,
                         statement.Span.End)));
     }
 
@@ -430,6 +430,19 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
 
     private static bool AliasIsValidAt(
         BlockSyntax containingBlock,
+        IReadOnlyDictionary<string, int> aliases,
+        string aliasName,
+        int evidenceStart)
+    {
+        return aliases.TryGetValue(aliasName, out var aliasStart) &&
+            AliasIsValidAt(
+                containingBlock,
+                new KeyValuePair<string, int>(aliasName, aliasStart),
+                evidenceStart);
+    }
+
+    private static bool AliasIsValidAt(
+        BlockSyntax containingBlock,
         KeyValuePair<string, int> alias,
         int evidenceStart)
     {
@@ -444,29 +457,51 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
         int declarationStart,
         int evidenceStart)
     {
+        var aliases = GetVisibleStreamAliases(containingBlock, variableName, declarationStart);
+        return TransfersStreamOwnership(
+            expression,
+            containingBlock,
+            aliases,
+            declarationStart,
+            evidenceStart);
+    }
+
+    private static bool TransfersStreamOwnership(
+        ExpressionSyntax expression,
+        BlockSyntax containingBlock,
+        IReadOnlyDictionary<string, int> aliases,
+        int declarationStart,
+        int evidenceStart)
+    {
         return expression switch
         {
-            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == variableName &&
-                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, evidenceStart) ||
+            IdentifierNameSyntax identifier => AliasIsValidAt(
+                containingBlock,
+                aliases,
+                identifier.Identifier.ValueText,
+                evidenceStart) ||
                 LocalInitializerTransfersStreamOwnership(
                     containingBlock,
                     identifier.Identifier.ValueText,
-                    variableName,
-                    declarationStart),
+                    aliases,
+                    declarationStart,
+                    evidenceStart),
             ParenthesizedExpressionSyntax parenthesized => TransfersStreamOwnership(
                 parenthesized.Expression,
-                variableName,
                 containingBlock,
+                aliases,
                 declarationStart,
                 evidenceStart),
             ObjectCreationExpressionSyntax objectCreation => ObjectCreationTransfersStreamOwnership(
                 objectCreation,
-                variableName) &&
-                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, evidenceStart),
+                containingBlock,
+                aliases,
+                evidenceStart),
             ImplicitObjectCreationExpressionSyntax implicitObjectCreation => ObjectCreationTransfersStreamOwnership(
                 implicitObjectCreation,
-                variableName) &&
-                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, evidenceStart),
+                containingBlock,
+                aliases,
+                evidenceStart),
             _ => false
         };
     }
@@ -474,8 +509,9 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
     private static bool LocalInitializerTransfersStreamOwnership(
         BlockSyntax containingBlock,
         string localName,
-        string streamVariableName,
-        int streamDeclarationStart)
+        IReadOnlyDictionary<string, int> aliases,
+        int streamDeclarationStart,
+        int evidenceStart)
     {
         return containingBlock
             .DescendantNodes()
@@ -483,52 +519,95 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
             .Any(variable => variable.Identifier.ValueText == localName &&
                 variable.Initializer?.Value is { } initializer &&
                 variable.SpanStart > streamDeclarationStart &&
+                variable.SpanStart < evidenceStart &&
                 !IsVariableReassignedBetween(
                     containingBlock,
-                    streamVariableName,
-                    streamDeclarationStart,
-                    variable.SpanStart) &&
-                InitializerCreatesStreamOwner(initializer, streamVariableName));
+                    localName,
+                    variable.SpanStart,
+                    evidenceStart) &&
+                InitializerCreatesStreamOwner(
+                    initializer,
+                    containingBlock,
+                    aliases,
+                    variable.SpanStart));
     }
 
-    private static bool InitializerCreatesStreamOwner(ExpressionSyntax expression, string streamVariableName)
+    private static bool InitializerCreatesStreamOwner(
+        ExpressionSyntax expression,
+        BlockSyntax containingBlock,
+        IReadOnlyDictionary<string, int> aliases,
+        int evidenceStart)
     {
         return expression switch
         {
             ObjectCreationExpressionSyntax objectCreation => ObjectCreationTransfersStreamOwnership(
                 objectCreation,
-                streamVariableName),
+                containingBlock,
+                aliases,
+                evidenceStart),
             ImplicitObjectCreationExpressionSyntax implicitObjectCreation => ObjectCreationTransfersStreamOwnership(
                 implicitObjectCreation,
-                streamVariableName),
-            ParenthesizedExpressionSyntax parenthesized => InitializerCreatesStreamOwner(parenthesized.Expression, streamVariableName),
+                containingBlock,
+                aliases,
+                evidenceStart),
+            ParenthesizedExpressionSyntax parenthesized => InitializerCreatesStreamOwner(
+                parenthesized.Expression,
+                containingBlock,
+                aliases,
+                evidenceStart),
             _ => false
         };
     }
 
     private static bool ObjectCreationTransfersStreamOwnership(
         BaseObjectCreationExpressionSyntax objectCreation,
-        string variableName)
+        BlockSyntax containingBlock,
+        IReadOnlyDictionary<string, int> aliases,
+        int evidenceStart)
     {
-        return HasDirectStreamArgument(objectCreation.ArgumentList, variableName) ||
-            HasDirectStreamInitializer(objectCreation.Initializer, variableName);
+        return HasDirectStreamArgument(
+                objectCreation.ArgumentList,
+                containingBlock,
+                aliases,
+                evidenceStart) ||
+            HasDirectStreamInitializer(
+                objectCreation.Initializer,
+                containingBlock,
+                aliases,
+                evidenceStart);
     }
 
-    private static bool HasDirectStreamArgument(ArgumentListSyntax? argumentList, string variableName)
+    private static bool HasDirectStreamArgument(
+        ArgumentListSyntax? argumentList,
+        BlockSyntax containingBlock,
+        IReadOnlyDictionary<string, int> aliases,
+        int evidenceStart)
     {
         return argumentList?.Arguments
             .Select(argument => argument.Expression)
             .OfType<IdentifierNameSyntax>()
-            .Any(identifier => identifier.Identifier.ValueText == variableName) == true;
+            .Any(identifier => AliasIsValidAt(
+                containingBlock,
+                aliases,
+                identifier.Identifier.ValueText,
+                evidenceStart)) == true;
     }
 
-    private static bool HasDirectStreamInitializer(InitializerExpressionSyntax? initializer, string variableName)
+    private static bool HasDirectStreamInitializer(
+        InitializerExpressionSyntax? initializer,
+        BlockSyntax containingBlock,
+        IReadOnlyDictionary<string, int> aliases,
+        int evidenceStart)
     {
         return initializer?.Expressions
             .OfType<AssignmentExpressionSyntax>()
             .Select(assignment => assignment.Right)
             .OfType<IdentifierNameSyntax>()
-            .Any(identifier => identifier.Identifier.ValueText == variableName) == true;
+            .Any(identifier => AliasIsValidAt(
+                containingBlock,
+                aliases,
+                identifier.Identifier.ValueText,
+                evidenceStart)) == true;
     }
 
     private static bool IsVariableReassignedBetween(
