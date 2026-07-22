@@ -169,6 +169,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         urlExpression = invocation;
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
             !RelativeUrlHttpMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) ||
+            !InvocationTargetsHttpClient(invocation, semanticModel, cancellationToken) ||
             !IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken) ||
             invocation.ArgumentList.Arguments.Count == 0)
         {
@@ -183,6 +184,28 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
 
         urlExpression = candidate;
         return true;
+    }
+
+    private static bool InvocationTargetsHttpClient(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return MethodTargetsHttpClient(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(MethodTargetsHttpClient);
+    }
+
+    private static bool MethodTargetsHttpClient(IMethodSymbol method)
+    {
+        return (method.ReducedFrom ?? method).ContainingType
+            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::System.Net.Http.HttpClient";
     }
 
     private static bool IsRelativeStringUrl(
