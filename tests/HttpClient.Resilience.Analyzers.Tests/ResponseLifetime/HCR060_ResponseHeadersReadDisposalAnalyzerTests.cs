@@ -339,11 +339,11 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
             {
                 public static Task<string> GetAsync(
                     this HttpClient client,
-                    string path,
+                    int key,
                     HttpCompletionOption completionOption,
                     CancellationToken cancellationToken)
                 {
-                    return Task.FromResult(path);
+                    return Task.FromResult(key.ToString());
                 }
             }
 
@@ -352,7 +352,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
                 public async Task UseAsync(HttpClient client, CancellationToken cancellationToken)
                 {
                     var result = await client.GetAsync(
-                        "/events",
+                        42,
                         HttpCompletionOption.ResponseHeadersRead,
                         cancellationToken);
                 }

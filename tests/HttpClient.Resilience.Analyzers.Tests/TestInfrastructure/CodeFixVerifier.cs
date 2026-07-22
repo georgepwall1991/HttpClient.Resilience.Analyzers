@@ -56,7 +56,7 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
             .AddProject("CodeFixTests", "CodeFixTests", LanguageNames.CSharp)
             .WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
             .WithParseOptions(CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview))
-            .AddMetadataReferences(GetReferenceAssemblies());
+            .AddMetadataReferences(TestCompilationFactory.References);
 
         var document = project.AddDocument("Test.cs", SourceText.From(source, Encoding.UTF8));
         var compilation = await document.Project.GetCompilationAsync().ConfigureAwait(false);
@@ -82,21 +82,5 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
         await new TCodeFix().RegisterCodeFixesAsync(context).ConfigureAwait(false);
 
         return await action(document, actions).ConfigureAwait(false);
-    }
-
-    private static IReadOnlyList<MetadataReference> GetReferenceAssemblies()
-    {
-        var trustedPlatformAssemblies =
-            (string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES");
-
-        if (trustedPlatformAssemblies is null)
-        {
-            throw new InvalidOperationException("Trusted platform assemblies are unavailable.");
-        }
-
-        return trustedPlatformAssemblies
-            .Split(Path.PathSeparator)
-            .Select(path => MetadataReference.CreateFromFile(path))
-            .ToArray();
     }
 }
