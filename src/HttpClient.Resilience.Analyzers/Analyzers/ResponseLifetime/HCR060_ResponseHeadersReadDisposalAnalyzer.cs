@@ -413,18 +413,18 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         string variableName,
         int declarationStart)
     {
-        return IsAliasDisposedInBlock(
+        return IsAliasOwnershipTransferredInBlock(
             containingBlock,
             variableName,
             declarationStart,
             (aliasName, aliasStart) => AliasIsDirectlyDisposed(containingBlock, aliasName, aliasStart));
     }
 
-    private static bool IsAliasDisposedInBlock(
+    private static bool IsAliasOwnershipTransferredInBlock(
         BlockSyntax containingBlock,
         string variableName,
         int declarationStart,
-        System.Func<string, int, bool> aliasIsDisposed)
+        System.Func<string, int, bool> aliasTransfersOwnership)
     {
         foreach (var alias in containingBlock.Statements
             .OfType<LocalDeclarationStatementSyntax>()
@@ -439,7 +439,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                     alias.SpanStart)))
         {
             var aliasName = alias.Identifier.ValueText;
-            if (aliasIsDisposed(aliasName, alias.SpanStart))
+            if (aliasTransfersOwnership(aliasName, alias.SpanStart))
             {
                 return true;
             }
@@ -465,7 +465,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                     assignment.SpanStart)))
         {
             var aliasName = ((IdentifierNameSyntax)aliasAssignment.Left).Identifier.ValueText;
-            if (aliasIsDisposed(aliasName, aliasAssignment.SpanStart))
+            if (aliasTransfersOwnership(aliasName, aliasAssignment.SpanStart))
             {
                 return true;
             }
@@ -510,7 +510,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                 .Any(invocation => invocation.SpanStart > aliasStart &&
                     IsDisposeInvocation(invocation, aliasName) &&
                     !IsVariableReassignedBetween(containingBlock, aliasName, aliasStart, invocation.SpanStart))) ||
-            IsAliasDisposedInBlock(
+            IsAliasOwnershipTransferredInBlock(
                 containingBlock,
                 aliasName,
                 aliasStart,
@@ -534,12 +534,27 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
 
     private static bool IsOwnedByUsingStatement(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
+        return AliasIsOwnedByUsingStatement(containingBlock, variableName, declarationStart);
+    }
+
+    private static bool AliasIsOwnedByUsingStatement(
+        BlockSyntax containingBlock,
+        string aliasName,
+        int aliasStart)
+    {
         return containingBlock
             .DescendantNodes()
             .OfType<UsingStatementSyntax>()
-            .Any(usingStatement => usingStatement.Expression is IdentifierNameSyntax identifier &&
-                identifier.Identifier.ValueText == variableName &&
-                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, usingStatement.SpanStart));
+            .Any(usingStatement => usingStatement.SpanStart > aliasStart &&
+                usingStatement.Expression is IdentifierNameSyntax identifier &&
+                identifier.Identifier.ValueText == aliasName &&
+                !IsVariableReassignedBetween(containingBlock, aliasName, aliasStart, usingStatement.SpanStart)) ||
+            IsAliasOwnershipTransferredInBlock(
+                containingBlock,
+                aliasName,
+                aliasStart,
+                (nestedAliasName, nestedAliasStart) =>
+                    AliasIsOwnedByUsingStatement(containingBlock, nestedAliasName, nestedAliasStart));
     }
 
     private static bool IsOwnedByUsingDeclaration(BlockSyntax containingBlock, string variableName, int declarationStart)
