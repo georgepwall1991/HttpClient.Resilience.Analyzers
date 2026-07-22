@@ -31,6 +31,67 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
         Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
     }
 
+    [Fact]
+    public async Task ReportsDiagnostic_WhenTaskWhenAllFansOutHttpCallsThroughQuerySyntax()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(HttpClient client, IEnumerable<string> urls, CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(
+                        from url in urls
+                        select client.GetAsync(url, cancellationToken));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenQuerySyntaxUsesCustomSelectPattern()
+    {
+        const string source = """
+            using System;
+            using System.Collections.Generic;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(HttpClient client, CustomSource urls, CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(
+                        from url in urls
+                        select client.GetAsync(url, cancellationToken));
+                }
+            }
+
+            public sealed class CustomSource
+            {
+                public IEnumerable<TResult> Select<TResult>(Func<string, TResult> selector)
+                {
+                    return new[] { selector("/one") };
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
     [Theory]
     [InlineData("DeleteFromJsonAsync")]
     [InlineData("GetFromJsonAsync")]
