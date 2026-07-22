@@ -173,7 +173,7 @@ if ($releaseDocumentation -match '(?i)\bpreview release\b') {
     throw 'docs/releasing.md must describe stable releases only.'
 }
 
-Assert-Contains 'docs\releasing.md' '(?m)^## Stable Release$' 'docs/releasing.md must document the stable release process.'
+Assert-Contains 'docs\releasing.md' '(?m)^## Stable Release\r?$' 'docs/releasing.md must document the stable release process.'
 
 Assert-Contains '.gitattributes' '\*\s+text=auto\s+eol=crlf' '.gitattributes must normalize text files to CRLF.'
 Assert-Contains '.github\CODEOWNERS' '@georgepwall1991' 'CODEOWNERS must include the repository owner.'
