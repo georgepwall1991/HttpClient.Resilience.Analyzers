@@ -132,6 +132,10 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
             ContainingRegistrationStatementConfiguresBaseAddress(
                 registration.Invocation,
                 compilation,
+                cancellationToken) ||
+            FollowingBuilderLocalConfiguresBaseAddress(
+                registration.Invocation,
+                semanticModel,
                 cancellationToken);
     }
 
@@ -179,6 +183,54 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
 
         var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
         return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkConfigureHttpClientMethod);
+    }
+
+    private static bool FollowingBuilderLocalConfiguresBaseAddress(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (invocation.FirstAncestorOrSelf<VariableDeclaratorSyntax>() is not { Initializer: { } initializer } declarator ||
+            !initializer.Value.Span.Contains(invocation.Span) ||
+            declarator.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>() is not { Parent: BlockSyntax block } declaration)
+        {
+            return false;
+        }
+
+        var localName = declarator.Identifier.ValueText;
+        var declarationIndex = block.Statements.IndexOf(declaration);
+        for (var index = declarationIndex + 1; index < block.Statements.Count; index++)
+        {
+            var statement = block.Statements[index];
+            if (StatementReassignsLocal(statement, localName))
+            {
+                return false;
+            }
+
+            if (statement.DescendantNodes()
+                .OfType<InvocationExpressionSyntax>()
+                .Any(candidate => candidate.Expression is MemberAccessExpressionSyntax
+                {
+                    Expression: IdentifierNameSyntax receiver,
+                    Name.Identifier.ValueText: "ConfigureHttpClient"
+                } &&
+                    receiver.Identifier.ValueText == localName &&
+                    IsFrameworkConfigureHttpClientInvocation(candidate, semanticModel, cancellationToken) &&
+                    InvocationArgumentsConfigureBaseAddress(candidate, semanticModel, cancellationToken)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool StatementReassignsLocal(StatementSyntax statement, string localName)
+    {
+        return statement.DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => assignment.Left is IdentifierNameSyntax identifier &&
+                identifier.Identifier.ValueText == localName);
     }
 
     private static bool IsFrameworkConfigureHttpClientMethod(IMethodSymbol method)

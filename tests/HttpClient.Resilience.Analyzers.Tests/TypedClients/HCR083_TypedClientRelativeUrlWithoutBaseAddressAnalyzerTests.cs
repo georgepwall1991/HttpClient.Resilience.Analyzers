@@ -273,6 +273,61 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenBaseAddressIsConfiguredThroughBuilderLocal()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    var builder = services.AddHttpClient<PaymentsClient>();
+                    builder.ConfigureHttpClient(client =>
+                        client.BaseAddress = new Uri("https://api.example.com"));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+                public Task<string> SendAsync(HttpClient client)
+                {
+                    return client.GetStringAsync("/payments");
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+
+                public static IHttpClientBuilder ConfigureHttpClient(
+                    this IHttpClientBuilder builder,
+                    Action<HttpClient> configureClient)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenConfigureHttpClientIsCustomExtension()
     {
         const string source = """
