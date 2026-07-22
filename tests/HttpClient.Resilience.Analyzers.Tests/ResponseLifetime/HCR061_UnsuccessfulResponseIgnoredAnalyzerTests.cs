@@ -80,6 +80,39 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenCustomEnsureSuccessExtensionIsCalled()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class CustomExtensions
+            {
+                public static void EnsureSuccessStatusCode(
+                    this global::System.Net.Http.HttpResponseMessage response,
+                    int marker)
+                {
+                }
+            }
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(global::System.Net.Http.HttpClient client)
+                {
+                    var response = await client.GetAsync("https://example.com");
+                    response.EnsureSuccessStatusCode(42);
+                    return await response.Content.ReadAsStringAsync();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR061, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenIsSuccessStatusCodeIsCheckedBeforeContentRead()
     {
         const string source = """
