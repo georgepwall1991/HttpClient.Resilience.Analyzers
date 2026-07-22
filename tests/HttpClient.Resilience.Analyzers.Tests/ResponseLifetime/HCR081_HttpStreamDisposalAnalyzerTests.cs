@@ -365,6 +365,9 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
             fixedSource,
             StringComparison.Ordinal);
         Assert.DoesNotContain("Stream stream;", fixedSource, StringComparison.Ordinal);
+        Assert.Equal(
+            fixedSource.IndexOf("stream = await response.Content.ReadAsStreamAsync", StringComparison.Ordinal),
+            fixedSource.LastIndexOf("stream = await response.Content.ReadAsStreamAsync", StringComparison.Ordinal));
     }
 
     [Fact]
