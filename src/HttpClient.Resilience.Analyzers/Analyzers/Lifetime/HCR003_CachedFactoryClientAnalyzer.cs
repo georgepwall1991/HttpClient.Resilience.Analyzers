@@ -341,6 +341,10 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
                 GetSemanticModel(compilation, root.SyntaxTree),
                 cancellationToken))
             .Where(registration => registration.Kind == ServiceRegistrationKind.Singleton)
+            .Where(registration => IsFrameworkServiceCollectionRegistration(
+                registration,
+                compilation,
+                cancellationToken))
             .SelectMany(registration => new[]
             {
                 registration.ServiceTypeName,
@@ -349,6 +353,29 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             .Where(typeName => typeName is not null)
             .Select(typeName => NormalizeTypeName(typeName!))
             .ToArray();
+    }
+
+    private static bool IsFrameworkServiceCollectionRegistration(
+        ServiceRegistrationModel registration,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var semanticModel = GetSemanticModel(compilation, registration.Invocation.SyntaxTree);
+        var symbolInfo = semanticModel.GetSymbolInfo(registration.Invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsFrameworkServiceCollectionRegistration(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkServiceCollectionRegistration);
+    }
+
+    private static bool IsFrameworkServiceCollectionRegistration(IMethodSymbol method)
+    {
+        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
+        return containingNamespace.IsGlobalNamespace ||
+            containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
     }
 
 #pragma warning disable RS1030 // HCR003 performs compilation-wide singleton matching and needs cross-tree semantic checks.

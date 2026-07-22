@@ -990,4 +990,53 @@ public sealed class HCR003_CachedFactoryClientAnalyzerTests
 
         Assert.Empty(diagnostics);
     }
+
+    [Fact]
+    public async Task DoesNotReport_WhenSingletonRegistrationMethodIsOwnedByCustomNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+            using Custom.DependencyInjection;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton<ClientRunner>();
+                }
+            }
+
+            public sealed class ClientRunner
+            {
+                private HttpClient _client = null!;
+
+                public ClientRunner(IHttpClientFactory factory)
+                {
+                    _client = factory.CreateClient("github");
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            namespace Custom.DependencyInjection
+            {
+                public static class ServiceCollectionExtensions
+                {
+                    public static global::IServiceCollection AddSingleton<TService>(
+                        this global::IServiceCollection services) => services;
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
 }
