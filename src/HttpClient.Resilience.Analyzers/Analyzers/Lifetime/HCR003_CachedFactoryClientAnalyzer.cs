@@ -29,7 +29,10 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
         var roots = context.Compilation.SyntaxTrees
             .Select(tree => tree.GetRoot(context.CancellationToken))
             .ToArray();
-        var singletonTypes = GetKnownSingletonTypes(roots);
+        var singletonTypes = GetKnownSingletonTypes(
+            roots,
+            context.Compilation,
+            context.CancellationToken);
 
         context.RegisterSyntaxNodeAction(
             nodeContext => AnalyzeAssignment(nodeContext, singletonTypes),
@@ -327,10 +330,16 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
         return expression;
     }
 
-    private static IReadOnlyCollection<string> GetKnownSingletonTypes(IEnumerable<SyntaxNode> roots)
+    private static IReadOnlyCollection<string> GetKnownSingletonTypes(
+        IEnumerable<SyntaxNode> roots,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
         return roots
-            .SelectMany(ServiceRegistrationCollector.Collect)
+            .SelectMany(root => ServiceRegistrationCollector.Collect(
+                root,
+                GetSemanticModel(compilation, root.SyntaxTree),
+                cancellationToken))
             .Where(registration => registration.Kind == ServiceRegistrationKind.Singleton)
             .SelectMany(registration => new[]
             {
@@ -341,6 +350,13 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             .Select(typeName => NormalizeTypeName(typeName!))
             .ToArray();
     }
+
+#pragma warning disable RS1030 // HCR003 performs compilation-wide singleton matching and needs cross-tree semantic checks.
+    private static SemanticModel GetSemanticModel(Compilation compilation, SyntaxTree syntaxTree)
+    {
+        return compilation.GetSemanticModel(syntaxTree);
+    }
+#pragma warning restore RS1030
 
     private static bool IsLongLivedField(IFieldSymbol field, IReadOnlyCollection<string> singletonTypes)
     {
