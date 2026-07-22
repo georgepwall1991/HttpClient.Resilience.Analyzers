@@ -5,7 +5,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>HttpClient.Resilience.Analyzers</PackageId>
-    <Version>0.1.112</Version>
+    <Version>0.1.113</Version>
     <Authors>HttpClient.Resilience.Analyzers contributors</Authors>
     <Description>Roslyn analyzers for .NET HttpClient, IHttpClientFactory, and Microsoft.Extensions.Http.Resilience. Catches socket exhaustion risks, DNS-stale clients, typed-client lifetime bugs, unsafe retries, handler scope leaks, response disposal mistakes, and fragile outbound HTTP patterns at compile time.</Description>
     <PackageTags>httpclient;ihttpclientfactory;resilience;polly;dotnet;csharp;roslyn;analyzer;analyser;aspnetcore;static-analysis;socket-exhaustion;typed-client;retry;resilience-pipeline</PackageTags>
@@ -15,7 +15,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Normalize parentheses and null-forgiving operators across HCR060 ownership evidence.</PackageReleaseNotes>
+    <PackageReleaseNotes>Detect HCR064 non-canceling token sentinels passed through ordered local aliases.</PackageReleaseNotes>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
