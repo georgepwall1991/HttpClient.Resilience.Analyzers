@@ -265,7 +265,13 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         } &&
             ContentReadMethodNames.Contains(methodName.Identifier.ValueText, System.StringComparer.Ordinal) &&
             InvocationTargetsHttpContentApi(invocation, semanticModel, cancellationToken) &&
-            (IsResponseContentAccess(contentReceiver, responseLocal, semanticModel, cancellationToken) ||
+            (IsResponseContentAccess(
+                    contentReceiver,
+                    responseLocal,
+                    originStart,
+                    invocation.SpanStart,
+                    semanticModel,
+                    cancellationToken) ||
                 IsResponseContentAlias(
                     contentReceiver,
                     responseLocal,
@@ -278,17 +284,73 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
     private static bool IsResponseContentAccess(
         ExpressionSyntax expression,
         ILocalSymbol responseLocal,
+        int originStart,
+        int accessStart,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
         return expression is MemberAccessExpressionSyntax
         {
             Name.Identifier.ValueText: "Content",
-            Expression: IdentifierNameSyntax responseIdentifier
+            Expression: ExpressionSyntax responseExpression
         } &&
-            SymbolEqualityComparer.Default.Equals(
-                semanticModel.GetSymbolInfo(responseIdentifier, cancellationToken).Symbol,
-                responseLocal);
+            IsResponseReference(
+                responseExpression,
+                responseLocal,
+                originStart,
+                accessStart,
+                semanticModel,
+                cancellationToken);
+    }
+
+    private static bool IsResponseReference(
+        ExpressionSyntax expression,
+        ILocalSymbol responseLocal,
+        int originStart,
+        int accessStart,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        expression = UnwrapParentheses(expression);
+        if (expression is not IdentifierNameSyntax responseIdentifier)
+        {
+            return false;
+        }
+
+        var responseSymbol = semanticModel.GetSymbolInfo(responseIdentifier, cancellationToken).Symbol;
+        if (SymbolEqualityComparer.Default.Equals(responseSymbol, responseLocal))
+        {
+            return true;
+        }
+
+        if (responseSymbol is not ILocalSymbol aliasLocal ||
+            expression.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
+        {
+            return false;
+        }
+
+        var aliasDeclaration = block
+            .DescendantNodes()
+            .OfType<VariableDeclaratorSyntax>()
+            .FirstOrDefault(variable => variable.SpanStart > originStart &&
+                variable.SpanStart < accessStart &&
+                variable.Initializer?.Value is { } initializer &&
+                UnwrapParentheses(initializer) is IdentifierNameSyntax sourceIdentifier &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetSymbolInfo(sourceIdentifier, cancellationToken).Symbol,
+                    responseLocal) &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetDeclaredSymbol(variable, cancellationToken),
+                    aliasLocal));
+
+        return aliasDeclaration is not null &&
+            !LocalIsReassignedBetween(
+                block,
+                aliasLocal,
+                aliasDeclaration.SpanStart,
+                accessStart,
+                semanticModel,
+                cancellationToken);
     }
 
     private static bool IsResponseContentAlias(
@@ -351,7 +413,13 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         }
 
         aliasValue = UnwrapParentheses(aliasValue);
-        return IsResponseContentAccess(aliasValue, responseLocal, semanticModel, cancellationToken) ||
+        return IsResponseContentAccess(
+                aliasValue,
+                responseLocal,
+                originStart,
+                aliasOrigin.SpanStart,
+                semanticModel,
+                cancellationToken) ||
             IsResponseContentAlias(
                 aliasValue,
                 responseLocal,
@@ -406,11 +474,13 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
                 InvocationExpressionSyntax invocation => IsEnsureSuccessStatusCodeCall(
                     invocation,
                     responseLocal,
+                    origin.SpanStart,
                     semanticModel,
                     cancellationToken),
                 MemberAccessExpressionSyntax memberAccess => IsSuccessStatusCheck(
                     memberAccess,
                     responseLocal,
+                    origin.SpanStart,
                     semanticModel,
                     cancellationToken),
                 _ => false
@@ -420,18 +490,23 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
     private static bool IsEnsureSuccessStatusCodeCall(
         InvocationExpressionSyntax invocation,
         ILocalSymbol responseLocal,
+        int originStart,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
         return invocation.Expression is MemberAccessExpressionSyntax
         {
             Name.Identifier.ValueText: "EnsureSuccessStatusCode",
-            Expression: IdentifierNameSyntax responseIdentifier
+            Expression: ExpressionSyntax responseExpression
         } &&
             InvocationTargetsHttpResponseMessage(invocation, semanticModel, cancellationToken) &&
-            SymbolEqualityComparer.Default.Equals(
-                semanticModel.GetSymbolInfo(responseIdentifier, cancellationToken).Symbol,
-                responseLocal);
+            IsResponseReference(
+                responseExpression,
+                responseLocal,
+                originStart,
+                invocation.SpanStart,
+                semanticModel,
+                cancellationToken);
     }
 
     private static bool InvocationTargetsHttpResponseMessage(
@@ -459,14 +534,18 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
     private static bool IsSuccessStatusCheck(
         MemberAccessExpressionSyntax memberAccess,
         ILocalSymbol responseLocal,
+        int originStart,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
         return memberAccess.Name.Identifier.ValueText is "IsSuccessStatusCode" or "StatusCode" &&
-            memberAccess.Expression is IdentifierNameSyntax responseIdentifier &&
-            SymbolEqualityComparer.Default.Equals(
-                semanticModel.GetSymbolInfo(responseIdentifier, cancellationToken).Symbol,
-                responseLocal);
+            IsResponseReference(
+                memberAccess.Expression,
+                responseLocal,
+                originStart,
+                memberAccess.SpanStart,
+                semanticModel,
+                cancellationToken);
     }
 
     private static bool LocalIsReassignedBetween(
