@@ -9,10 +9,26 @@ internal static class ServiceRegistrationCollector
 {
     public static IReadOnlyList<ServiceRegistrationModel> Collect(SyntaxNode root)
     {
+        return CollectCore(root, semanticModel: null, default);
+    }
+
+    public static IReadOnlyList<ServiceRegistrationModel> Collect(
+        SyntaxNode root,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return CollectCore(root, semanticModel, cancellationToken);
+    }
+
+    private static IReadOnlyList<ServiceRegistrationModel> CollectCore(
+        SyntaxNode root,
+        SemanticModel? semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
         return root
             .DescendantNodes()
             .OfType<InvocationExpressionSyntax>()
-            .Select(TryCreate)
+            .Select(invocation => TryCreate(invocation, semanticModel, cancellationToken))
             .Where(registration => registration is not null)
             .Select(registration => registration!)
             .ToArray();
@@ -41,14 +57,20 @@ internal static class ServiceRegistrationCollector
         return typeNames;
     }
 
-    private static ServiceRegistrationModel? TryCreate(InvocationExpressionSyntax invocation)
+    private static ServiceRegistrationModel? TryCreate(
+        InvocationExpressionSyntax invocation,
+        SemanticModel? semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
         {
             return null;
         }
 
-        if (!IsLikelyServiceCollectionReceiver(memberAccess.Expression))
+        if (!IsLikelyServiceCollectionReceiver(
+                memberAccess.Expression,
+                semanticModel,
+                cancellationToken))
         {
             return null;
         }
@@ -188,8 +210,17 @@ internal static class ServiceRegistrationCollector
         };
     }
 
-    private static bool IsLikelyServiceCollectionReceiver(ExpressionSyntax receiver)
+    private static bool IsLikelyServiceCollectionReceiver(
+        ExpressionSyntax receiver,
+        SemanticModel? semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
+        if (semanticModel?.GetTypeInfo(receiver, cancellationToken).Type is { } resolvedType &&
+            resolvedType is not IErrorTypeSymbol)
+        {
+            return IsServiceCollectionType(resolvedType);
+        }
+
         return receiver switch
         {
             IdentifierNameSyntax identifier => IdentifierLooksLikeServiceCollection(identifier),
@@ -312,6 +343,13 @@ internal static class ServiceRegistrationCollector
             AliasQualifiedNameSyntax aliasQualified => aliasQualified.ToString() == "global::Microsoft.Extensions.DependencyInjection.IServiceCollection",
             _ => false
         };
+    }
+
+    private static bool IsServiceCollectionType(ITypeSymbol type)
+    {
+        return type.Name == "IServiceCollection" &&
+            (type.ContainingNamespace.IsGlobalNamespace ||
+                type.ContainingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection");
     }
 
     private static bool IsServiceCollectionVariableName(string name)

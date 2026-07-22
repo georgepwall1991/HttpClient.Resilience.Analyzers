@@ -42,6 +42,42 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenServiceCollectionParameterUsesAlias()
+    {
+        const string source = """
+            using Services = global::IServiceCollection;
+
+            public static class Registrations
+            {
+                public static void Configure(Services services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddTransient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR005, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenOnlyTypedClientRegistrationExists()
     {
         const string source = """
