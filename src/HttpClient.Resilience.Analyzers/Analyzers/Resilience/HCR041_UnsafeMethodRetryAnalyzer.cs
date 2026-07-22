@@ -228,15 +228,28 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
-        var predicateExpression = assignment.Right switch
-        {
-            ParenthesizedLambdaExpressionSyntax { Body: ExpressionSyntax expression } => expression,
-            SimpleLambdaExpressionSyntax { Body: ExpressionSyntax expression } => expression,
-            _ => null
-        };
+        var predicateExpression = GetPredicateExpression(assignment.Right);
 
         return predicateExpression is not null &&
             IsSafeOnlyPredicateExpression(predicateExpression, semanticModel, cancellationToken);
+    }
+
+    private static ExpressionSyntax? GetPredicateExpression(ExpressionSyntax expression)
+    {
+        if (expression is not LambdaExpressionSyntax lambda)
+        {
+            return null;
+        }
+
+        if (lambda.Body is ExpressionSyntax expressionBody)
+        {
+            return expressionBody;
+        }
+
+        return lambda.Body is BlockSyntax { Statements.Count: 1 } block &&
+            block.Statements[0] is ReturnStatementSyntax { Expression: { } returnExpression }
+                ? returnExpression
+                : null;
     }
 
     private static bool IsSafeOnlyPredicateExpression(
