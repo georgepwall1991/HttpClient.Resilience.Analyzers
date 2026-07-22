@@ -405,6 +405,60 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzerTests
         Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
     }
 
+    [Fact]
+    public async Task ReportsDiagnostic_WhenStreamingJsonReadUsesRelativeUrl()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Net.Http;
+            using System.Net.Http.Json;
+            using System.Threading;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient client)
+            {
+                public IAsyncEnumerable<Order?> Stream(CancellationToken cancellationToken)
+                {
+                    return client.GetFromJsonAsAsyncEnumerable<Order>(
+                        "/payments",
+                        cancellationToken: cancellationToken);
+                }
+            }
+
+            public sealed class Order
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
+    }
+
     [Theory]
     [InlineData("PatchAsJsonAsync")]
     [InlineData("PostAsJsonAsync")]
