@@ -83,7 +83,10 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                 invocation,
                 context.SemanticModel,
                 context.CancellationToken) ||
-            HasUnsafeMethodRetryGuard(invocation))
+            HasUnsafeMethodRetryGuard(
+                invocation,
+                context.SemanticModel,
+                context.CancellationToken))
         {
             return;
         }
@@ -147,21 +150,54 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
     }
 
-    private static bool HasUnsafeMethodRetryGuard(InvocationExpressionSyntax invocation)
+    private static bool HasUnsafeMethodRetryGuard(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
-        return ContainsDisableForUnsafeHttpMethods(invocation) ||
+        return ContainsDisableForUnsafeHttpMethods(invocation, semanticModel, cancellationToken) ||
             ContainsSafeOnlyRetryPredicate(invocation);
     }
 
-    private static bool ContainsDisableForUnsafeHttpMethods(InvocationExpressionSyntax invocation)
+    private static bool ContainsDisableForUnsafeHttpMethods(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         return invocation
             .DescendantNodes()
             .OfType<InvocationExpressionSyntax>()
-            .Any(child => child.Expression is MemberAccessExpressionSyntax
+            .Any(child => IsDisableForUnsafeHttpMethodsInvocation(child, semanticModel, cancellationToken));
+    }
+
+    private static bool IsDisableForUnsafeHttpMethodsInvocation(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax
             {
                 Name.Identifier.ValueText: "DisableForUnsafeHttpMethods"
-            });
+            })
+        {
+            return false;
+        }
+
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsFrameworkUnsafeMethodRetryGuard(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkUnsafeMethodRetryGuard);
+    }
+
+    private static bool IsFrameworkUnsafeMethodRetryGuard(IMethodSymbol method)
+    {
+        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
+        return containingNamespace.IsGlobalNamespace ||
+            containingNamespace.ToDisplayString() == "Microsoft.Extensions.Http.Resilience";
     }
 
     private static bool ContainsSafeOnlyRetryPredicate(InvocationExpressionSyntax invocation)
