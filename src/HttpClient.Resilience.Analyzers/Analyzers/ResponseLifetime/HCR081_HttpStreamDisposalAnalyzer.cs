@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Collections.Generic;
 using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.KnownSymbols;
@@ -316,22 +317,28 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
 
     private static bool IsDirectlyDisposedInBlock(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
+        var aliases = GetVisibleStreamAliases(containingBlock, variableName, declarationStart);
+
         return containingBlock.Statements
             .OfType<ExpressionStatementSyntax>()
-            .Any(statement => IsDisposeInvocation(statement.Expression, variableName) &&
-                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, statement.SpanStart));
+            .Any(statement => aliases.Any(alias =>
+                AliasIsValidAt(containingBlock, alias, statement.SpanStart) &&
+                IsDisposeInvocation(statement.Expression, alias.Key)));
     }
 
     private static bool IsDisposedInFinally(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
+        var aliases = GetVisibleStreamAliases(containingBlock, variableName, declarationStart);
+
         return containingBlock
             .DescendantNodes()
             .OfType<FinallyClauseSyntax>()
             .Any(finallyClause => finallyClause.Block
                 .DescendantNodes()
                 .OfType<InvocationExpressionSyntax>()
-                .Any(invocation => IsDisposeInvocation(invocation, variableName) &&
-                    !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, invocation.SpanStart)));
+                .Any(invocation => aliases.Any(alias =>
+                    AliasIsValidAt(containingBlock, alias, invocation.SpanStart) &&
+                    IsDisposeInvocation(invocation, alias.Key))));
     }
 
     private static bool IsDisposeInvocation(ExpressionSyntax expression, string variableName)
@@ -354,23 +361,80 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
 
     private static bool IsOwnedByUsingStatement(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
+        var aliases = GetVisibleStreamAliases(containingBlock, variableName, declarationStart);
+
         return containingBlock
             .DescendantNodes()
             .OfType<UsingStatementSyntax>()
             .Any(usingStatement => usingStatement.Expression is IdentifierNameSyntax identifier &&
-                identifier.Identifier.ValueText == variableName &&
-                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, usingStatement.SpanStart));
+                aliases.TryGetValue(identifier.Identifier.ValueText, out var aliasStart) &&
+                AliasIsValidAt(
+                    containingBlock,
+                    new KeyValuePair<string, int>(identifier.Identifier.ValueText, aliasStart),
+                    usingStatement.SpanStart));
     }
 
     private static bool IsOwnedByUsingDeclaration(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
+        var aliases = GetVisibleStreamAliases(containingBlock, variableName, declarationStart);
+
         return containingBlock.Statements
             .OfType<LocalDeclarationStatementSyntax>()
             .Any(statement => statement.UsingKeyword.IsKind(SyntaxKind.UsingKeyword) &&
                 statement.SpanStart > declarationStart &&
-                statement.Declaration.Variables.Any(variable => variable.Initializer?.Value is { } initializer &&
-                    IsDirectVariableReference(initializer, variableName)) &&
-                !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, statement.SpanStart));
+                statement.Declaration.Variables.Any(variable =>
+                    aliases.TryGetValue(variable.Identifier.ValueText, out var aliasStart) &&
+                    AliasIsValidAt(
+                        containingBlock,
+                        new KeyValuePair<string, int>(variable.Identifier.ValueText, aliasStart),
+                        statement.Span.End)));
+    }
+
+    private static IReadOnlyDictionary<string, int> GetVisibleStreamAliases(
+        BlockSyntax containingBlock,
+        string variableName,
+        int ownershipStart)
+    {
+        var aliases = new Dictionary<string, int>(System.StringComparer.Ordinal)
+        {
+            [variableName] = ownershipStart
+        };
+
+        foreach (var statement in containingBlock.Statements
+            .OfType<LocalDeclarationStatementSyntax>()
+            .Where(statement => statement.SpanStart > ownershipStart))
+        {
+            foreach (var variable in statement.Declaration.Variables)
+            {
+                if (variable.Initializer?.Value is not { } initializer)
+                {
+                    continue;
+                }
+
+                initializer = UnwrapParentheses(initializer);
+                if (initializer is IdentifierNameSyntax source &&
+                    aliases.TryGetValue(source.Identifier.ValueText, out var sourceStart) &&
+                    !IsVariableReassignedBetween(
+                        containingBlock,
+                        source.Identifier.ValueText,
+                        sourceStart,
+                        variable.SpanStart))
+                {
+                    aliases[variable.Identifier.ValueText] = variable.SpanStart;
+                }
+            }
+        }
+
+        return aliases;
+    }
+
+    private static bool AliasIsValidAt(
+        BlockSyntax containingBlock,
+        KeyValuePair<string, int> alias,
+        int evidenceStart)
+    {
+        return alias.Value < evidenceStart &&
+            !IsVariableReassignedBetween(containingBlock, alias.Key, alias.Value, evidenceStart);
     }
 
     private static bool TransfersStreamOwnership(
@@ -465,14 +529,6 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
             .Select(assignment => assignment.Right)
             .OfType<IdentifierNameSyntax>()
             .Any(identifier => identifier.Identifier.ValueText == variableName) == true;
-    }
-
-    private static bool IsDirectVariableReference(ExpressionSyntax expression, string variableName)
-    {
-        expression = UnwrapParentheses(expression);
-
-        return expression is IdentifierNameSyntax identifier &&
-            identifier.Identifier.ValueText == variableName;
     }
 
     private static bool IsVariableReassignedBetween(
