@@ -145,6 +145,34 @@ public sealed class HCR062_DefaultRequestHeadersMutationAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenCustomExtensionNamedAddTargetsRealDefaultHeaders()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Net.Http.Headers;
+
+            public static class CustomHeaderExtensions
+            {
+                public static void Add(this HttpRequestHeaders headers, int marker)
+                {
+                }
+            }
+
+            public sealed class Client
+            {
+                public void Configure(HttpClient client)
+                {
+                    client.DefaultRequestHeaders.Add(42);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenThisQualifiedHttpClientFieldHeadersAreMutated()
     {
         const string source = """

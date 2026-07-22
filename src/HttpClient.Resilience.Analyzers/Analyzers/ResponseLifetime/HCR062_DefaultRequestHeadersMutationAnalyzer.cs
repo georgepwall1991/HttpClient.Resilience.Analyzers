@@ -38,6 +38,7 @@ public sealed class HCR062_DefaultRequestHeadersMutationAnalyzer : DiagnosticAna
         var invocation = (InvocationExpressionSyntax)context.Node;
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
             !MutatingHeaderMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) ||
+            !InvocationTargetsSystemNetHttpHeaders(invocation, context.SemanticModel, context.CancellationToken) ||
             !ExpressionContainsDefaultRequestHeadersAccess(memberAccess.Expression, context.SemanticModel, context.CancellationToken))
         {
             return;
@@ -46,6 +47,28 @@ public sealed class HCR062_DefaultRequestHeadersMutationAnalyzer : DiagnosticAna
         context.ReportDiagnostic(Diagnostic.Create(
             DiagnosticDescriptors.HCR062,
             memberAccess.Name.GetLocation()));
+    }
+
+    private static bool InvocationTargetsSystemNetHttpHeaders(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return MethodTargetsSystemNetHttpHeaders(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(MethodTargetsSystemNetHttpHeaders);
+    }
+
+    private static bool MethodTargetsSystemNetHttpHeaders(IMethodSymbol method)
+    {
+        var originalMethod = method.ReducedFrom ?? method;
+        return originalMethod.ContainingAssembly.Name == "System.Net.Http" &&
+            originalMethod.ContainingNamespace.ToDisplayString() == "System.Net.Http.Headers";
     }
 
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context)
