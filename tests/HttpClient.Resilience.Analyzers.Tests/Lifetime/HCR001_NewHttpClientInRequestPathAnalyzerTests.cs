@@ -116,6 +116,32 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenNullForgivingMinimalApiEndpointCreatesHttpClient()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            var app = WebApplication.Create();
+
+            app!.MapPost("/payments", () => new HttpClient());
+
+            public sealed class WebApplication
+            {
+                public static WebApplication Create() => new();
+                public void MapPost(string pattern, Func<HttpClient> handler)
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenMinimalApiRouteGroupEndpointCreatesHttpClient()
     {
         const string source = """
@@ -163,6 +189,38 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
             {
                 return new HttpClient();
             });
+
+            public sealed class WebApplication
+            {
+                public static WebApplication Create() => new();
+                public RouteGroupBuilder MapGroup(string prefix) => new();
+            }
+
+            public sealed class RouteGroupBuilder
+            {
+                public void MapPost(string pattern, Func<HttpClient> handler)
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenNullForgivingRouteGroupEndpointCreatesHttpClient()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            var app = WebApplication.Create();
+            var group = app.MapGroup("/api");
+
+            group!.MapPost("/payments", () => new HttpClient());
 
             public sealed class WebApplication
             {
