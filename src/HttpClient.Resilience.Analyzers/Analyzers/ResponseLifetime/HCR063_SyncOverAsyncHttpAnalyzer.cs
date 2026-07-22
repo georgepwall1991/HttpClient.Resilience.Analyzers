@@ -97,6 +97,19 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
+        return ExpressionIsHttpAsyncOperation(
+            expression,
+            semanticModel,
+            cancellationToken,
+            ImmutableHashSet.Create<ISymbol>(SymbolEqualityComparer.Default));
+    }
+
+    private static bool ExpressionIsHttpAsyncOperation(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        ImmutableHashSet<ISymbol> visitedLocals)
+    {
         expression = UnwrapParentheses(expression);
 
         if (expression is InvocationExpressionSyntax invocation)
@@ -107,11 +120,16 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
                 ExpressionIsHttpAsyncOperation(
                     configureAwaitAccess.Expression,
                     semanticModel,
-                    cancellationToken);
+                    cancellationToken,
+                    visitedLocals);
         }
 
         return expression is IdentifierNameSyntax identifier &&
-            LatestLocalValueIsHttpAsyncOperation(identifier, semanticModel, cancellationToken);
+            LatestLocalValueIsHttpAsyncOperation(
+                identifier,
+                semanticModel,
+                cancellationToken,
+                visitedLocals);
     }
 
     private static bool IsFrameworkConfigureAwaitInvocation(
@@ -157,10 +175,12 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
     private static bool LatestLocalValueIsHttpAsyncOperation(
         IdentifierNameSyntax identifier,
         SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
+        System.Threading.CancellationToken cancellationToken,
+        ImmutableHashSet<ISymbol> visitedLocals)
     {
         if (identifier.FirstAncestorOrSelf<BlockSyntax>() is not { } block ||
-            semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is not ILocalSymbol local)
+            semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is not ILocalSymbol local ||
+            visitedLocals.Contains(local))
         {
             return false;
         }
@@ -193,7 +213,11 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
             .FirstOrDefault();
 
         return latestValue is not null &&
-            ExpressionIsHttpAsyncOperation(latestValue, semanticModel, cancellationToken);
+            ExpressionIsHttpAsyncOperation(
+                latestValue,
+                semanticModel,
+                cancellationToken,
+                visitedLocals.Add(local));
     }
 
     private static bool IsHttpAsyncCall(

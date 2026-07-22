@@ -93,6 +93,53 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenHttpTaskAliasResultIsRead()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class Client
+            {
+                public HttpResponseMessage Get(HttpClient client)
+                {
+                    var request = client.GetAsync("https://example.com");
+                    var alias = request;
+                    return alias.Result;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR063, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHttpTaskAliasesFormCycle()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public HttpResponseMessage Get(HttpClient client)
+                {
+                    Task<HttpResponseMessage> request = client.GetAsync("https://example.com");
+                    Task<HttpResponseMessage> alias = request;
+                    request = alias;
+                    return request.Result;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task CodeFix_ReplacesAssignedHttpTaskResultWithAwait()
     {
         const string source = """
