@@ -610,4 +610,54 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzerTests
 
         Assert.Empty(diagnostics);
     }
+
+    [Fact]
+    public async Task DoesNotReport_WhenAddHttpClientMethodIsOwnedByCustomNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+            using Custom.DependencyInjection;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+                public Task<string> SendAsync(HttpClient client)
+                {
+                    return client.GetStringAsync("/payments");
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            namespace Custom.DependencyInjection
+            {
+                public static class HttpClientBuilderExtensions
+                {
+                    public static global::IHttpClientBuilder AddHttpClient<TClient>(
+                        this global::IServiceCollection services)
+                    {
+                        return default!;
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
 }
