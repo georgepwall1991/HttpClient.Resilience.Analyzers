@@ -92,12 +92,28 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
             } memberAccess ||
             invocation.ArgumentList.Arguments.Count == 0 ||
             !IsServiceCollectionReceiver(memberAccess.Expression, semanticModel, cancellationToken) ||
+            !ReturnsHttpClientBuilder(invocation, semanticModel, cancellationToken) ||
             !TryGetStringLiteral(invocation.ArgumentList.Arguments[0].Expression, out name))
         {
             return false;
         }
 
         return !string.IsNullOrWhiteSpace(name);
+    }
+
+    private static bool ReturnsHttpClientBuilder(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsHttpClientBuilderType(method.ReturnType);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(method => IsHttpClientBuilderType(method.ReturnType));
     }
 
     private static bool TryGetNamedClientUsage(
@@ -214,6 +230,14 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
             (type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
                 "global::System.Net.Http.IHttpClientFactory" ||
             type.Name == "IHttpClientFactory" && type.ContainingNamespace.IsGlobalNamespace);
+    }
+
+    private static bool IsHttpClientBuilderType(ITypeSymbol? type)
+    {
+        return type is not null &&
+            (type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                "global::Microsoft.Extensions.DependencyInjection.IHttpClientBuilder" ||
+            type.Name == "IHttpClientBuilder" && type.ContainingNamespace.IsGlobalNamespace);
     }
 
     private static bool SyntacticDeclarationLooksLikeServiceCollection(ISymbol symbol)
