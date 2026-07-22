@@ -310,7 +310,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
                 return true;
             }
 
-            return TryGetRelativeUriCreationArgument(
+            return TryGetRelativeUriExpression(
                 candidate,
                 semanticModel,
                 cancellationToken,
@@ -350,7 +350,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
                 cancellationToken,
                 out var requestUriValue))
             {
-                return TryGetRelativeUriCreationArgument(
+                return TryGetRelativeUriExpression(
                     requestUriValue,
                     semanticModel,
                     cancellationToken,
@@ -386,7 +386,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
                 return true;
             }
 
-            if (TryGetRelativeUriCreationArgument(
+            if (TryGetRelativeUriExpression(
                 constructorCandidate,
                 semanticModel,
                 cancellationToken,
@@ -422,7 +422,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
                     assignment.Left,
                     semanticModel,
                     cancellationToken) ||
-                !TryGetRelativeUriCreationArgument(
+                !TryGetRelativeUriExpression(
                     assignment.Right,
                     semanticModel,
                     cancellationToken,
@@ -510,13 +510,32 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
                 "global::System.Net.Http.HttpRequestMessage";
     }
 
-    private static bool TryGetRelativeUriCreationArgument(
+    private static bool TryGetRelativeUriExpression(
         ExpressionSyntax expression,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken,
         out ExpressionSyntax urlExpression)
     {
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
         urlExpression = expression;
+        if (expression is IdentifierNameSyntax identifier &&
+            TryGetVisibleLocalValue(
+                identifier,
+                semanticModel,
+                cancellationToken,
+                out var localValue))
+        {
+            return TryGetRelativeUriExpression(
+                localValue,
+                semanticModel,
+                cancellationToken,
+                out urlExpression);
+        }
+
         if (expression is not BaseObjectCreationExpressionSyntax uriCreation ||
             uriCreation.ArgumentList is not { Arguments.Count: >= 1 } argumentList ||
             semanticModel.GetTypeInfo(uriCreation, cancellationToken).Type is not { } uriType ||

@@ -158,6 +158,104 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenDirectHttpCallUsesRelativeUriLocal()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient client)
+            {
+                public Task<HttpResponseMessage> SendAsync(CancellationToken cancellationToken)
+                {
+                    var requestUri = new Uri("/payments", UriKind.Relative);
+                    return client.GetAsync(requestUri, cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenRelativeUriLocalIsReassignedBeforeDirectHttpCall()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient client)
+            {
+                public Task<HttpResponseMessage> SendAsync(CancellationToken cancellationToken)
+                {
+                    var requestUri = new Uri("/payments", UriKind.Relative);
+                    requestUri = new Uri("https://api.example.com/payments", UriKind.Absolute);
+                    return client.GetAsync(requestUri, cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenSendAsyncUsesInlineRequestWithRelativeUrl()
     {
         const string source = """
