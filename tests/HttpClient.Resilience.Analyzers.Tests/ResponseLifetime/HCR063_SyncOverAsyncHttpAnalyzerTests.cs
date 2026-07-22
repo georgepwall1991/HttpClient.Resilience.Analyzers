@@ -341,6 +341,100 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_ReplacesConfiguredGetAwaiterGetResultInsideAsyncMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    return client.GetAsync("https://example.com")
+                        .ConfigureAwait(false)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "await client.GetAsync(\"https://example.com\")",
+            fixedSource,
+            StringComparison.Ordinal);
+        Assert.Contains(".ConfigureAwait(false);", fixedSource, StringComparison.Ordinal);
+        Assert.DoesNotContain(".GetAwaiter()", fixedSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenConfiguredHttpTaskLocalBlocks()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class Client
+            {
+                public HttpResponseMessage Get(HttpClient client)
+                {
+                    var request = client.GetAsync("https://example.com");
+                    return request.ConfigureAwait(false).GetAwaiter().GetResult();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR063, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenCustomConfigureAwaitExtensionWrapsHttpTask()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class CustomExtensions
+            {
+                public static CustomAwaitable ConfigureAwait(this Task<HttpResponseMessage> task, int mode)
+                {
+                    return new CustomAwaitable();
+                }
+            }
+
+            public sealed class CustomAwaitable
+            {
+                public CustomAwaiter GetAwaiter() => new CustomAwaiter();
+            }
+
+            public sealed class CustomAwaiter
+            {
+                public HttpResponseMessage GetResult() => new HttpResponseMessage();
+            }
+
+            public sealed class Client
+            {
+                public HttpResponseMessage Get(HttpClient client)
+                {
+                    return client.GetAsync("https://example.com")
+                        .ConfigureAwait(42)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task CodeFix_IsNotOfferedForGetAwaiterGetResultInsideSynchronousMethod()
     {
         const string source = """

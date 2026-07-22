@@ -101,11 +101,57 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
 
         if (expression is InvocationExpressionSyntax invocation)
         {
-            return IsHttpAsyncCall(invocation, semanticModel, cancellationToken);
+            return IsHttpAsyncCall(invocation, semanticModel, cancellationToken) ||
+                IsFrameworkConfigureAwaitInvocation(invocation, semanticModel, cancellationToken) &&
+                invocation.Expression is MemberAccessExpressionSyntax configureAwaitAccess &&
+                ExpressionIsHttpAsyncOperation(
+                    configureAwaitAccess.Expression,
+                    semanticModel,
+                    cancellationToken);
         }
 
         return expression is IdentifierNameSyntax identifier &&
             LatestLocalValueIsHttpAsyncOperation(identifier, semanticModel, cancellationToken);
+    }
+
+    private static bool IsFrameworkConfigureAwaitInvocation(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "ConfigureAwait"
+            })
+        {
+            return false;
+        }
+
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsFrameworkConfigureAwait(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkConfigureAwait);
+    }
+
+    private static bool IsFrameworkConfigureAwait(IMethodSymbol method)
+    {
+        if (method.Name != "ConfigureAwait")
+        {
+            return false;
+        }
+
+        var containingType = (method.ReducedFrom ?? method).ContainingType;
+        var definition = containingType.IsGenericType
+            ? containingType.ConstructedFrom
+            : containingType;
+
+        return definition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) is
+            "global::System.Threading.Tasks.Task" or
+            "global::System.Threading.Tasks.Task<TResult>";
     }
 
     private static bool LatestLocalValueIsHttpAsyncOperation(
