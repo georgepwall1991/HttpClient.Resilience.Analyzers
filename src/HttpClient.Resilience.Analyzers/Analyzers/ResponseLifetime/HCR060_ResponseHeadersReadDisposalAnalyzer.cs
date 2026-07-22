@@ -131,6 +131,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
     {
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
             !IsHttpResponseMethodName(memberAccess.Name.Identifier.ValueText) ||
+            !InvocationTargetsHttpClient(invocation, semanticModel, cancellationToken) ||
             !IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken) ||
             !ReturnsHttpResponseMessage(invocation, semanticModel, cancellationToken))
         {
@@ -142,6 +143,28 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                 argument.Expression,
                 semanticModel,
                 cancellationToken));
+    }
+
+    private static bool InvocationTargetsHttpClient(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return MethodTargetsHttpClient(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(MethodTargetsHttpClient);
+    }
+
+    private static bool MethodTargetsHttpClient(IMethodSymbol method)
+    {
+        return (method.ReducedFrom ?? method).ContainingType
+            .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::System.Net.Http.HttpClient";
     }
 
     private static bool IsHttpResponseMethodName(string methodName)
