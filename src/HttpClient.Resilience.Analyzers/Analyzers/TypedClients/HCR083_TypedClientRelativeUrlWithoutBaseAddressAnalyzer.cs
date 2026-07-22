@@ -124,18 +124,28 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         Compilation compilation,
         System.Threading.CancellationToken cancellationToken)
     {
-        return InvocationArgumentsConfigureBaseAddress(registration.Invocation) ||
+        var semanticModel = GetSemanticModel(compilation, registration.Invocation.SyntaxTree);
+        return InvocationArgumentsConfigureBaseAddress(
+                registration.Invocation,
+                semanticModel,
+                cancellationToken) ||
             ContainingRegistrationStatementConfiguresBaseAddress(
                 registration.Invocation,
                 compilation,
                 cancellationToken);
     }
 
-    private static bool InvocationArgumentsConfigureBaseAddress(InvocationExpressionSyntax invocation)
+    private static bool InvocationArgumentsConfigureBaseAddress(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         return invocation.ArgumentList.Arguments
             .Select(argument => argument.Expression)
-            .Any(ExpressionConfiguresBaseAddress);
+            .Any(expression => ExpressionConfiguresBaseAddress(
+                expression,
+                semanticModel,
+                cancellationToken));
     }
 
     private static bool ContainingRegistrationStatementConfiguresBaseAddress(
@@ -153,7 +163,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
                     Name.Identifier.ValueText: "ConfigureHttpClient"
                 } &&
                     IsFrameworkConfigureHttpClientInvocation(candidate, semanticModel, cancellationToken) &&
-                    InvocationArgumentsConfigureBaseAddress(candidate));
+                    InvocationArgumentsConfigureBaseAddress(candidate, semanticModel, cancellationToken));
     }
 
     private static bool IsFrameworkConfigureHttpClientInvocation(
@@ -178,7 +188,10 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
             containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
     }
 
-    private static bool ExpressionConfiguresBaseAddress(ExpressionSyntax expression)
+    private static bool ExpressionConfiguresBaseAddress(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         var body = expression switch
         {
@@ -193,7 +206,29 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
                 .Any(assignment => assignment.Left is MemberAccessExpressionSyntax
                 {
                     Name.Identifier.ValueText: "BaseAddress"
-                });
+                } memberAccess &&
+                    IsHttpClientBaseAddressProperty(memberAccess, semanticModel, cancellationToken));
+    }
+
+    private static bool IsHttpClientBaseAddressProperty(
+        MemberAccessExpressionSyntax memberAccess,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(memberAccess, cancellationToken);
+        if (symbolInfo.Symbol is ISymbol symbol)
+        {
+            return IsHttpClientBaseAddressProperty(symbol);
+        }
+
+        return symbolInfo.CandidateSymbols.Length == 0 ||
+            symbolInfo.CandidateSymbols.All(IsHttpClientBaseAddressProperty);
+    }
+
+    private static bool IsHttpClientBaseAddressProperty(ISymbol symbol)
+    {
+        return symbol is IPropertySymbol property &&
+            HttpClientSymbols.IsHttpClient(property.ContainingType);
     }
 
     private static bool TryGetRelativeHttpClientUrlArgument(
