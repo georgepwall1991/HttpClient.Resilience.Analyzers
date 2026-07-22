@@ -121,6 +121,40 @@ public sealed class HCR082_PerRequestResiliencePipelineAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenNullForgivingBuilderLocalBuildsInRequestPath()
+    {
+        const string source = """
+            using Polly;
+
+            public sealed class PaymentsEndpoint
+            {
+                public void Handle()
+                {
+                    var builder = new ResiliencePipelineBuilder();
+                    var pipeline = builder!.Build();
+                }
+            }
+
+            namespace Polly
+            {
+                public sealed class ResiliencePipeline
+                {
+                }
+
+                public sealed class ResiliencePipelineBuilder
+                {
+                    public ResiliencePipeline Build() => new ResiliencePipeline();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR082_PerRequestResiliencePipelineAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR082, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenMinimalApiEndpointBuildsPipeline()
     {
         const string source = """
@@ -152,6 +186,45 @@ public sealed class HCR082_PerRequestResiliencePipelineAnalyzerTests
                     {
                         return new ResiliencePipeline();
                     }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR082_PerRequestResiliencePipelineAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR082, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenNullForgivingMinimalApiEndpointBuildsPipeline()
+    {
+        const string source = """
+            using System;
+            using Polly;
+
+            var app = new WebApplication();
+            app!.MapPost("/payments", () =>
+            {
+                var pipeline = new ResiliencePipelineBuilder().Build();
+            });
+
+            public sealed class WebApplication
+            {
+                public void MapPost(string pattern, Action handler)
+                {
+                }
+            }
+
+            namespace Polly
+            {
+                public sealed class ResiliencePipeline
+                {
+                }
+
+                public sealed class ResiliencePipelineBuilder
+                {
+                    public ResiliencePipeline Build() => new ResiliencePipeline();
                 }
             }
             """;
