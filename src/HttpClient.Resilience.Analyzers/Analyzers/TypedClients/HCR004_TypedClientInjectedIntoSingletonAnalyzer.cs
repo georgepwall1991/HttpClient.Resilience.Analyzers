@@ -232,9 +232,16 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
             return false;
         }
 
+        var semanticModel = GetSemanticModel(compilation, parameter.SyntaxTree);
+        if (semanticModel.GetDeclaredSymbol(parameter, cancellationToken) is IParameterSymbol parameterSymbol &&
+            parameterSymbol.Type is not IErrorTypeSymbol)
+        {
+            return IsServiceProviderType(parameterSymbol.Type);
+        }
+
         return parameter.Type is null
             ? IsLikelyServiceProviderParameterName(parameter.Identifier.ValueText)
-            : IsServiceProviderType(parameter.Type, compilation, cancellationToken);
+            : IsServiceProviderTypeName(parameter.Type);
     }
 
     private static bool IsLikelyServiceProviderParameterName(string name)
@@ -242,20 +249,10 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
         return name is "provider" or "serviceProvider" or "sp";
     }
 
-    private static bool IsServiceProviderType(
-        TypeSyntax type,
-        Compilation compilation,
-        System.Threading.CancellationToken cancellationToken)
+    private static bool IsServiceProviderType(ITypeSymbol type)
     {
-        var semanticModel = GetSemanticModel(compilation, type.SyntaxTree);
-        var resolvedType = semanticModel.GetTypeInfo(type, cancellationToken).Type;
-        if (resolvedType is not null && resolvedType is not IErrorTypeSymbol)
-        {
-            return resolvedType.Name == "IServiceProvider" &&
-                resolvedType.ContainingNamespace.ToDisplayString() == "System";
-        }
-
-        return IsServiceProviderTypeName(type);
+        return type.Name == "IServiceProvider" &&
+            type.ContainingNamespace.ToDisplayString() == "System";
     }
 
     private static bool IsServiceProviderTypeName(TypeSyntax type)
