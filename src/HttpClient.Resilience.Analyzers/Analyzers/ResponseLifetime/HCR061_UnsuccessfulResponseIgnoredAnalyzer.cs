@@ -311,12 +311,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
             .Where(node => node.SpanStart > originStart && node.SpanStart < contentReadStart)
             .Where(node => node switch
             {
-                VariableDeclaratorSyntax variable => variable.Initializer?.Value is { } initializer &&
-                    IsResponseContentAccess(
-                        UnwrapParentheses(initializer),
-                        responseLocal,
-                        semanticModel,
-                        cancellationToken) &&
+                VariableDeclaratorSyntax { Initializer.Value: not null } variable =>
                     SymbolEqualityComparer.Default.Equals(
                         semanticModel.GetDeclaredSymbol(variable, cancellationToken),
                         aliasLocal),
@@ -325,23 +320,43 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
                     assignment.Left is IdentifierNameSyntax assignmentTarget &&
                     SymbolEqualityComparer.Default.Equals(
                         semanticModel.GetSymbolInfo(assignmentTarget, cancellationToken).Symbol,
-                        aliasLocal) &&
-                    IsResponseContentAccess(
-                        UnwrapParentheses(assignment.Right),
-                        responseLocal,
-                        semanticModel,
-                        cancellationToken),
+                        aliasLocal),
                 _ => false
             })
             .OrderByDescending(node => node.SpanStart)
             .FirstOrDefault();
 
-        return aliasOrigin is not null &&
-            !LocalIsReassignedBetween(
+        if (aliasOrigin is null ||
+            LocalIsReassignedBetween(
                 block,
                 aliasLocal,
                 aliasOrigin.SpanStart,
                 contentReadStart,
+                semanticModel,
+                cancellationToken))
+        {
+            return false;
+        }
+
+        var aliasValue = aliasOrigin switch
+        {
+            VariableDeclaratorSyntax variable => variable.Initializer!.Value,
+            AssignmentExpressionSyntax assignment => assignment.Right,
+            _ => null
+        };
+
+        if (aliasValue is null)
+        {
+            return false;
+        }
+
+        aliasValue = UnwrapParentheses(aliasValue);
+        return IsResponseContentAccess(aliasValue, responseLocal, semanticModel, cancellationToken) ||
+            IsResponseContentAlias(
+                aliasValue,
+                responseLocal,
+                originStart,
+                aliasOrigin.SpanStart,
                 semanticModel,
                 cancellationToken);
     }
