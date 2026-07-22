@@ -868,6 +868,85 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenResponseIsDisposedThroughAssignedLocalAlias()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task SendAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    HttpResponseMessage responseAlias;
+                    responseAlias = response;
+                    responseAlias.Dispose();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenResponseIsReassignedBeforeAssignedAliasCapture()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task SendAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    HttpResponseMessage responseAlias;
+                    response = new HttpResponseMessage();
+                    responseAlias = response;
+                    responseAlias.Dispose();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR060, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenAssignedDisposalAliasIsReassignedBeforeDispose()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task SendAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    HttpResponseMessage responseAlias;
+                    responseAlias = response;
+                    responseAlias = new HttpResponseMessage();
+                    responseAlias.Dispose();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR060, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenResponseIsDisposedInFinally()
     {
         const string source = """
