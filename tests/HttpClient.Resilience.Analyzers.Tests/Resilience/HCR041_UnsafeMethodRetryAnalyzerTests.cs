@@ -1111,6 +1111,82 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenSafeRetryPredicateUsesCustomShouldHandleProperty()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using CustomRetry;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<PaymentsClient>()
+                        .AddStandardResilienceHandler(options =>
+                        {
+                            options.Retry.ShouldHandle = args =>
+                                args.Outcome.Result?.RequestMessage?.Method == HttpMethod.Get;
+                        });
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public sealed class StandardHttpResilienceOptions
+            {
+                public RetryOptions Retry { get; } = new();
+            }
+
+            public sealed class RetryPredicateArguments
+            {
+                public Outcome Outcome { get; } = new();
+            }
+
+            public sealed class Outcome
+            {
+                public HttpResponseMessage? Result { get; set; }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder, Action<StandardHttpResilienceOptions> configure) => builder;
+            }
+
+            namespace CustomRetry
+            {
+                public sealed class RetryOptions
+                {
+                    public Func<RetryPredicateArguments, bool>? ShouldHandle { get; set; }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR041, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenRetryPredicateUsesCustomHttpMethodLookalike()
     {
         const string source = """

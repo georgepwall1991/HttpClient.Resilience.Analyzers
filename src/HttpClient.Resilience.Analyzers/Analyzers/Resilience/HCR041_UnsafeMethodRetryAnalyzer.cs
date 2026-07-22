@@ -222,7 +222,8 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         if (assignment.Left is not MemberAccessExpressionSyntax
             {
                 Name.Identifier.ValueText: "ShouldHandle"
-            })
+            } shouldHandleMember ||
+            !IsFrameworkShouldHandleProperty(shouldHandleMember, semanticModel, cancellationToken))
         {
             return false;
         }
@@ -237,6 +238,28 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
 
         return httpMethods.Any(method => SafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal)) &&
             !httpMethods.Any(method => UnsafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal));
+    }
+
+    private static bool IsFrameworkShouldHandleProperty(
+        MemberAccessExpressionSyntax memberAccess,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(memberAccess, cancellationToken);
+        if (symbolInfo.Symbol is ISymbol symbol)
+        {
+            return IsFrameworkShouldHandleProperty(symbol);
+        }
+
+        return symbolInfo.CandidateSymbols.Length == 0 ||
+            symbolInfo.CandidateSymbols.All(IsFrameworkShouldHandleProperty);
+    }
+
+    private static bool IsFrameworkShouldHandleProperty(ISymbol symbol)
+    {
+        return symbol is IPropertySymbol property &&
+            (property.ContainingNamespace.IsGlobalNamespace ||
+                property.ContainingNamespace.ToDisplayString() == "Polly.Retry");
     }
 
     private static bool IsFrameworkHttpMethodMember(
