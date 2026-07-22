@@ -329,25 +329,39 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
             return false;
         }
 
-        var aliasDeclaration = block
+        var aliasOrigin = block
             .DescendantNodes()
-            .OfType<VariableDeclaratorSyntax>()
-            .FirstOrDefault(variable => variable.SpanStart > originStart &&
-                variable.SpanStart < accessStart &&
-                variable.Initializer?.Value is { } initializer &&
-                UnwrapParentheses(initializer) is IdentifierNameSyntax sourceIdentifier &&
-                SymbolEqualityComparer.Default.Equals(
-                    semanticModel.GetSymbolInfo(sourceIdentifier, cancellationToken).Symbol,
-                    responseLocal) &&
-                SymbolEqualityComparer.Default.Equals(
-                    semanticModel.GetDeclaredSymbol(variable, cancellationToken),
-                    aliasLocal));
+            .Where(node => node.SpanStart > originStart && node.SpanStart < accessStart)
+            .Where(node => node switch
+            {
+                VariableDeclaratorSyntax variable => variable.Initializer?.Value is { } initializer &&
+                    UnwrapParentheses(initializer) is IdentifierNameSyntax sourceIdentifier &&
+                    SymbolEqualityComparer.Default.Equals(
+                        semanticModel.GetSymbolInfo(sourceIdentifier, cancellationToken).Symbol,
+                        responseLocal) &&
+                    SymbolEqualityComparer.Default.Equals(
+                        semanticModel.GetDeclaredSymbol(variable, cancellationToken),
+                        aliasLocal),
+                AssignmentExpressionSyntax assignment =>
+                    assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                    assignment.Left is IdentifierNameSyntax assignmentTarget &&
+                    SymbolEqualityComparer.Default.Equals(
+                        semanticModel.GetSymbolInfo(assignmentTarget, cancellationToken).Symbol,
+                        aliasLocal) &&
+                    UnwrapParentheses(assignment.Right) is IdentifierNameSyntax assignmentSource &&
+                    SymbolEqualityComparer.Default.Equals(
+                        semanticModel.GetSymbolInfo(assignmentSource, cancellationToken).Symbol,
+                        responseLocal),
+                _ => false
+            })
+            .OrderByDescending(node => node.SpanStart)
+            .FirstOrDefault();
 
-        return aliasDeclaration is not null &&
+        return aliasOrigin is not null &&
             !LocalIsReassignedBetween(
                 block,
                 aliasLocal,
-                aliasDeclaration.SpanStart,
+                aliasOrigin.SpanStart,
                 accessStart,
                 semanticModel,
                 cancellationToken);
