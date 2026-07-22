@@ -1,6 +1,8 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$PackagePath
+    [string]$PackagePath,
+
+    [string]$ExpectedRepositoryCommit
 )
 
 $ErrorActionPreference = 'Stop'
@@ -94,6 +96,16 @@ try {
     $repository = $xml.SelectSingleNode('/n:package/n:metadata/n:repository', $namespaceManager)
     if ($null -eq $repository -or $repository.type -ne 'git' -or $repository.url -ne 'https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers') {
         throw 'Package repository metadata is missing or incorrect.'
+    }
+
+    $repositoryCommit = [string]$repository.commit
+    if ($repositoryCommit -notmatch '^[0-9a-f]{40}$') {
+        throw "Package repository commit must be a lowercase 40-character Git SHA, but found '$repositoryCommit'."
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedRepositoryCommit) -and
+        $repositoryCommit -ne $ExpectedRepositoryCommit.ToLowerInvariant()) {
+        throw "Package repository commit '$repositoryCommit' does not match expected commit '$ExpectedRepositoryCommit'."
     }
 
     $dependencies = $xml.SelectNodes('/n:package/n:metadata/n:dependencies/n:dependency', $namespaceManager)
