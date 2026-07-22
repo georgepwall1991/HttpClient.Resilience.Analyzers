@@ -2255,6 +2255,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
     public async Task CodeFix_AddsDisableForUnsafeHttpMethodsConfiguration()
     {
         const string source = """
+            using System;
             using System.Net.Http;
             using System.Threading;
             using System.Threading.Tasks;
@@ -2289,6 +2290,25 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
             {
                 public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
                 public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+                public static IHttpClientBuilder AddStandardResilienceHandler(
+                    this IHttpClientBuilder builder,
+                    Action<HttpStandardResilienceOptions> configure)
+                {
+                    configure(new HttpStandardResilienceOptions());
+                    return builder;
+                }
+            }
+
+            public sealed class HttpStandardResilienceOptions
+            {
+                public RetryOptions Retry { get; } = new();
+            }
+
+            public sealed class RetryOptions
+            {
+                public void DisableForUnsafeHttpMethods()
+                {
+                }
             }
             """;
 

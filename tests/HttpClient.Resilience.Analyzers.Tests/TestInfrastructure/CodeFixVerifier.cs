@@ -41,6 +41,14 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
             throw new InvalidOperationException("Code fix did not produce a changed document.");
         }
 
+        var changedCompilation = await changedDocument.Project.GetCompilationAsync().ConfigureAwait(false);
+        if (changedCompilation is null)
+        {
+            throw new InvalidOperationException("Code fix output compilation could not be created.");
+        }
+
+        TestCompilationFactory.EnsureNoCompilerErrors(changedCompilation);
+
         var fixedText = await changedDocument.GetTextAsync().ConfigureAwait(false);
         return fixedText.ToString();
     }

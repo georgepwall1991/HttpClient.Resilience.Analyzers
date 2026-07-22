@@ -920,6 +920,9 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
             fixedSource,
             StringComparison.Ordinal);
         Assert.DoesNotContain("HttpResponseMessage response;", fixedSource, StringComparison.Ordinal);
+        Assert.Equal(
+            fixedSource.IndexOf("response = await client.SendAsync", StringComparison.Ordinal),
+            fixedSource.LastIndexOf("response = await client.SendAsync", StringComparison.Ordinal));
     }
 
     [Fact]

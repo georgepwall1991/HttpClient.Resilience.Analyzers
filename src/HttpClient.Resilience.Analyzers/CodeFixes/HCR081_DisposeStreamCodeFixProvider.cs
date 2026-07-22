@@ -153,7 +153,7 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
             .WithAdditionalAnnotations(Formatter.Annotation);
         var statements = block.Statements
             .Replace(declaration, usingDeclaration)
-            .Remove(assignmentStatement);
+            .RemoveAt(block.Statements.IndexOf(assignmentStatement));
         var updatedBlock = block.WithStatements(statements);
 
         return document.WithSyntaxRoot(root.ReplaceNode(block, updatedBlock));
