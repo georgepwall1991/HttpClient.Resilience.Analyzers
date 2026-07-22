@@ -502,7 +502,7 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
     {
         if (expression is BaseObjectCreationExpressionSyntax creation)
         {
-            return IsSocketsHttpHandlerCreation(creation, semanticModel, cancellationToken) &&
+            return IsFrameworkConnectionLimitedHandlerCreation(creation, semanticModel, cancellationToken) &&
                 HasMaxConnectionsPerServerInitializer(creation);
         }
 
@@ -515,7 +515,11 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             .FirstOrDefault(declaration => declaration.Identifier.ValueText == identifier.Identifier.ValueText);
 
         return handlerDeclaration?.Initializer?.Value is BaseObjectCreationExpressionSyntax handlerCreation &&
-            IsSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken, handlerDeclaration) &&
+            IsFrameworkConnectionLimitedHandlerCreation(
+                handlerCreation,
+                semanticModel,
+                cancellationToken,
+                handlerDeclaration) &&
             !IsLocalReassignedBetween(handlerDeclaration, evidenceStart) &&
             HasMaxConnectionsPerServerInitializer(handlerCreation);
     }
@@ -534,7 +538,7 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
                 identifier.Identifier.ValueText == variableName) == true;
     }
 
-    private static bool IsSocketsHttpHandlerCreation(
+    private static bool IsFrameworkConnectionLimitedHandlerCreation(
         BaseObjectCreationExpressionSyntax creation,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken,
@@ -543,15 +547,22 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         var creationType = semanticModel.GetTypeInfo(creation, cancellationToken).Type;
         if (creationType is not null && creationType is not IErrorTypeSymbol)
         {
-            return creationType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
-                "global::System.Net.Http.SocketsHttpHandler";
+            var fullyQualifiedType = creationType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            return fullyQualifiedType == "global::System.Net.Http.SocketsHttpHandler" ||
+                fullyQualifiedType == "global::System.Net.Http.HttpClientHandler";
         }
 
         return creation is ObjectCreationExpressionSyntax objectCreation &&
-            objectCreation.Type.ToString().EndsWith("SocketsHttpHandler", System.StringComparison.Ordinal) ||
+            IsFrameworkConnectionLimitedHandlerName(objectCreation.Type.ToString()) ||
             creation is ImplicitObjectCreationExpressionSyntax &&
             variable?.Parent is VariableDeclarationSyntax declaration &&
-            declaration.Type.ToString().EndsWith("SocketsHttpHandler", System.StringComparison.Ordinal);
+            IsFrameworkConnectionLimitedHandlerName(declaration.Type.ToString());
+    }
+
+    private static bool IsFrameworkConnectionLimitedHandlerName(string typeName)
+    {
+        return typeName.EndsWith("SocketsHttpHandler", System.StringComparison.Ordinal) ||
+            typeName.EndsWith("HttpClientHandler", System.StringComparison.Ordinal);
     }
 
     private static bool HasMaxConnectionsPerServerInitializer(BaseObjectCreationExpressionSyntax creation)
