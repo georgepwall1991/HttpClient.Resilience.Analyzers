@@ -56,7 +56,10 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         var typedClients = roots
             .SelectMany(ServiceRegistrationCollector.Collect)
             .Where(registration => registration.Kind == ServiceRegistrationKind.HttpClient &&
-                !RegistrationConfiguresBaseAddress(registration))
+                !RegistrationConfiguresBaseAddress(
+                    registration,
+                    context.Compilation,
+                    context.CancellationToken))
             .Select(registration => CreateTypedClientRegistration(
                 registration,
                 context.Compilation,
@@ -116,10 +119,16 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
                 : null);
     }
 
-    private static bool RegistrationConfiguresBaseAddress(ServiceRegistrationModel registration)
+    private static bool RegistrationConfiguresBaseAddress(
+        ServiceRegistrationModel registration,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
         return InvocationArgumentsConfigureBaseAddress(registration.Invocation) ||
-            ContainingRegistrationStatementConfiguresBaseAddress(registration.Invocation);
+            ContainingRegistrationStatementConfiguresBaseAddress(
+                registration.Invocation,
+                compilation,
+                cancellationToken);
     }
 
     private static bool InvocationArgumentsConfigureBaseAddress(InvocationExpressionSyntax invocation)
@@ -129,9 +138,13 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
             .Any(ExpressionConfiguresBaseAddress);
     }
 
-    private static bool ContainingRegistrationStatementConfiguresBaseAddress(InvocationExpressionSyntax invocation)
+    private static bool ContainingRegistrationStatementConfiguresBaseAddress(
+        InvocationExpressionSyntax invocation,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
     {
         var statement = invocation.FirstAncestorOrSelf<StatementSyntax>();
+        var semanticModel = GetSemanticModel(compilation, invocation.SyntaxTree);
         return statement is not null &&
             statement.DescendantNodes()
                 .OfType<InvocationExpressionSyntax>()
@@ -139,7 +152,30 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
                 {
                     Name.Identifier.ValueText: "ConfigureHttpClient"
                 } &&
+                    IsFrameworkConfigureHttpClientInvocation(candidate, semanticModel, cancellationToken) &&
                     InvocationArgumentsConfigureBaseAddress(candidate));
+    }
+
+    private static bool IsFrameworkConfigureHttpClientInvocation(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsFrameworkConfigureHttpClientMethod(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkConfigureHttpClientMethod);
+    }
+
+    private static bool IsFrameworkConfigureHttpClientMethod(IMethodSymbol method)
+    {
+        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
+        return containingNamespace.IsGlobalNamespace ||
+            containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
     }
 
     private static bool ExpressionConfiguresBaseAddress(ExpressionSyntax expression)
