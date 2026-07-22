@@ -413,6 +413,19 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         string variableName,
         int declarationStart)
     {
+        return IsAliasDisposedInBlock(
+            containingBlock,
+            variableName,
+            declarationStart,
+            (aliasName, aliasStart) => AliasIsDirectlyDisposed(containingBlock, aliasName, aliasStart));
+    }
+
+    private static bool IsAliasDisposedInBlock(
+        BlockSyntax containingBlock,
+        string variableName,
+        int declarationStart,
+        System.Func<string, int, bool> aliasIsDisposed)
+    {
         foreach (var alias in containingBlock.Statements
             .OfType<LocalDeclarationStatementSyntax>()
             .Where(statement => statement.SpanStart > declarationStart)
@@ -426,7 +439,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                     alias.SpanStart)))
         {
             var aliasName = alias.Identifier.ValueText;
-            if (AliasIsDirectlyDisposed(containingBlock, aliasName, alias.SpanStart))
+            if (aliasIsDisposed(aliasName, alias.SpanStart))
             {
                 return true;
             }
@@ -452,7 +465,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                     assignment.SpanStart)))
         {
             var aliasName = ((IdentifierNameSyntax)aliasAssignment.Left).Identifier.ValueText;
-            if (AliasIsDirectlyDisposed(containingBlock, aliasName, aliasAssignment.SpanStart))
+            if (aliasIsDisposed(aliasName, aliasAssignment.SpanStart))
             {
                 return true;
             }
@@ -480,14 +493,29 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
 
     private static bool IsDisposedInFinally(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
+        return AliasIsDisposedInFinally(containingBlock, variableName, declarationStart);
+    }
+
+    private static bool AliasIsDisposedInFinally(
+        BlockSyntax containingBlock,
+        string aliasName,
+        int aliasStart)
+    {
         return containingBlock
             .DescendantNodes()
             .OfType<FinallyClauseSyntax>()
             .Any(finallyClause => finallyClause.Block
                 .DescendantNodes()
                 .OfType<InvocationExpressionSyntax>()
-                .Any(invocation => IsDisposeInvocation(invocation, variableName) &&
-                    !IsVariableReassignedBetween(containingBlock, variableName, declarationStart, invocation.SpanStart)));
+                .Any(invocation => invocation.SpanStart > aliasStart &&
+                    IsDisposeInvocation(invocation, aliasName) &&
+                    !IsVariableReassignedBetween(containingBlock, aliasName, aliasStart, invocation.SpanStart))) ||
+            IsAliasDisposedInBlock(
+                containingBlock,
+                aliasName,
+                aliasStart,
+                (nestedAliasName, nestedAliasStart) =>
+                    AliasIsDisposedInFinally(containingBlock, nestedAliasName, nestedAliasStart));
     }
 
     private static bool IsDisposeInvocation(ExpressionSyntax expression, string variableName)
