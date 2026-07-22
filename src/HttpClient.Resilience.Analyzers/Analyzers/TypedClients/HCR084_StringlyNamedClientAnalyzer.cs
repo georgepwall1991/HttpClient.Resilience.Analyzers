@@ -193,7 +193,11 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
     {
         expression = UnwrapParentheses(expression);
         valueExpression = expression;
-        if (TryGetStringLiteral(expression, out value))
+        if (TryGetInlineStringConstant(
+            expression,
+            semanticModel,
+            cancellationToken,
+            out value))
         {
             return true;
         }
@@ -251,6 +255,30 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
             cancellationToken,
             out value,
             out valueExpression);
+    }
+
+    private static bool TryGetInlineStringConstant(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        out string value)
+    {
+        if (TryGetStringLiteral(expression, out value))
+        {
+            return true;
+        }
+
+        expression = UnwrapParentheses(expression);
+        if (expression is BinaryExpressionSyntax binary &&
+            binary.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.AddExpression) &&
+            semanticModel.GetConstantValue(expression, cancellationToken) is { HasValue: true, Value: string constantValue })
+        {
+            value = constantValue;
+            return true;
+        }
+
+        value = string.Empty;
+        return false;
     }
 
     private static bool IsServiceCollectionReceiver(
