@@ -294,7 +294,6 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
     {
         urlExpression = invocation;
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
-            !RelativeUrlHttpMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) ||
             !InvocationTargetsHttpClient(invocation, semanticModel, cancellationToken) ||
             !IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken) ||
             invocation.ArgumentList.Arguments.Count == 0)
@@ -303,6 +302,47 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         }
 
         var candidate = invocation.ArgumentList.Arguments[0].Expression;
+        if (RelativeUrlHttpMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
+            IsRelativeStringUrl(candidate, semanticModel, cancellationToken))
+        {
+            urlExpression = candidate;
+            return true;
+        }
+
+        if (memberAccess.Name.Identifier.ValueText is not ("Send" or "SendAsync") ||
+            !TryGetInlineRequestMessageRelativeUrl(
+                candidate,
+                semanticModel,
+                cancellationToken,
+                out urlExpression))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryGetInlineRequestMessageRelativeUrl(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        out ExpressionSyntax urlExpression)
+    {
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
+        urlExpression = expression;
+        if (expression is not BaseObjectCreationExpressionSyntax requestCreation ||
+            requestCreation.ArgumentList is null ||
+            requestCreation.ArgumentList.Arguments.Count < 2 ||
+            !IsHttpRequestMessageCreation(requestCreation, semanticModel, cancellationToken))
+        {
+            return false;
+        }
+
+        var candidate = requestCreation.ArgumentList.Arguments[1].Expression;
         if (!IsRelativeStringUrl(candidate, semanticModel, cancellationToken))
         {
             return false;
@@ -310,6 +350,25 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
 
         urlExpression = candidate;
         return true;
+    }
+
+    private static bool IsHttpRequestMessageCreation(
+        BaseObjectCreationExpressionSyntax creation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var resolvedType = semanticModel.GetTypeInfo(creation, cancellationToken).Type;
+        if (resolvedType is not null && resolvedType is not IErrorTypeSymbol)
+        {
+            return resolvedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                "global::System.Net.Http.HttpRequestMessage";
+        }
+
+        return creation is ObjectCreationExpressionSyntax objectCreation &&
+            objectCreation.Type.ToString() is
+                "HttpRequestMessage" or
+                "System.Net.Http.HttpRequestMessage" or
+                "global::System.Net.Http.HttpRequestMessage";
     }
 
     private static bool InvocationTargetsHttpClient(
