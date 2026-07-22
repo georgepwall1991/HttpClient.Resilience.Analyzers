@@ -7,6 +7,7 @@
 [![CI](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/actions/workflows/ci.yml/badge.svg)](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/HttpClient.Resilience.Analyzers.svg)](https://www.nuget.org/packages/HttpClient.Resilience.Analyzers)
 [![NuGet downloads](https://img.shields.io/nuget/dt/HttpClient.Resilience.Analyzers.svg)](https://www.nuget.org/packages/HttpClient.Resilience.Analyzers)
+[![GitHub release](https://img.shields.io/github/v/release/georgepwall1991/HttpClient.Resilience.Analyzers)](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Production-focused Roslyn analyzers and code fixes for .NET `HttpClient`, `IHttpClientFactory`, typed and named clients, Polly, and `Microsoft.Extensions.Http.Resilience`.
@@ -26,7 +27,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 Or add an explicit package reference:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.119" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.120" PrivateAssets="all" />
 ```
 
 `PrivateAssets="all"` prevents the analyzer from flowing to projects that consume your project.
@@ -170,6 +171,7 @@ Check the rule's documented detection scope, reduce its severity if needed, and 
 - [All analyzer rules](docs/rules/README.md)
 - [Implementation status and limitations](docs/implementation-status.md)
 - [Contributing](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Support](SUPPORT.md)
 - [Security policy](SECURITY.md)
 - [MIT license](LICENSE)

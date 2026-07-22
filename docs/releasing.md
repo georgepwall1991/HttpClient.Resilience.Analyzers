@@ -39,7 +39,7 @@ git tag -a "v$version" (git rev-parse origin/main) -m "Release v$version"
 git push origin "v$version"
 ```
 
-The release workflow will restore, format-check, build, test, pack, validate the package, upload artifacts, and push the `.nupkg` to NuGet.org.
+The release workflow will restore, format-check, build, test, pack, validate the package, upload artifacts, push the `.nupkg` to NuGet.org, and create a matching GitHub Release with generated release notes and the package attached.
 Publishing uses NuGet Trusted Publishing through GitHub OIDC and `NuGet/login@v1`; no long-lived NuGet API key is stored in the repository.
 
 ## Dry Run

@@ -1,0 +1,41 @@
+name: Adoption or configuration question
+description: Ask how to adopt, configure, suppress, or troubleshoot the analyzer package.
+title: "[Question]: "
+labels:
+  - question
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Package installation
+        - Analyzer configuration
+        - Brownfield adoption
+        - Diagnostic suppression
+        - CI integration
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Describe what you are trying to achieve and where you are stuck.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      placeholder: The version from your PackageReference
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Relevant configuration or code
+      description: Include a small public example when it helps explain the question.
+      render: csharp
+    validations:
+      required: false

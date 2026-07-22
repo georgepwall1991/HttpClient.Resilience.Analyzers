@@ -1,5 +1,11 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Documentation hub
+    url: https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/docs/README.md
+    about: Browse rules, configuration, adoption guidance, and implementation details.
+  - name: NuGet package
+    url: https://www.nuget.org/packages/HttpClient.Resilience.Analyzers
+    about: View the latest published version, install command, and package metadata.
   - name: Security report
     url: https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/security
     about: Report security-sensitive issues privately.

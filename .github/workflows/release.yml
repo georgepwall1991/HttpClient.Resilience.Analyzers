@@ -13,7 +13,7 @@ on:
         default: false
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
@@ -111,4 +111,25 @@ jobs:
                   --api-key $env:NUGET_API_KEY `
                   --source https://api.nuget.org/v3/index.json `
                   --skip-duplicate
+          }
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $version = $tag.TrimStart('v')
+          $assets = @(Get-ChildItem artifacts/packages/*.nupkg | ForEach-Object { $_.FullName })
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+              gh release upload $tag $assets --clobber
+          }
+          else {
+              gh release create $tag $assets `
+                  --verify-tag `
+                  --generate-notes `
+                  --title "HttpClient.Resilience.Analyzers $version"
           }
