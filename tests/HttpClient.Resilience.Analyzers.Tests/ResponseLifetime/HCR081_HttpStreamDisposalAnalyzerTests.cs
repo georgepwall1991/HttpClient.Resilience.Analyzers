@@ -264,6 +264,148 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenStreamAliasIsReturned()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<Stream> OpenAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var stream = await client.GetStreamAsync("https://example.com", cancellationToken);
+                    var result = stream;
+                    return result;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenReturnedOwnerReceivesStreamAlias()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<StreamOwner> OpenAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    var ownedStream = stream;
+                    return new StreamOwner(ownedStream);
+                }
+            }
+
+            public sealed class StreamOwner(Stream stream)
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenReturnedLocalOwnerReceivesStreamAlias()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<StreamOwner> OpenAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    var ownedStream = stream;
+                    var owner = new StreamOwner(ownedStream);
+                    return owner;
+                }
+            }
+
+            public sealed class StreamOwner(Stream stream)
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenReturnedStreamAliasWasReassigned()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<Stream> OpenAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var stream = await client.GetStreamAsync("https://example.com", cancellationToken);
+                    var result = stream;
+                    result = Stream.Null;
+                    return result;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR081, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenReturnedStreamOwnerWasReassigned()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<StreamOwner> OpenAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    var owner = new StreamOwner(stream);
+                    owner = new StreamOwner(Stream.Null);
+                    return owner;
+                }
+            }
+
+            public sealed class StreamOwner(Stream stream)
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR081, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenStreamIsTransferredToReturnedOwner()
     {
         const string source = """
