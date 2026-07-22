@@ -297,8 +297,10 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         System.Threading.CancellationToken cancellationToken)
     {
         return compilation.SyntaxTrees
-            .Select(tree => tree.GetRoot(cancellationToken))
-            .SelectMany(ServiceRegistrationCollector.Collect)
+            .SelectMany(tree => ServiceRegistrationCollector.Collect(
+                tree.GetRoot(cancellationToken),
+                GetSemanticModel(compilation, tree),
+                cancellationToken))
             .Where(registration => registration.Kind == ServiceRegistrationKind.Singleton)
             .SelectMany(registration => new[]
             {
@@ -309,6 +311,13 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             .Select(typeName => NormalizeTypeName(typeName!))
             .ToArray();
     }
+
+#pragma warning disable RS1030 // HCR002 performs compilation-wide singleton matching and needs cross-tree semantic checks.
+    private static SemanticModel GetSemanticModel(Compilation compilation, SyntaxTree syntaxTree)
+    {
+        return compilation.GetSemanticModel(syntaxTree);
+    }
+#pragma warning restore RS1030
 
     private static bool IsLongLivedField(
         FieldDeclarationSyntax field,
