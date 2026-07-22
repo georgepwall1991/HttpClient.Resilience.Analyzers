@@ -250,4 +250,97 @@ public sealed class HCR084_StringlyNamedClientAnalyzerTests
 
         Assert.Empty(diagnostics);
     }
+
+    [Fact]
+    public async Task DoesNotReport_WhenResolvedRegistrationTypeHasCustomNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Composition
+            {
+                public static void Configure(Custom.IServiceCollection services)
+                {
+                    services.AddHttpClient("payments");
+                }
+            }
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory factory)
+                {
+                    return factory.CreateClient("payments");
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+
+            namespace Custom
+            {
+                public interface IServiceCollection
+                {
+                    void AddHttpClient(string name);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR084_StringlyNamedClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenResolvedFactoryTypeHasCustomNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient("payments");
+                }
+            }
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(Custom.IHttpClientFactory factory)
+                {
+                    return factory.CreateClient("payments");
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name)
+                {
+                    return default!;
+                }
+            }
+
+            namespace Custom
+            {
+                public interface IHttpClientFactory
+                {
+                    HttpClient CreateClient(string name);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR084_StringlyNamedClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
 }
