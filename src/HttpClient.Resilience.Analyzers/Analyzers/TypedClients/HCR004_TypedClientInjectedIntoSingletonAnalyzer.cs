@@ -157,11 +157,35 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
             } genericName
         } &&
         IsServiceProviderFactoryParameter(receiver, containingFactory) &&
+        IsFrameworkServiceProviderResolution(invocation, compilation, cancellationToken) &&
         TypeMatchesTypedClient(
             genericName.TypeArgumentList.Arguments[0],
             typedClients,
             compilation,
             cancellationToken);
+    }
+
+    private static bool IsFrameworkServiceProviderResolution(
+        InvocationExpressionSyntax invocation,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var semanticModel = GetSemanticModel(compilation, invocation.SyntaxTree);
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsFrameworkServiceProviderResolution(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkServiceProviderResolution);
+    }
+
+    private static bool IsFrameworkServiceProviderResolution(IMethodSymbol method)
+    {
+        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
+        return containingNamespace.IsGlobalNamespace ||
+            containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
     }
 
     private static bool IsServiceProviderFactoryParameter(
