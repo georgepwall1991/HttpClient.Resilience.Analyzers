@@ -29,6 +29,27 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenNullForgivingHttpClientAsyncResultIsRead()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class Client
+            {
+                public HttpResponseMessage Get(HttpClient client)
+                {
+                    return client.GetAsync("https://example.com")!.Result;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR063, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenHttpClientAsyncWaitIsCalled()
     {
         const string source = """
@@ -50,6 +71,28 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenNullForgivingHttpTaskLocalWaitIsCalled()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class Client
+            {
+                public void Get(HttpClient client)
+                {
+                    var responseTask = client.GetAsync("https://example.com");
+                    responseTask!.Wait();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR063, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenHttpClientAsyncGetAwaiterGetResultIsCalled()
     {
         const string source = """
@@ -60,6 +103,30 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
                 public HttpResponseMessage Get(HttpClient client)
                 {
                     return client.GetAsync("https://example.com").GetAwaiter().GetResult();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR063, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenNullForgivingConfiguredHttpTaskGetResultIsCalled()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class Client
+            {
+                public HttpResponseMessage Get(HttpClient client)
+                {
+                    return client.GetAsync("https://example.com")!
+                        .ConfigureAwait(false)
+                        .GetAwaiter()
+                        .GetResult();
                 }
             }
             """;
