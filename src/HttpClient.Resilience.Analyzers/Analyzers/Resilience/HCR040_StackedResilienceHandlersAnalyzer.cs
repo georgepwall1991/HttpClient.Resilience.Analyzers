@@ -254,7 +254,8 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
             {
                 Name.Identifier.ValueText: "AddResilienceHandler"
             } ||
-            invocation.ArgumentList.Arguments.Count == 0)
+            invocation.ArgumentList.Arguments.Count == 0 ||
+            !IsFrameworkResilienceExtension(invocation, semanticModel, cancellationToken))
         {
             return false;
         }
