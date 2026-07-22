@@ -104,6 +104,38 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
         Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
     }
 
+    [Theory]
+    [InlineData("GetByteArrayAsync")]
+    [InlineData("GetStreamAsync")]
+    [InlineData("GetStringAsync")]
+    public async Task ReportsDiagnostic_WhenTaskWhenAllFansOutBodyHelpers(string methodName)
+    {
+        var source = $$"""
+            using System.Collections.Generic;
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(
+                    HttpClient client,
+                    IEnumerable<string> urls,
+                    CancellationToken cancellationToken)
+                {
+                    return Task.WhenAll(urls.Select(url =>
+                        client.{{methodName}}(url, cancellationToken)));
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR080, diagnostic.Id);
+    }
+
     [Fact]
     public async Task DoesNotReport_WhenTaskWhenAllFansOutCustomJsonExtension()
     {
