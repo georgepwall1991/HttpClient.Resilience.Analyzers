@@ -675,6 +675,48 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenStandaloneRegistrationUsesCustomExtension()
+    {
+        const string source = """
+            using CustomRegistrations;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddTransient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class HttpClientRegistrationExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+            }
+
+            namespace CustomRegistrations
+            {
+                public static class ServiceCollectionExtensions
+                {
+                    public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenLookalikeServicesParameterIsNotIServiceCollection()
     {
         const string source = """
