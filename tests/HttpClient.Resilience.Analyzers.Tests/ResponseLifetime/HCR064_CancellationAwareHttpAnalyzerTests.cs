@@ -570,6 +570,113 @@ public sealed class HCR064_CancellationAwareHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenLocalAliasUsesCancellationTokenNone()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(
+                    HttpClient client,
+                    CancellationToken cancellationToken)
+                {
+                    var ignoredToken = CancellationToken.None;
+                    return client.GetAsync("https://example.com", ignoredToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR064, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenChainedAssignedLocalAliasUsesDefaultToken()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(
+                    HttpClient client,
+                    CancellationToken cancellationToken)
+                {
+                    CancellationToken ignoredToken;
+                    ignoredToken = default;
+                    var forwardedToken = ignoredToken;
+                    return client.GetAsync("https://example.com", forwardedToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR064, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenSentinelAliasIsReassignedToAvailableToken()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(
+                    HttpClient client,
+                    CancellationToken cancellationToken)
+                {
+                    var selectedToken = CancellationToken.None;
+                    selectedToken = cancellationToken;
+                    return client.GetAsync("https://example.com", selectedToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenNonCancelableTokenAliasIsSelfAssigned()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public Task<HttpResponseMessage> GetAsync(
+                    HttpClient client,
+                    CancellationToken cancellationToken)
+                {
+                    var ignoredToken = CancellationToken.None;
+                    ignoredToken = ignoredToken;
+                    return client.GetAsync("https://example.com", ignoredToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR064, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task CodeFix_ReplacesCancellationTokenNoneWithAvailableToken()
     {
         const string source = """

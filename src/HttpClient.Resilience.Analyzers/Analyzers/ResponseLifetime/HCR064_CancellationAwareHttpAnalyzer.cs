@@ -137,30 +137,89 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
-        {
-            expression = parenthesized.Expression;
-        }
+        expression = UnwrapTransparentExpressions(expression);
 
         if (expression.IsKind(SyntaxKind.DefaultLiteralExpression) || expression is DefaultExpressionSyntax)
         {
             return true;
         }
 
-        if (expression is not MemberAccessExpressionSyntax
+        if (expression is MemberAccessExpressionSyntax
             {
                 Name.Identifier.ValueText: "None"
             } memberAccess)
         {
-            return false;
+            if (semanticModel.GetSymbolInfo(memberAccess, cancellationToken).Symbol is IPropertySymbol property)
+            {
+                return IsCancellationToken(property.ContainingType) && IsCancellationToken(property.Type);
+            }
+
+            return memberAccess.Expression.ToString().EndsWith("CancellationToken", System.StringComparison.Ordinal);
         }
 
-        if (semanticModel.GetSymbolInfo(memberAccess, cancellationToken).Symbol is IPropertySymbol property)
+        if (expression is IdentifierNameSyntax identifier &&
+            semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is ILocalSymbol local &&
+            expression.FirstAncestorOrSelf<BlockSyntax>() is { } block &&
+            FindLatestLocalValue(block, local, expression.SpanStart, semanticModel, cancellationToken) is { } localValue)
         {
-            return IsCancellationToken(property.ContainingType) && IsCancellationToken(property.Type);
+            return IsNonCancelableTokenExpression(localValue, semanticModel, cancellationToken);
         }
 
-        return memberAccess.Expression.ToString().EndsWith("CancellationToken", System.StringComparison.Ordinal);
+        return false;
+    }
+
+    private static ExpressionSyntax? FindLatestLocalValue(
+        BlockSyntax block,
+        ILocalSymbol local,
+        int accessStart,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var origin = block
+            .DescendantNodes()
+            .Where(node => node.Span.End <= accessStart)
+            .Where(node => node switch
+            {
+                VariableDeclaratorSyntax { Initializer.Value: not null } variable =>
+                    SymbolEqualityComparer.Default.Equals(
+                        semanticModel.GetDeclaredSymbol(variable, cancellationToken),
+                        local),
+                AssignmentExpressionSyntax assignment =>
+                    assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                    assignment.Left is IdentifierNameSyntax assignmentTarget &&
+                    SymbolEqualityComparer.Default.Equals(
+                        semanticModel.GetSymbolInfo(assignmentTarget, cancellationToken).Symbol,
+                        local),
+                _ => false
+            })
+            .OrderByDescending(node => node.SpanStart)
+            .FirstOrDefault();
+
+        return origin switch
+        {
+            VariableDeclaratorSyntax variable => variable.Initializer!.Value,
+            AssignmentExpressionSyntax assignment => assignment.Right,
+            _ => null
+        };
+    }
+
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix
+                    when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
+        }
     }
 
     private static bool VisibleCancellationTokenExists(
