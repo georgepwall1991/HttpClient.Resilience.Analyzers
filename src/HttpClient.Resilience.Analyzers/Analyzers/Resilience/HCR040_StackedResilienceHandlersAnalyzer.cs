@@ -272,7 +272,7 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         if (expression is LiteralExpressionSyntax literal &&
             literal.IsKind(SyntaxKind.StringLiteralExpression))
@@ -401,13 +401,22 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
         };
     }
 
-    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        while (true)
         {
-            expression = parenthesized.Expression;
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix
+                    when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
         }
-
-        return expression;
     }
 }
