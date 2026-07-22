@@ -282,7 +282,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        return invocation.ArgumentList.Arguments.Count == 1 &&
+        if (invocation.ArgumentList.Arguments.Count == 1 &&
             invocation.Expression is MemberAccessExpressionSyntax
             {
                 Name.Identifier.ValueText: "Equals",
@@ -291,7 +291,48 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             IsFrameworkHttpMethodMember(httpMethodMember, semanticModel, cancellationToken) &&
             SafeHttpMethodNames.Contains(
                 httpMethodMember.Name.Identifier.ValueText,
-                System.StringComparer.Ordinal);
+                System.StringComparer.Ordinal))
+        {
+            return true;
+        }
+
+        if (invocation.ArgumentList.Arguments.Count != 2 ||
+            !IsSystemObjectEqualsInvocation(invocation, semanticModel, cancellationToken))
+        {
+            return false;
+        }
+
+        var httpMethodMembers = invocation.ArgumentList.Arguments
+            .SelectMany(argument => argument.Expression
+                .DescendantNodesAndSelf()
+                .OfType<MemberAccessExpressionSyntax>())
+            .Where(memberAccess => IsFrameworkHttpMethodMember(memberAccess, semanticModel, cancellationToken))
+            .Select(memberAccess => memberAccess.Name.Identifier.ValueText)
+            .ToArray();
+
+        return httpMethodMembers.Any(method => SafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal)) &&
+            !httpMethodMembers.Any(method => UnsafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal));
+    }
+
+    private static bool IsSystemObjectEqualsInvocation(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsSystemObjectEqualsMethod(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length > 0 && candidateMethods.All(IsSystemObjectEqualsMethod);
+    }
+
+    private static bool IsSystemObjectEqualsMethod(IMethodSymbol method)
+    {
+        return method.Name == "Equals" &&
+            (method.ReducedFrom ?? method).ContainingType.SpecialType == SpecialType.System_Object;
     }
 
     private static bool IsSafeHttpMethodEquality(
