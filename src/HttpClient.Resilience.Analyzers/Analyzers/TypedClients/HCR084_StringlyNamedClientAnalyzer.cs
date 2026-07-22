@@ -269,8 +269,7 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
         }
 
         expression = UnwrapParentheses(expression);
-        if (expression is BinaryExpressionSyntax binary &&
-            binary.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.AddExpression) &&
+        if (IsSupportedInlineConstantExpression(expression) &&
             semanticModel.GetConstantValue(expression, cancellationToken) is { HasValue: true, Value: string constantValue })
         {
             value = constantValue;
@@ -279,6 +278,17 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
 
         value = string.Empty;
         return false;
+    }
+
+    private static bool IsSupportedInlineConstantExpression(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            BinaryExpressionSyntax binary => binary.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.AddExpression),
+            ConditionalExpressionSyntax => true,
+            InterpolatedStringExpressionSyntax => true,
+            _ => false
+        };
     }
 
     private static bool IsServiceCollectionReceiver(
