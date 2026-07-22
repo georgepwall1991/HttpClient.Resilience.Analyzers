@@ -963,6 +963,45 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenSingletonRegistrationMethodIsOwnedByCustomNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+            using Custom.DependencyInjection;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddSingleton<GitHubClient>();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+                private readonly HttpClient _client = new();
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            namespace Custom.DependencyInjection
+            {
+                public static class ServiceCollectionExtensions
+                {
+                    public static global::IServiceCollection AddSingleton<TService>(
+                        this global::IServiceCollection services) => services;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task CodeFix_AddsSocketsHttpHandlerWithPooledConnectionLifetime()
     {
         const string source = """
