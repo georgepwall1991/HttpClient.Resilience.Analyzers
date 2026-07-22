@@ -228,20 +228,55 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
-        var httpMethodMembers = assignment.Right
-            .DescendantNodes()
+        var predicateExpression = assignment.Right switch
+        {
+            ParenthesizedLambdaExpressionSyntax { Body: ExpressionSyntax expression } => expression,
+            SimpleLambdaExpressionSyntax { Body: ExpressionSyntax expression } => expression,
+            _ => null
+        };
+
+        return predicateExpression is not null &&
+            IsSafeOnlyPredicateExpression(predicateExpression, semanticModel, cancellationToken);
+    }
+
+    private static bool IsSafeOnlyPredicateExpression(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return expression switch
+        {
+            ParenthesizedExpressionSyntax parenthesized => IsSafeOnlyPredicateExpression(
+                parenthesized.Expression,
+                semanticModel,
+                cancellationToken),
+            BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.LogicalOrExpression) =>
+                IsSafeOnlyPredicateExpression(binary.Left, semanticModel, cancellationToken) &&
+                IsSafeOnlyPredicateExpression(binary.Right, semanticModel, cancellationToken),
+            BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.LogicalAndExpression) =>
+                IsSafeOnlyPredicateExpression(binary.Left, semanticModel, cancellationToken) ||
+                IsSafeOnlyPredicateExpression(binary.Right, semanticModel, cancellationToken),
+            BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.EqualsExpression) =>
+                IsSafeHttpMethodEquality(binary, semanticModel, cancellationToken),
+            _ => false
+        };
+    }
+
+    private static bool IsSafeHttpMethodEquality(
+        BinaryExpressionSyntax binary,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var httpMethodMembers = binary
+            .ChildNodes()
             .OfType<MemberAccessExpressionSyntax>()
             .Where(memberAccess => memberAccess.Expression.ToString() == "HttpMethod" &&
                 IsFrameworkHttpMethodMember(memberAccess, semanticModel, cancellationToken))
+            .Select(memberAccess => memberAccess.Name.Identifier.ValueText)
             .ToArray();
 
-        return httpMethodMembers.Any(memberAccess =>
-                SafeHttpMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
-                memberAccess.Parent is BinaryExpressionSyntax binary &&
-                binary.IsKind(SyntaxKind.EqualsExpression)) &&
-            !httpMethodMembers.Any(memberAccess => UnsafeHttpMethodNames.Contains(
-                memberAccess.Name.Identifier.ValueText,
-                System.StringComparer.Ordinal));
+        return httpMethodMembers.Any(method => SafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal)) &&
+            !httpMethodMembers.Any(method => UnsafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal));
     }
 
     private static bool IsFrameworkShouldHandleProperty(
