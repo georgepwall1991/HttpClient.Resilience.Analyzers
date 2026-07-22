@@ -128,6 +128,7 @@ foreach ($path in $requiredTopLevelDocs) {
 $requiredScripts = @(
     'scripts\Validate-Package.ps1',
     'scripts\Validate-PackageConsumption.ps1',
+    'scripts\Validate-ReleaseVersion.ps1',
     'scripts\Validate-Repository.ps1',
     'scripts\Validate-SampleDiagnostics.ps1'
 )
@@ -180,6 +181,7 @@ Assert-Contains '.github\CODEOWNERS' '@georgepwall1991' 'CODEOWNERS must include
 Assert-Contains '.github\dependabot.yml' 'package-ecosystem:\s+nuget' 'dependabot.yml must include NuGet updates.'
 Assert-Contains '.github\dependabot.yml' 'package-ecosystem:\s+github-actions' 'dependabot.yml must include GitHub Actions updates.'
 Assert-Contains '.github\pull_request_template.md' 'Validate-Repository\.ps1' 'Pull request template must include repository validation.'
+Assert-Contains '.github\workflows\release.yml' 'Validate-ReleaseVersion\.ps1' 'Release workflow must validate tag and package version alignment.'
 Assert-Contains 'SECURITY.md' 'Reporting a Vulnerability' 'SECURITY.md must document vulnerability reporting.'
 Assert-Contains 'CONTRIBUTING.md' 'Diagnostic Quality Bar' 'CONTRIBUTING.md must document diagnostic quality expectations.'
 Assert-Contains 'SUPPORT.md' 'False positives' 'SUPPORT.md must document support paths for false positives.'

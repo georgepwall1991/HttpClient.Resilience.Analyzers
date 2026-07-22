@@ -26,7 +26,7 @@ $package = Get-ChildItem artifacts\packages\*.nupkg | Sort-Object LastWriteTime 
 ./scripts/Validate-PackageConsumption.ps1 -PackagePath $package.FullName
 ```
 
-CI and release workflows also pass `-ExpectedRepositoryCommit` so the package's repository commit metadata must match the exact checked-out Git SHA before publishing.
+CI and release workflows also pass `-ExpectedRepositoryCommit` so the package's repository commit metadata must match the exact checked-out Git SHA before publishing. Tag-triggered releases run `Validate-ReleaseVersion.ps1` and stop before building when the tag does not exactly match the package version.
 
 ## Stable Release
 
