@@ -156,7 +156,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         System.Threading.CancellationToken cancellationToken)
     {
         return ContainsDisableForUnsafeHttpMethods(invocation, semanticModel, cancellationToken) ||
-            ContainsSafeOnlyRetryPredicate(invocation);
+            ContainsSafeOnlyRetryPredicate(invocation, semanticModel, cancellationToken);
     }
 
     private static bool ContainsDisableForUnsafeHttpMethods(
@@ -200,15 +200,24 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             containingNamespace.ToDisplayString() == "Microsoft.Extensions.Http.Resilience";
     }
 
-    private static bool ContainsSafeOnlyRetryPredicate(InvocationExpressionSyntax invocation)
+    private static bool ContainsSafeOnlyRetryPredicate(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         return invocation
             .DescendantNodes()
             .OfType<AssignmentExpressionSyntax>()
-            .Any(IsSafeOnlyShouldHandleAssignment);
+            .Any(assignment => IsSafeOnlyShouldHandleAssignment(
+                assignment,
+                semanticModel,
+                cancellationToken));
     }
 
-    private static bool IsSafeOnlyShouldHandleAssignment(AssignmentExpressionSyntax assignment)
+    private static bool IsSafeOnlyShouldHandleAssignment(
+        AssignmentExpressionSyntax assignment,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         if (assignment.Left is not MemberAccessExpressionSyntax
             {
@@ -221,12 +230,34 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         var httpMethods = assignment.Right
             .DescendantNodes()
             .OfType<MemberAccessExpressionSyntax>()
-            .Where(memberAccess => memberAccess.Expression.ToString() == "HttpMethod")
+            .Where(memberAccess => memberAccess.Expression.ToString() == "HttpMethod" &&
+                IsFrameworkHttpMethodMember(memberAccess, semanticModel, cancellationToken))
             .Select(memberAccess => memberAccess.Name.Identifier.ValueText)
             .ToArray();
 
         return httpMethods.Any(method => SafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal)) &&
             !httpMethods.Any(method => UnsafeHttpMethodNames.Contains(method, System.StringComparer.Ordinal));
+    }
+
+    private static bool IsFrameworkHttpMethodMember(
+        MemberAccessExpressionSyntax memberAccess,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(memberAccess, cancellationToken);
+        if (symbolInfo.Symbol is ISymbol symbol)
+        {
+            return IsFrameworkHttpMethodMember(symbol);
+        }
+
+        return symbolInfo.CandidateSymbols.Length == 0 ||
+            symbolInfo.CandidateSymbols.All(IsFrameworkHttpMethodMember);
+    }
+
+    private static bool IsFrameworkHttpMethodMember(ISymbol symbol)
+    {
+        return symbol.ContainingType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+            "global::System.Net.Http.HttpMethod";
     }
 
     private static TypedClientRegistration? FindTypedClientImplementationInChain(
