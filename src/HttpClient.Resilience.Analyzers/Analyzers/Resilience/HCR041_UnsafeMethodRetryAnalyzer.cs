@@ -271,8 +271,27 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                 IsSafeOnlyPredicateExpression(binary.Right, semanticModel, cancellationToken),
             BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.EqualsExpression) =>
                 IsSafeHttpMethodEquality(binary, semanticModel, cancellationToken),
+            InvocationExpressionSyntax invocation =>
+                IsSafeHttpMethodEqualsInvocation(invocation, semanticModel, cancellationToken),
             _ => false
         };
+    }
+
+    private static bool IsSafeHttpMethodEqualsInvocation(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return invocation.ArgumentList.Arguments.Count == 1 &&
+            invocation.Expression is MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "Equals",
+                Expression: MemberAccessExpressionSyntax httpMethodMember
+            } &&
+            IsFrameworkHttpMethodMember(httpMethodMember, semanticModel, cancellationToken) &&
+            SafeHttpMethodNames.Contains(
+                httpMethodMember.Name.Identifier.ValueText,
+                System.StringComparer.Ordinal);
     }
 
     private static bool IsSafeHttpMethodEquality(
