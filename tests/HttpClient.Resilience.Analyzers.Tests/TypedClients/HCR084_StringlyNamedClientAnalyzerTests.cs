@@ -406,6 +406,58 @@ public sealed class HCR084_StringlyNamedClientAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenCreateClientLiteralLocalIsSelfAssigned()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient("payments");
+                }
+            }
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory factory)
+                {
+                    var clientName = "payments";
+                    clientName = clientName;
+                    return factory.CreateClient(clientName);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR084_StringlyNamedClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR084, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenCreateClientLiteralLocalIsReassigned()
     {
         const string source = """
