@@ -1322,6 +1322,51 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenRegistrationMethodsAreOwnedByCustomNamespace()
+    {
+        const string source = """
+            using Custom.DependencyInjection;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton<PaymentJob>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentJob(PaymentsClient client)
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            namespace Custom.DependencyInjection
+            {
+                public static class ServiceCollectionExtensions
+                {
+                    public static global::IServiceCollection AddHttpClient<TClient>(
+                        this global::IServiceCollection services) => services;
+
+                    public static global::IServiceCollection AddSingleton<TService>(
+                        this global::IServiceCollection services) => services;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenLookalikeServicesParameterIsNotIServiceCollection()
     {
         const string source = """
