@@ -397,6 +397,110 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenContentIsReadThroughResponseAlias()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    var responseAlias = response;
+                    return await responseAlias.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR061, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenResponseAliasChecksSuccessBeforeContentRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    var responseAlias = response;
+                    responseAlias.EnsureSuccessStatusCode();
+                    return await responseAlias.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenResponseAliasStatusIsCheckedBeforeContentRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    var responseAlias = response;
+                    if (!responseAlias.IsSuccessStatusCode)
+                    {
+                        return string.Empty;
+                    }
+
+                    return await responseAlias.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenResponseAliasIsReassignedBeforeContentRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    var responseAlias = response;
+                    responseAlias = new HttpResponseMessage();
+                    return await responseAlias.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenResolvedCustomHttpClientReturnsResponseLikeType()
     {
         const string source = """
