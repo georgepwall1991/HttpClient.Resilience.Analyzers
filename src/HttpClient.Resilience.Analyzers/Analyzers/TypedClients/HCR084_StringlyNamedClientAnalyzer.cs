@@ -113,6 +113,7 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
             } memberAccess ||
             invocation.ArgumentList.Arguments.Count == 0 ||
             !IsHttpClientFactoryReceiver(memberAccess.Expression, semanticModel, cancellationToken) ||
+            !IsHttpClientFactoryCreateClientMethod(invocation, semanticModel, cancellationToken) ||
             !TryGetStringLiteral(invocation.ArgumentList.Arguments[0].Expression, out var name) ||
             string.IsNullOrWhiteSpace(name))
         {
@@ -121,6 +122,26 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
 
         usage = new NamedClientUsage(name, invocation.ArgumentList.Arguments[0].Expression);
         return true;
+    }
+
+    private static bool IsHttpClientFactoryCreateClientMethod(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsHttpClientFactoryMethod(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsHttpClientFactoryMethod);
+    }
+
+    private static bool IsHttpClientFactoryMethod(IMethodSymbol method)
+    {
+        return IsHttpClientFactoryType((method.ReducedFrom ?? method).ContainingType);
     }
 
     private static bool TryGetStringLiteral(ExpressionSyntax expression, out string value)
