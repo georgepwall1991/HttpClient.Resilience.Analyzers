@@ -107,6 +107,19 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
+        return ContainsSelectWithHttpCall(
+            expression,
+            semanticModel,
+            cancellationToken,
+            ImmutableHashSet.Create<ISymbol>(SymbolEqualityComparer.Default));
+    }
+
+    private static bool ContainsSelectWithHttpCall(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        ImmutableHashSet<ISymbol> visitedLocals)
+    {
         expression = UnwrapParentheses(expression);
 
         if (ExpressionContainsSelectWithHttpCall(expression, semanticModel, cancellationToken))
@@ -115,10 +128,11 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         }
 
         return expression is IdentifierNameSyntax identifier &&
-            LocalInitializerContainsSelectWithHttpCall(
+            LocalValueContainsSelectWithHttpCall(
                 identifier,
                 semanticModel,
-                cancellationToken);
+                cancellationToken,
+                visitedLocals);
     }
 
     private static bool ExpressionContainsSelectWithHttpCall(
@@ -132,54 +146,67 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             .Any(invocation => IsSelectInvocationWithHttpCall(invocation, semanticModel, cancellationToken));
     }
 
-    private static bool LocalInitializerContainsSelectWithHttpCall(
+    private static bool LocalValueContainsSelectWithHttpCall(
         IdentifierNameSyntax identifier,
         SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
+        System.Threading.CancellationToken cancellationToken,
+        ImmutableHashSet<ISymbol> visitedLocals)
     {
         var containingBlock = identifier.FirstAncestorOrSelf<BlockSyntax>();
         if (containingBlock is null ||
-            semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is not ILocalSymbol local)
+            semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is not ILocalSymbol local ||
+            visitedLocals.Contains(local))
         {
             return false;
         }
 
-        return containingBlock
+        var declaration = containingBlock
             .DescendantNodes()
             .OfType<VariableDeclaratorSyntax>()
-            .Any(variable =>
+            .FirstOrDefault(variable =>
                 variable.SpanStart < identifier.SpanStart &&
                 SymbolEqualityComparer.Default.Equals(
                     semanticModel.GetDeclaredSymbol(variable, cancellationToken),
-                    local) &&
-                variable.Initializer?.Value is { } initializer &&
-                !LocalIsReassignedBetweenDeclarationAndUse(
-                    containingBlock,
-                    variable,
-                    identifier,
-                    semanticModel,
-                    cancellationToken) &&
-                ContainsSelectWithHttpCall(initializer, semanticModel, cancellationToken));
-    }
+                    local));
+        if (declaration is null)
+        {
+            return false;
+        }
 
-    private static bool LocalIsReassignedBetweenDeclarationAndUse(
-        BlockSyntax containingBlock,
-        VariableDeclaratorSyntax variable,
-        SyntaxNode context,
-        SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
-    {
-        var localSymbol = semanticModel.GetDeclaredSymbol(variable, cancellationToken);
-
-        return containingBlock
+        var latestAssignment = containingBlock
             .DescendantNodes()
             .OfType<AssignmentExpressionSyntax>()
-            .Any(assignment => assignment.SpanStart > variable.SpanStart &&
-                assignment.SpanStart < context.SpanStart &&
-                assignment.Left is IdentifierNameSyntax identifier &&
+            .Where(assignment => assignment.SpanStart > declaration.SpanStart &&
+                assignment.SpanStart < identifier.SpanStart &&
+                assignment.Left is IdentifierNameSyntax assignmentIdentifier &&
                 SymbolEqualityComparer.Default.Equals(
-                    semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol,
-                    localSymbol));
+                    semanticModel.GetSymbolInfo(assignmentIdentifier, cancellationToken).Symbol,
+                    local))
+            .OrderByDescending(assignment => assignment.SpanStart)
+            .FirstOrDefault();
+
+        ExpressionSyntax? value;
+        if (latestAssignment is null)
+        {
+            value = declaration.Initializer?.Value;
+        }
+        else if (latestAssignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+            latestAssignment.Parent is ExpressionStatementSyntax { Parent: BlockSyntax assignmentBlock } &&
+            assignmentBlock == containingBlock)
+        {
+            value = latestAssignment.Right;
+        }
+        else
+        {
+            return false;
+        }
+
+        return value is not null &&
+            ContainsSelectWithHttpCall(
+                value,
+                semanticModel,
+                cancellationToken,
+                visitedLocals.Add(local));
     }
 
     private static bool IsSelectInvocationWithHttpCall(
