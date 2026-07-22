@@ -20,6 +20,19 @@ internal static class ServiceRegistrationCollector
         return CollectCore(root, semanticModel, cancellationToken);
     }
 
+    public static IReadOnlyList<ServiceRegistrationModel> CollectFrameworkRegistrations(
+        SyntaxNode root,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return CollectCore(root, semanticModel, cancellationToken)
+            .Where(registration => IsFrameworkServiceCollectionRegistration(
+                registration,
+                semanticModel,
+                cancellationToken))
+            .ToArray();
+    }
+
     private static IReadOnlyList<ServiceRegistrationModel> CollectCore(
         SyntaxNode root,
         SemanticModel? semanticModel,
@@ -55,6 +68,28 @@ internal static class ServiceRegistrationCollector
         }
 
         return typeNames;
+    }
+
+    private static bool IsFrameworkServiceCollectionRegistration(
+        ServiceRegistrationModel registration,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(registration.Invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsFrameworkServiceCollectionRegistration(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkServiceCollectionRegistration);
+    }
+
+    private static bool IsFrameworkServiceCollectionRegistration(IMethodSymbol method)
+    {
+        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
+        return containingNamespace.IsGlobalNamespace ||
+            containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
     }
 
     private static ServiceRegistrationModel? TryCreate(

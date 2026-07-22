@@ -53,38 +53,11 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzer : Diagnostic
     private static IReadOnlyList<ServiceRegistrationModel> GetCompilationRegistrations(CompilationAnalysisContext context)
     {
         return context.Compilation.SyntaxTrees
-            .SelectMany(tree => ServiceRegistrationCollector.Collect(
+            .SelectMany(tree => ServiceRegistrationCollector.CollectFrameworkRegistrations(
                 tree.GetRoot(context.CancellationToken),
                 GetSemanticModel(context.Compilation, tree),
                 context.CancellationToken))
-            .Where(registration => IsFrameworkServiceCollectionRegistration(
-                registration,
-                context.Compilation,
-                context.CancellationToken))
             .ToArray();
-    }
-
-    private static bool IsFrameworkServiceCollectionRegistration(
-        ServiceRegistrationModel registration,
-        Compilation compilation,
-        System.Threading.CancellationToken cancellationToken)
-    {
-        var semanticModel = GetSemanticModel(compilation, registration.Invocation.SyntaxTree);
-        var symbolInfo = semanticModel.GetSymbolInfo(registration.Invocation, cancellationToken);
-        if (symbolInfo.Symbol is IMethodSymbol method)
-        {
-            return IsFrameworkServiceCollectionRegistration(method);
-        }
-
-        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
-        return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkServiceCollectionRegistration);
-    }
-
-    private static bool IsFrameworkServiceCollectionRegistration(IMethodSymbol method)
-    {
-        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
-        return containingNamespace.IsGlobalNamespace ||
-            containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
     }
 
     private static bool IsStandaloneServiceRegistration(ServiceRegistrationModel registration)
