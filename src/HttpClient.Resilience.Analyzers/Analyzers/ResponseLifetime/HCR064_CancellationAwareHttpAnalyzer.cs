@@ -17,6 +17,7 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         "DeleteAsync",
         "GetAsync",
         "GetByteArrayAsync",
+        "GetFromJsonAsAsyncEnumerable",
         "GetFromJsonAsync",
         "GetStreamAsync",
         "GetStringAsync",
