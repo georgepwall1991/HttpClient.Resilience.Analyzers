@@ -708,6 +708,56 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenAwaitedResponseHasExplicitCast()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = (HttpResponseMessage)await client.GetAsync(
+                        "https://example.com",
+                        cancellationToken);
+                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR061, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenTrackedContentHasExplicitCast()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    return await ((HttpContent)response.Content).ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR061, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenNullForgivingResponseContentIsRead()
     {
         const string source = """

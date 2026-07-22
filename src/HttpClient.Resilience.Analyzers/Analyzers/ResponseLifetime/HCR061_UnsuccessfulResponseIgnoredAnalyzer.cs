@@ -607,6 +607,9 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
                     when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
                     expression = postfix.Operand;
                     continue;
+                case CastExpressionSyntax cast:
+                    expression = cast.Expression;
+                    continue;
                 default:
                     return expression;
             }
