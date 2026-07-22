@@ -62,6 +62,53 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenServiceCollectionParameterUsesAlias()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+            using Services = global::IServiceCollection;
+
+            public static class Composition
+            {
+                public static void Configure(Services services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+                public Task<string> SendAsync(HttpClient client)
+                {
+                    return client.GetStringAsync("payments");
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenTwoGenericTypedClientImplementationUsesRelativeUrl()
     {
         const string source = """
