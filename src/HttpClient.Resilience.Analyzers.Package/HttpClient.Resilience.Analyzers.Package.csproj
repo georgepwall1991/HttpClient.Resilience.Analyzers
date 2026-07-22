@@ -5,7 +5,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>HttpClient.Resilience.Analyzers</PackageId>
-    <Version>0.1.120</Version>
+    <Version>0.1.121</Version>
     <Title>HttpClient Resilience Analyzers for .NET</Title>
     <Authors>George Wall</Authors>
     <Copyright>Copyright (c) George Wall and contributors 2026</Copyright>
@@ -17,7 +17,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Improve NuGet and GitHub discoverability with richer package metadata, a dedicated NuGet README, complete community files, and automated GitHub Releases.</PackageReleaseNotes>
+    <PackageReleaseNotes>Detect HCR063 sync-over-async blocking when an HTTP task is hidden behind an explicit task cast.</PackageReleaseNotes>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
