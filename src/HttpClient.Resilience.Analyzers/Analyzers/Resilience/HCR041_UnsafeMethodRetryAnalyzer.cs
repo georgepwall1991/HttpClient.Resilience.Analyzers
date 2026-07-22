@@ -79,7 +79,10 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         IEnumerable<SyntaxNode> roots)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
-        if (!IsAddStandardResilienceHandlerInvocation(invocation) ||
+        if (!IsAddStandardResilienceHandlerInvocation(
+                invocation,
+                context.SemanticModel,
+                context.CancellationToken) ||
             HasUnsafeMethodRetryGuard(invocation))
         {
             return;
@@ -114,12 +117,34 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             memberAccess.Name.GetLocation()));
     }
 
-    private static bool IsAddStandardResilienceHandlerInvocation(InvocationExpressionSyntax invocation)
+    private static bool IsAddStandardResilienceHandlerInvocation(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
-        return invocation.Expression is MemberAccessExpressionSyntax
+        if (invocation.Expression is not MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "AddStandardResilienceHandler"
+            })
         {
-            Name.Identifier.ValueText: "AddStandardResilienceHandler"
-        };
+            return false;
+        }
+
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsFrameworkResilienceExtension(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkResilienceExtension);
+    }
+
+    private static bool IsFrameworkResilienceExtension(IMethodSymbol method)
+    {
+        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
+        return containingNamespace.IsGlobalNamespace ||
+            containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
     }
 
     private static bool HasUnsafeMethodRetryGuard(InvocationExpressionSyntax invocation)
