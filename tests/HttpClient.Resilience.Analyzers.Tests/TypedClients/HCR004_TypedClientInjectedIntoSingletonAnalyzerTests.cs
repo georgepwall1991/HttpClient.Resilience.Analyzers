@@ -209,6 +209,54 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenCustomServiceProviderExtensionResolvesTypedClient()
+    {
+        const string source = """
+            using CustomResolution;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton<PaymentJob>(sp => PaymentJob.Create(sp.GetRequiredService<PaymentsClient>()));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentJob
+            {
+                public static PaymentJob Create(PaymentsClient paymentsClient) => new();
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services, System.Func<System.IServiceProvider, TService> factory) => services;
+            }
+
+            namespace CustomResolution
+            {
+                public static class ServiceProviderExtensions
+                {
+                    public static TService GetRequiredService<TService>(this System.IServiceProvider provider) => default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenTypeofSingletonFactoryResolvesTypedClient()
     {
         const string source = """
