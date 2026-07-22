@@ -334,18 +334,33 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         }
 
         urlExpression = expression;
-        if (expression is IdentifierNameSyntax identifier &&
-            TryGetVisibleLocalValue(
+        if (expression is IdentifierNameSyntax identifier)
+        {
+            if (TryGetVisibleRequestUriValue(
+                identifier,
+                semanticModel,
+                cancellationToken,
+                out var requestUriValue))
+            {
+                return TryGetRelativeUriCreationArgument(
+                    requestUriValue,
+                    semanticModel,
+                    cancellationToken,
+                    out urlExpression);
+            }
+
+            if (TryGetVisibleLocalValue(
                 identifier,
                 semanticModel,
                 cancellationToken,
                 out var localValue))
-        {
-            return TryGetRequestMessageRelativeUrl(
-                localValue,
-                semanticModel,
-                cancellationToken,
-                out urlExpression);
+            {
+                return TryGetRequestMessageRelativeUrl(
+                    localValue,
+                    semanticModel,
+                    cancellationToken,
+                    out urlExpression);
+            }
         }
 
         if (expression is not BaseObjectCreationExpressionSyntax requestCreation ||
@@ -395,13 +410,10 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
 
         foreach (var assignment in requestCreation.Initializer.Expressions.OfType<AssignmentExpressionSyntax>())
         {
-            if (semanticModel.GetSymbolInfo(assignment.Left, cancellationToken).Symbol is not IPropertySymbol
-                {
-                    Name: "RequestUri",
-                    ContainingType: { } containingType,
-                } ||
-                containingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) !=
-                    "global::System.Net.Http.HttpRequestMessage" ||
+            if (!IsHttpRequestMessageRequestUriProperty(
+                    assignment.Left,
+                    semanticModel,
+                    cancellationToken) ||
                 !TryGetRelativeUriCreationArgument(
                     assignment.Right,
                     semanticModel,
@@ -416,6 +428,78 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         }
 
         return false;
+    }
+
+    private static bool TryGetVisibleRequestUriValue(
+        IdentifierNameSyntax identifier,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        out ExpressionSyntax value)
+    {
+        value = identifier;
+        if (semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is not ILocalSymbol local ||
+            identifier.FirstAncestorOrSelf<BlockSyntax>() is not { } containingBlock)
+        {
+            return false;
+        }
+
+        var assignments = containingBlock
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Where(assignment => assignment.SpanStart < identifier.SpanStart &&
+                assignment.Left is MemberAccessExpressionSyntax memberAccess &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetSymbolInfo(memberAccess.Expression, cancellationToken).Symbol,
+                    local) &&
+                IsHttpRequestMessageRequestUriProperty(
+                    assignment.Left,
+                    semanticModel,
+                    cancellationToken))
+            .ToList();
+        if (assignments.Count == 0)
+        {
+            return false;
+        }
+
+        var directAssignment = assignments
+            .Where(assignment =>
+                assignment.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SimpleAssignmentExpression) &&
+                assignment.Parent is ExpressionStatementSyntax { Parent: BlockSyntax parentBlock } &&
+                parentBlock == containingBlock)
+            .LastOrDefault();
+        if (directAssignment is null ||
+            assignments.Any(assignment => assignment.SpanStart > directAssignment.SpanStart))
+        {
+            return true;
+        }
+
+        if (LocalIsReassignedBetween(
+            local,
+            directAssignment.Span.End,
+            identifier.SpanStart,
+            containingBlock,
+            semanticModel,
+            cancellationToken))
+        {
+            return false;
+        }
+
+        value = directAssignment.Right;
+        return true;
+    }
+
+    private static bool IsHttpRequestMessageRequestUriProperty(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol is IPropertySymbol
+        {
+            Name: "RequestUri",
+            ContainingType: { } containingType,
+        } &&
+            containingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                "global::System.Net.Http.HttpRequestMessage";
     }
 
     private static bool TryGetRelativeUriCreationArgument(
