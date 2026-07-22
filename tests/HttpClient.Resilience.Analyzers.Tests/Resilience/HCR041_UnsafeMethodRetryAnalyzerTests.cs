@@ -55,6 +55,60 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenStandardResilienceHandlerIsCustomExtension()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using CustomResilience;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<PaymentsClient>()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+            }
+
+            namespace CustomResilience
+            {
+                public static class CustomHttpClientBuilderExtensions
+                {
+                    public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenTypedClientSendsConnectMethodThroughHttpClientExtension()
     {
         const string source = """
@@ -372,6 +426,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
             using System.Net.Http;
             using System.Threading;
             using System.Threading.Tasks;
+            using Microsoft.Extensions.DependencyInjection;
 
             namespace Clients
             {
@@ -401,10 +456,14 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
                 {
                 }
 
+            }
+
+            namespace Microsoft.Extensions.DependencyInjection
+            {
                 public static class ServiceCollectionExtensions
                 {
-                    public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
-                    public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+                    public static Clients.IHttpClientBuilder AddHttpClient<TClient>(this Clients.IServiceCollection services) => null!;
+                    public static Clients.IHttpClientBuilder AddStandardResilienceHandler(this Clients.IHttpClientBuilder builder) => builder;
                 }
             }
             """;
