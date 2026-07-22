@@ -32,6 +32,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         "DeleteFromJsonAsync",
         "GetAsync",
         "GetByteArrayAsync",
+        "GetFromJsonAsAsyncEnumerable",
         "GetFromJsonAsync",
         "GetStreamAsync",
         "GetStringAsync",
