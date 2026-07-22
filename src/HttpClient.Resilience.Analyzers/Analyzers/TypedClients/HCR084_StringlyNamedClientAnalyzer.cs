@@ -130,13 +130,18 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
             invocation.ArgumentList.Arguments.Count == 0 ||
             !IsHttpClientFactoryReceiver(memberAccess.Expression, semanticModel, cancellationToken) ||
             !IsHttpClientFactoryCreateClientMethod(invocation, semanticModel, cancellationToken) ||
-            !TryGetStringLiteral(invocation.ArgumentList.Arguments[0].Expression, out var name) ||
+            !TryGetVisibleStringLiteral(
+                invocation.ArgumentList.Arguments[0].Expression,
+                semanticModel,
+                cancellationToken,
+                out var name,
+                out var nameExpression) ||
             string.IsNullOrWhiteSpace(name))
         {
             return false;
         }
 
-        usage = new NamedClientUsage(name, invocation.ArgumentList.Arguments[0].Expression);
+        usage = new NamedClientUsage(name, nameExpression);
         return true;
     }
 
@@ -172,6 +177,57 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
 
         value = string.Empty;
         return false;
+    }
+
+    private static bool TryGetVisibleStringLiteral(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        out string value,
+        out ExpressionSyntax valueExpression)
+    {
+        expression = UnwrapParentheses(expression);
+        valueExpression = expression;
+        if (TryGetStringLiteral(expression, out value))
+        {
+            return true;
+        }
+
+        value = string.Empty;
+        if (expression is not IdentifierNameSyntax identifier ||
+            semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is not ILocalSymbol local ||
+            identifier.FirstAncestorOrSelf<BlockSyntax>() is not { } containingBlock)
+        {
+            return false;
+        }
+
+        var declaration = containingBlock.Statements
+            .OfType<LocalDeclarationStatementSyntax>()
+            .SelectMany(statement => statement.Declaration.Variables)
+            .FirstOrDefault(variable => variable.SpanStart < identifier.SpanStart &&
+                variable.Initializer is not null &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetDeclaredSymbol(variable, cancellationToken),
+                    local));
+        if (declaration?.Initializer is not { Value: { } initializer } ||
+            containingBlock
+                .DescendantNodes()
+                .OfType<AssignmentExpressionSyntax>()
+                .Any(assignment => assignment.SpanStart > declaration.Span.End &&
+                    assignment.SpanStart < identifier.SpanStart &&
+                    SymbolEqualityComparer.Default.Equals(
+                        semanticModel.GetSymbolInfo(assignment.Left, cancellationToken).Symbol,
+                        local)))
+        {
+            return false;
+        }
+
+        return TryGetVisibleStringLiteral(
+            initializer,
+            semanticModel,
+            cancellationToken,
+            out value,
+            out valueExpression);
     }
 
     private static bool IsServiceCollectionReceiver(
