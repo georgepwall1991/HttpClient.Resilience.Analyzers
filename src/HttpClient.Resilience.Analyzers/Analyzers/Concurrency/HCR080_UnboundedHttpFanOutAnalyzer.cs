@@ -7,6 +7,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace HttpClient.Resilience.Analyzers.Analyzers.Concurrency;
 
@@ -143,7 +144,31 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         return expression
             .DescendantNodesAndSelf()
             .OfType<InvocationExpressionSyntax>()
-            .Any(invocation => IsSelectInvocationWithHttpCall(invocation, semanticModel, cancellationToken));
+            .Any(invocation => IsSelectInvocationWithHttpCall(invocation, semanticModel, cancellationToken)) ||
+            expression
+                .DescendantNodesAndSelf()
+                .OfType<QueryExpressionSyntax>()
+                .Any(query => IsLinqQueryWithHttpCall(query, semanticModel, cancellationToken));
+    }
+
+    private static bool IsLinqQueryWithHttpCall(
+        QueryExpressionSyntax query,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (query.Body.SelectOrGroup is not SelectClauseSyntax selectClause ||
+            semanticModel.GetOperation(query, cancellationToken) is not { } operation ||
+            !operation.DescendantsAndSelf()
+                .OfType<IInvocationOperation>()
+                .Any(invocation => IsLinqSelect(invocation.TargetMethod)))
+        {
+            return false;
+        }
+
+        return selectClause.Expression
+            .DescendantNodesAndSelf()
+            .OfType<InvocationExpressionSyntax>()
+            .Any(invocation => IsUnboundedHttpCall(invocation, semanticModel, cancellationToken));
     }
 
     private static bool LocalValueContainsSelectWithHttpCall(
