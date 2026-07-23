@@ -222,6 +222,9 @@ internal static class ServiceRegistrationCollector
         {
             ObjectCreationExpressionSyntax objectCreation => objectCreation.Type.ToString(),
             ParenthesizedExpressionSyntax parenthesized => TryGetConstructedImplementationType(parenthesized.Expression),
+            PostfixUnaryExpressionSyntax postfix when
+                postfix.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SuppressNullableWarningExpression) =>
+                TryGetConstructedImplementationType(postfix.Operand),
             LambdaExpressionSyntax lambda => TryGetConstructedImplementationType(lambda.Body),
             AnonymousMethodExpressionSyntax anonymousMethod => TryGetConstructedImplementationType(anonymousMethod.Block),
             BlockSyntax block => TryGetConstructedImplementationType(block),
