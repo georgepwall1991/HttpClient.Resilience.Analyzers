@@ -49,7 +49,8 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
 
         foreach (var variable in field.Declaration.Variables)
         {
-            if (variable.Initializer?.Value is not BaseObjectCreationExpressionSyntax creation)
+            if (variable.Initializer?.Value is not { } initializer ||
+                UnwrapTransparentExpressions(initializer) is not BaseObjectCreationExpressionSyntax creation)
             {
                 continue;
             }
@@ -74,7 +75,8 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     {
         var property = (PropertyDeclarationSyntax)context.Node;
         if (!IsLongLivedProperty(property, singletonTypes, context.SemanticModel, context.CancellationToken) ||
-            property.Initializer?.Value is not BaseObjectCreationExpressionSyntax creation)
+            property.Initializer?.Value is not { } initializer ||
+            UnwrapTransparentExpressions(initializer) is not BaseObjectCreationExpressionSyntax creation)
         {
             return;
         }
@@ -130,7 +132,7 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         System.Threading.CancellationToken cancellationToken,
         out BaseObjectCreationExpressionSyntax creation)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         if (expression is BaseObjectCreationExpressionSyntax directCreation)
         {
@@ -186,7 +188,7 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
                     cancellationToken));
 
         if (variable?.Initializer?.Value is not { } initializer ||
-            UnwrapParentheses(initializer) is not BaseObjectCreationExpressionSyntax localCreation)
+            UnwrapTransparentExpressions(initializer) is not BaseObjectCreationExpressionSyntax localCreation)
         {
             return false;
         }
@@ -410,7 +412,7 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
 
         return creation.ArgumentList.Arguments
             .Any(argument => HandlerExpressionHasPooledConnectionLifetime(
-                UnwrapParentheses(argument.Expression),
+                UnwrapTransparentExpressions(argument.Expression),
                 semanticModel,
                 cancellationToken));
     }
@@ -458,7 +460,8 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
                 SymbolEqualityComparer.Default.Equals(
                     semanticModel.GetDeclaredSymbol(variable, cancellationToken),
                     local) &&
-                variable.Initializer?.Value is BaseObjectCreationExpressionSyntax handlerCreation &&
+                variable.Initializer?.Value is { } initializer &&
+                UnwrapTransparentExpressions(initializer) is BaseObjectCreationExpressionSyntax handlerCreation &&
                 !LocalIsReassignedBetweenDeclarationAndUse(
                     containingBlock,
                     variable,
@@ -484,7 +487,8 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         return symbol.DeclaringSyntaxReferences
             .Select(reference => reference.GetSyntax(cancellationToken))
             .OfType<VariableDeclaratorSyntax>()
-            .Any(variable => variable.Initializer?.Value is BaseObjectCreationExpressionSyntax handlerCreation &&
+            .Any(variable => variable.Initializer?.Value is { } initializer &&
+                UnwrapTransparentExpressions(initializer) is BaseObjectCreationExpressionSyntax handlerCreation &&
                 IsConfiguredSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken));
     }
 
@@ -496,7 +500,8 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         return property.DeclaringSyntaxReferences
             .Select(reference => reference.GetSyntax(cancellationToken))
             .OfType<PropertyDeclarationSyntax>()
-            .Any(propertyDeclaration => propertyDeclaration.Initializer?.Value is BaseObjectCreationExpressionSyntax handlerCreation &&
+            .Any(propertyDeclaration => propertyDeclaration.Initializer?.Value is { } initializer &&
+                UnwrapTransparentExpressions(initializer) is BaseObjectCreationExpressionSyntax handlerCreation &&
                 IsConfiguredSocketsHttpHandlerCreation(handlerCreation, semanticModel, cancellationToken));
     }
 
@@ -538,7 +543,7 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
 
     private static bool IsPooledConnectionLifetimeMember(ExpressionSyntax expression)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         return expression switch
         {
@@ -548,14 +553,23 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         };
     }
 
-    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        while (true)
         {
-            expression = parenthesized.Expression;
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix when
+                    postfix.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
         }
-
-        return expression;
     }
 
     private static bool IsHttpClientMemberCreation(
