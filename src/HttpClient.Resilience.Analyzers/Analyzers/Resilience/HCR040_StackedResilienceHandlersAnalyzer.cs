@@ -69,7 +69,7 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
 
             if (invocation.Expression is MemberAccessExpressionSyntax memberAccess)
             {
-                current = memberAccess.Expression;
+                current = UnwrapTransparentExpressions(memberAccess.Expression);
                 continue;
             }
 
@@ -238,7 +238,7 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
                 yield break;
             }
 
-            current = memberAccess.Expression;
+            current = UnwrapTransparentExpressions(memberAccess.Expression);
         }
     }
 
