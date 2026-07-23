@@ -520,7 +520,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                     builderIdentifier.Identifier.ValueText,
                     variable.SpanStart,
                     invocation.SpanStart))
-            .Select(variable => UnwrapParentheses(variable.Initializer!.Value))
+            .Select(variable => UnwrapTransparentExpressions(variable.Initializer!.Value))
             .OfType<InvocationExpressionSyntax>()
             .FirstOrDefault();
     }
@@ -798,7 +798,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         SyntaxNode context,
         IEnumerable<SyntaxNode> roots)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         return expression switch
         {
@@ -815,12 +815,12 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         IEnumerable<SyntaxNode> roots)
     {
         return objectCreation.ArgumentList?.Arguments
-            .Select(argument => UnwrapParentheses(argument.Expression))
+            .Select(argument => UnwrapTransparentExpressions(argument.Expression))
             .Any(expression => IsUnsafeHttpMethodExpression(expression, roots)) == true ||
             objectCreation.Initializer?.Expressions
                 .OfType<AssignmentExpressionSyntax>()
                 .Any(assignment => IsMethodMember(assignment.Left) &&
-                    IsUnsafeHttpMethodExpression(UnwrapParentheses(assignment.Right), roots)) == true;
+                    IsUnsafeHttpMethodExpression(UnwrapTransparentExpressions(assignment.Right), roots)) == true;
     }
 
     private static bool LocalRequestVariableUsesUnsafeMethod(
@@ -850,7 +850,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
 
     private static bool IsMethodMember(ExpressionSyntax expression)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         return expression switch
         {
@@ -862,7 +862,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
 
     private static bool IsUnsafeHttpMethodExpression(ExpressionSyntax expression, IEnumerable<SyntaxNode> roots)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         return expression switch
         {
@@ -877,14 +877,23 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        while (true)
         {
-            expression = parenthesized.Expression;
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix when
+                    postfix.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
         }
-
-        return expression;
     }
 
     private static bool IsCreateClientInvocation(
@@ -1029,7 +1038,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
 
     private static string? TryGetStringConstant(ExpressionSyntax expression, IEnumerable<SyntaxNode> roots)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         if (TryGetStringLiteral(expression) is { } literal)
         {
