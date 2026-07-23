@@ -164,7 +164,8 @@ internal static class ServiceRegistrationCollector
 
     private static bool TryGetTypeofArgument(ArgumentSyntax argument, out string typeName)
     {
-        if (argument.Expression is TypeOfExpressionSyntax typeOfExpression)
+        var expression = UnwrapTransparentExpressions(argument.Expression);
+        if (expression is TypeOfExpressionSyntax typeOfExpression)
         {
             typeName = typeOfExpression.Type.ToString();
             return true;
@@ -172,6 +173,25 @@ internal static class ServiceRegistrationCollector
 
         typeName = string.Empty;
         return false;
+    }
+
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix when
+                    postfix.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
+        }
     }
 
     private static bool IsSupportedNonTypeofRegistrationArgument(ArgumentSyntax argument)

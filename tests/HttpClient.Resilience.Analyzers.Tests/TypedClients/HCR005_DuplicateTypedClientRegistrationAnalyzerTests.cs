@@ -272,6 +272,46 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenDuplicateRegistrationUsesNullForgivingTypeofTypes()
+    {
+        const string source = """
+            using System;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<IPaymentsClient, PaymentsClient>();
+                    services.AddTransient((typeof(IPaymentsClient)!), typeof(PaymentsClient)!);
+                }
+            }
+
+            public interface IPaymentsClient
+            {
+            }
+
+            public sealed class PaymentsClient : IPaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TService, TImplementation>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient(this IServiceCollection services, Type serviceType, Type implementationType) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR005, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenDuplicateRegistrationUsesTypeofFactory()
     {
         const string source = """
