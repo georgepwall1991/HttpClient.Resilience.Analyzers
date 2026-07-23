@@ -345,10 +345,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         System.Threading.CancellationToken cancellationToken,
         out ExpressionSyntax urlExpression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
-        {
-            expression = parenthesized.Expression;
-        }
+        expression = UnwrapTransparentExpressions(expression);
 
         urlExpression = expression;
         if (expression is IdentifierNameSyntax identifier)
@@ -529,10 +526,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         System.Threading.CancellationToken cancellationToken,
         out ExpressionSyntax urlExpression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
-        {
-            expression = parenthesized.Expression;
-        }
+        expression = UnwrapTransparentExpressions(expression);
 
         urlExpression = expression;
         if (expression is IdentifierNameSyntax identifier &&
@@ -585,10 +579,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         System.Threading.CancellationToken cancellationToken,
         out ExpressionSyntax urlExpression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
-        {
-            expression = parenthesized.Expression;
-        }
+        expression = UnwrapTransparentExpressions(expression);
 
         urlExpression = expression;
         if (IsRelativeStringUrl(expression, semanticModel, cancellationToken))
@@ -611,6 +602,25 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
             semanticModel,
             cancellationToken,
             out urlExpression);
+    }
+
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix when
+                    postfix.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
+        }
     }
 
     private static bool TryGetVisibleLocalValue(
