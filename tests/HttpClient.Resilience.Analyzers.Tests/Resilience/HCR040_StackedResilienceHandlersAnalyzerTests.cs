@@ -55,6 +55,46 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenStandardResilienceHandlerChainUsesNullForgivingSegments()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<GitHubClient>()!
+                        .AddStandardResilienceHandler()!
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR040, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenStandardResilienceHandlerIsUsedOnce()
     {
         const string source = """
@@ -507,6 +547,49 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
                 {
                     return builder;
                 }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR040, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenNamedResilienceHandlerChainUsesNullForgivingSegments()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<GitHubClient>()!
+                        .AddResilienceHandler("github", builder => { })!
+                        .AddResilienceHandler("github", builder => { });
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddResilienceHandler(
+                    this IHttpClientBuilder builder,
+                    string name,
+                    System.Action<object> configure) => builder;
             }
             """;
 
