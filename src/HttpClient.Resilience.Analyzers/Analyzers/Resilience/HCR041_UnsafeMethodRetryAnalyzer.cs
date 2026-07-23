@@ -263,6 +263,9 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                 parenthesized.Expression,
                 semanticModel,
                 cancellationToken),
+            PostfixUnaryExpressionSyntax postfix when
+                postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression) =>
+                IsSafeOnlyPredicateExpression(postfix.Operand, semanticModel, cancellationToken),
             BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.LogicalOrExpression) =>
                 IsSafeOnlyPredicateExpression(binary.Left, semanticModel, cancellationToken) &&
                 IsSafeOnlyPredicateExpression(binary.Right, semanticModel, cancellationToken),
@@ -342,6 +345,9 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
     {
         var httpMethodMembers = binary
             .ChildNodes()
+            .OfType<ExpressionSyntax>()
+            .Select(UnwrapTransparentExpressions)
+            .SelectMany(operand => operand.DescendantNodesAndSelf())
             .OfType<MemberAccessExpressionSyntax>()
             .Where(memberAccess => IsFrameworkHttpMethodMember(memberAccess, semanticModel, cancellationToken))
             .Select(memberAccess => memberAccess.Name.Identifier.ValueText)
