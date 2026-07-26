@@ -24,6 +24,7 @@ Most .NET services use `HttpClient`, but many production issues come from patter
 - Per-request resilience pipeline construction.
 - Typed clients using relative URLs without a configured `BaseAddress`.
 - Named clients whose string names are duplicated across registration and use sites.
+- Multiple typed-client implementations that silently share one implicit named-client configuration.
 
 ## Example
 
@@ -56,4 +57,4 @@ The package is intentionally not a style analyzer. Warnings should feel like pro
 
 ## Status
 
-The initial preview implements the MVP diagnostics plus the starter's first future-rule expansion through `HCR084`, with tests, documentation, sample cases, `.editorconfig` profiles, and NuGet analyzer packaging.
+The initial preview implements the MVP diagnostics plus the starter's first future-rule expansion through `HCR085`, with tests, documentation, sample cases, `.editorconfig` profiles, and NuGet analyzer packaging.

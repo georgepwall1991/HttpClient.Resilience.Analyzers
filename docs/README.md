@@ -28,7 +28,7 @@ New to the package? Follow the root [quick start](../README.md#quick-start), the
 Each rule page includes the production risk, bad and better C# examples, detection scope, code-fix notes, suppression guidance, and references.
 
 - [Lifetime rules](rules/README.md#lifetime): `HCR001`, `HCR002`, `HCR003`
-- [Typed-client and named-client rules](rules/README.md#typed-clients-and-named-clients): `HCR004`, `HCR005`, `HCR083`, `HCR084`
+- [Typed-client and named-client rules](rules/README.md#typed-clients-and-named-clients): `HCR004`, `HCR005`, `HCR083`, `HCR084`, `HCR085`
 - [Handler rules](rules/README.md#handlers): `HCR020`
 - [Resilience rules](rules/README.md#resilience): `HCR040`, `HCR041`, `HCR082`
 - [Response lifetime and request correctness rules](rules/README.md#response-lifetime-and-request-correctness): `HCR060`, `HCR061`, `HCR062`, `HCR063`, `HCR064`, `HCR081`

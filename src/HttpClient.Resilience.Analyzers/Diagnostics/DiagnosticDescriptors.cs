@@ -113,6 +113,12 @@ public static class DiagnosticDescriptors
         "Avoid duplicated string literals for named HttpClient names",
         DiagnosticCategories.TypedClients);
 
+    public static readonly DiagnosticDescriptor HCR085 = Create(
+        DiagnosticIds.HCR085,
+        "Multiple typed clients on one interface should use explicit names",
+        "Typed clients '{0}' and '{1}' share the implicit HttpClient name for '{2}'; specify distinct names or link them to an explicit named client",
+        DiagnosticCategories.TypedClients);
+
     private static DiagnosticDescriptor Create(
         string id,
         string title,

@@ -17,3 +17,4 @@ dotnet_diagnostic.HCR081.severity = error
 dotnet_diagnostic.HCR082.severity = error
 dotnet_diagnostic.HCR083.severity = error
 dotnet_diagnostic.HCR084.severity = error
+dotnet_diagnostic.HCR085.severity = error

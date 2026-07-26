@@ -29,6 +29,7 @@ Each rule page includes:
 | [`HCR005`](HCR005.md) | Do not separately register a typed client already registered by `AddHttpClient<T>()` | Warning | Yes |
 | [`HCR083`](HCR083.md) | Configure `BaseAddress` for typed clients that use relative URLs | Warning | Guide |
 | [`HCR084`](HCR084.md) | Avoid duplicated string literals for named `HttpClient` names | Warning | Guide |
+| [`HCR085`](HCR085.md) | Multiple typed clients on one interface should use explicit names | Warning | Guide |
 
 ### Handlers
 
@@ -67,7 +68,7 @@ For brownfield services, start with the rules most likely to prevent production 
 
 | Priority | Rules | Why |
 |---|---|---|
-| 1 | `HCR041`, `HCR060`, `HCR061`, `HCR062`, `HCR063`, `HCR064`, `HCR081` | These catch unsafe retries, response ownership mistakes, shared header mutation, sync-over-async calls, and missing cancellation. |
+| 1 | `HCR041`, `HCR060`, `HCR061`, `HCR062`, `HCR063`, `HCR064`, `HCR081`, `HCR085` | These catch unsafe retries, response ownership mistakes, shared header mutation, sync-over-async calls, missing cancellation, and silent typed-client configuration collisions. |
 | 2 | `HCR001`, `HCR002`, `HCR003`, `HCR004`, `HCR005`, `HCR020` | These catch lifetime and dependency-injection problems that are costly to debug after deployment. |
 | 3 | `HCR040`, `HCR080`, `HCR082`, `HCR083`, `HCR084` | These improve resilience configuration, fan-out control, URI safety, and named-client maintainability. |
 

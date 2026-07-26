@@ -743,6 +743,7 @@ Do not build these until the MVP rules are stable:
 | `HCR082` | Avoid per-request creation of resilience pipelines. |
 | `HCR083` | Warn when typed clients have no `BaseAddress` and use relative URLs. |
 | `HCR084` | Warn when named client names are stringly duplicated. |
+| `HCR085` | Warn when multiple typed-client implementations share one implicit client name. |
 
 ## Reference docs to link from rule pages
 
