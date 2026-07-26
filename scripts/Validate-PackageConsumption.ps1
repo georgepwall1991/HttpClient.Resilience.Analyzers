@@ -64,6 +64,7 @@ dotnet_diagnostic.HCR081.severity = warning
 dotnet_diagnostic.HCR082.severity = warning
 dotnet_diagnostic.HCR083.severity = warning
 dotnet_diagnostic.HCR084.severity = warning
+dotnet_diagnostic.HCR085.severity = warning
 "@ | Set-Content -LiteralPath $editorConfigPath
 
     @"
@@ -127,6 +128,27 @@ public static class BadDuplicateTypedClientRegistration
         services.AddHttpClient<BadPaymentsService>();
         services.AddTransient<BadPaymentsService>();
     }
+}
+
+public static class BadSharedTypedClientNameRegistration
+{
+    public static void Configure(IServiceCollection services)
+    {
+        services.AddHttpClient<IBadSharedPaymentsClient, BadStripePaymentsClient>();
+        services.AddHttpClient<IBadSharedPaymentsClient, BadAdyenPaymentsClient>();
+    }
+}
+
+public interface IBadSharedPaymentsClient
+{
+}
+
+public sealed class BadStripePaymentsClient : IBadSharedPaymentsClient
+{
+}
+
+public sealed class BadAdyenPaymentsClient : IBadSharedPaymentsClient
+{
 }
 
 public static class BadRelativeTypedClientRegistration
@@ -305,6 +327,12 @@ public static class HttpClientBuilderExtensions
         return new DemoHttpClientBuilder();
     }
 
+    public static IHttpClientBuilder AddHttpClient<TService, TImplementation>(this IServiceCollection services)
+        where TImplementation : TService
+    {
+        return new DemoHttpClientBuilder();
+    }
+
     public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name)
     {
         return new DemoHttpClientBuilder();
@@ -382,7 +410,8 @@ namespace Polly
         'HCR081',
         'HCR082',
         'HCR083',
-        'HCR084'
+        'HCR084',
+        'HCR085'
     )
 
     $missingDiagnostics = @(

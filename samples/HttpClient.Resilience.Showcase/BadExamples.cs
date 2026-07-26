@@ -60,6 +60,27 @@ public static class BadDuplicateTypedClientRegistration
     }
 }
 
+public static class BadSharedTypedClientNameRegistration
+{
+    public static void Configure(IServiceCollection services)
+    {
+        services.AddHttpClient<IBadSharedPaymentsClient, BadStripePaymentsClient>();
+        services.AddHttpClient<IBadSharedPaymentsClient, BadAdyenPaymentsClient>();
+    }
+}
+
+public interface IBadSharedPaymentsClient
+{
+}
+
+public sealed class BadStripePaymentsClient : IBadSharedPaymentsClient
+{
+}
+
+public sealed class BadAdyenPaymentsClient : IBadSharedPaymentsClient
+{
+}
+
 public static class BadRelativeTypedClientRegistration
 {
     public static void Configure(IServiceCollection services)
@@ -223,6 +244,12 @@ public interface IHttpClientBuilder
 public static class HttpClientBuilderExtensions
 {
     public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+    {
+        return new DemoHttpClientBuilder();
+    }
+
+    public static IHttpClientBuilder AddHttpClient<TService, TImplementation>(this IServiceCollection services)
+        where TImplementation : TService
     {
         return new DemoHttpClientBuilder();
     }

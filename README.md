@@ -12,7 +12,7 @@
 
 Production-focused Roslyn analyzers and code fixes for .NET `HttpClient`, `IHttpClientFactory`, typed and named clients, Polly, and `Microsoft.Extensions.Http.Resilience`.
 
-Catch outbound HTTP reliability bugs during development—not after deployment. The analyzer detects socket-exhaustion risks, stale DNS clients, DI lifetime leaks, unsafe retries, undisposed responses and streams, sync-over-async, dropped cancellation tokens, unbounded fan-out, and fragile named-client strings.
+Catch outbound HTTP reliability bugs during development—not after deployment. The analyzer detects socket-exhaustion risks, stale DNS clients, DI lifetime leaks, typed-client configuration collisions, unsafe retries, undisposed responses and streams, sync-over-async, dropped cancellation tokens, unbounded fan-out, and fragile named-client strings.
 
 > The package is analyzer-only and adds no runtime dependency to your application.
 
@@ -27,7 +27,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 Or add an explicit package reference:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.140" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.141" PrivateAssets="all" />
 ```
 
 `PrivateAssets="all"` prevents the analyzer from flowing to projects that consume your project.
@@ -78,7 +78,7 @@ Several rules include automatic code fixes; every diagnostic links to a rule pag
 | Response ownership | Undisposed `ResponseHeadersRead` responses and HTTP content streams |
 | Request correctness | Unchecked failure responses, shared default-header mutation, missing cancellation |
 | Async and concurrency | Sync-over-async and obvious unbounded HTTP fan-out |
-| Typed and named clients | Relative URLs without `BaseAddress` and duplicated string client names |
+| Typed and named clients | Relative URLs without `BaseAddress`, duplicated string client names, and implicit-name configuration collisions |
 
 The rules intentionally focus on concrete production risks. Heuristic checks use a lower default severity, and deliberate exceptions can be configured per rule.
 
@@ -104,6 +104,7 @@ The rules intentionally focus on concrete production risks. Heuristic checks use
 | [`HCR082`](docs/rules/HCR082.md) | Resilience | Per-request resilience pipeline construction | Warning | Guide |
 | [`HCR083`](docs/rules/HCR083.md) | Typed clients | Relative URLs used without a configured `BaseAddress` | Warning | Guide |
 | [`HCR084`](docs/rules/HCR084.md) | Named clients | Duplicated string literals for named-client names | Warning | Guide |
+| [`HCR085`](docs/rules/HCR085.md) | Typed clients | Different implementations sharing one implicit client name | Warning | Guide |
 
 See the [rules index](docs/rules/README.md) for categories and recommended rollout order, or open an individual rule for exact detection details and limitations.
 

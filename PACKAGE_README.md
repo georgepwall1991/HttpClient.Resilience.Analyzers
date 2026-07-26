@@ -6,7 +6,7 @@
 
 Production-focused Roslyn analyzers and code fixes for `HttpClient`, `IHttpClientFactory`, typed and named clients, Polly, and `Microsoft.Extensions.Http.Resilience`.
 
-Catch outbound HTTP reliability bugs at compile time: socket exhaustion, stale DNS connections, dependency-injection lifetime leaks, unsafe retries, missing cancellation tokens, undisposed responses and streams, sync-over-async, and unbounded fan-out.
+Catch outbound HTTP reliability bugs at compile time: socket exhaustion, stale DNS connections, dependency-injection lifetime leaks, typed-client configuration collisions, unsafe retries, missing cancellation tokens, undisposed responses and streams, sync-over-async, and unbounded fan-out.
 
 > Analyzer-only package: no runtime dependency is added to your application.
 
@@ -19,7 +19,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 For a library or shared project, keep the analyzer private to the project:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.140" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.141" PrivateAssets="all" />
 ```
 
 Build normally with `dotnet build`. Diagnostics appear in supported IDEs, command-line builds, and CI without application configuration.
@@ -34,9 +34,9 @@ Build normally with `dotnet build`. Diagnostics appear in supported IDEs, comman
 | Response ownership | Undisposed `ResponseHeadersRead` responses and HTTP content streams |
 | Request correctness | Unchecked failure responses, shared default-header mutation, dropped cancellation tokens |
 | Async and concurrency | Sync-over-async and obvious unbounded HTTP fan-out |
-| Typed and named clients | Relative URLs without `BaseAddress` and duplicated string client names |
+| Typed and named clients | Relative URLs without `BaseAddress`, duplicated string client names, and implicit-name configuration collisions |
 
-The package currently contains 18 documented diagnostics, including automatic fixes for common lifetime, retry, response-disposal, cancellation, and registration problems.
+The package currently contains 19 documented diagnostics, including automatic fixes for common lifetime, retry, response-disposal, cancellation, and registration problems.
 
 ## Configure Severity
 

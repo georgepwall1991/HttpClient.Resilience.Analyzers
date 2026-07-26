@@ -22,6 +22,7 @@ HCR081 | HttpClient.ResponseLifetime | Warning | Dispose streams returned from H
 HCR082 | HttpClient.Resilience | Warning | Avoid per-request creation of resilience pipelines
 HCR083 | HttpClient.TypedClients | Warning | Configure BaseAddress for typed clients that use relative URLs
 HCR084 | HttpClient.TypedClients | Warning | Avoid duplicated string literals for named HttpClient names
+HCR085 | HttpClient.TypedClients | Warning | Multiple typed clients on one interface should use explicit names
 
 ### Removed Rules
 
