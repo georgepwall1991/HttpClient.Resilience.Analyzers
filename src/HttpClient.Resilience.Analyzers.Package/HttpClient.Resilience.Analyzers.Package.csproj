@@ -5,19 +5,19 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>HttpClient.Resilience.Analyzers</PackageId>
-    <Version>0.1.141</Version>
-    <Title>HttpClient Resilience Analyzers for .NET</Title>
+    <Version>0.1.142</Version>
+    <Title>HttpClient Resilience Analyzers — IHttpClientFactory, Polly, and Http.Resilience</Title>
     <Authors>George Wall</Authors>
     <Copyright>Copyright (c) George Wall and contributors 2026</Copyright>
-    <Description>Production-focused Roslyn analyzers and code fixes for .NET and ASP.NET Core HttpClient, IHttpClientFactory, typed clients, named clients, Polly, and Microsoft.Extensions.Http.Resilience. Catch socket exhaustion, stale DNS, DI lifetime bugs, unsafe retries, missing cancellation tokens, and response disposal mistakes at compile time.</Description>
-    <PackageTags>httpclient;ihttpclientfactory;httpclientfactory;resilience;http-resilience;polly;dotnet;csharp;roslyn;analyzer;analyser;dotnet-analyzers;code-fix;compiler;aspnetcore;static-analysis;dependency-injection;delegatinghandler;socketshttphandler;socket-exhaustion;dns;typed-client;named-client;retry;cancellationtoken;cancellation-token;response-disposal;resilience-pipeline;microsoft-extensions-http-resilience</PackageTags>
+    <Description>Compile-time Roslyn analyzers and code fixes for .NET HttpClient, IHttpClientFactory, AddHttpClient typed clients, named clients, Polly, and Microsoft.Extensions.Http.Resilience. Catch socket exhaustion, missing PooledConnectionLifetime, stale DNS, DI lifetime leaks, stacked AddStandardResilienceHandler pipelines, unsafe POST retries, ResponseHeadersRead disposal, CancellationToken gaps, and sync-over-async at build time—before production, not at runtime. Analyzer-only: no application runtime dependency.</Description>
+    <PackageTags>httpclient;ihttpclientfactory;httpclientfactory;AddHttpClient;resilience;http-resilience;polly;AddStandardResilienceHandler;PooledConnectionLifetime;dotnet;csharp;roslyn;roslyn-analyzer;analyzer;analyser;analyzers;dotnet-analyzers;code-fix;compiler;aspnetcore;static-analysis;dependency-injection;delegatinghandler;socketshttphandler;socket-exhaustion;dns;typed-client;named-client;retry;cancellationtoken;cancellation-token;response-disposal;resilience-pipeline;microsoft-extensions-http-resilience</PackageTags>
     <PackageProjectUrl>https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers</PackageProjectUrl>
     <RepositoryUrl>https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Add HCR085 to detect typed-client implementations that silently share one implicit HttpClient name and configuration.</PackageReleaseNotes>
+    <PackageReleaseNotes>Improve NuGet discoverability: keyword-rich Title/Description/PackageTags, conversion-funnel package README with product-flow visuals (absolute HTTPS image URLs), packed assets, and durable discoverability verification. Diagnostic IDs and severities are unchanged.</PackageReleaseNotes>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
@@ -30,6 +30,7 @@
     <None Include="..\..\PACKAGE_README.md" Pack="true" PackagePath="\README.md" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
     <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\**\*" Pack="true" PackagePath="assets\" />
     <None Include="..\..\profiles\*.editorconfig" Pack="true" PackagePath="contentFiles/any/any/profiles" />
     <None Include="..\HttpClient.Resilience.Analyzers\bin\$(Configuration)\netstandard2.0\HttpClient.Resilience.Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>

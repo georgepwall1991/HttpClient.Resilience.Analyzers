@@ -15,3 +15,6 @@
 *.nupkg binary
 *.snupkg binary
 *.trx text eol=crlf
+
+# Shell scripts must stay LF so bash on macOS/Linux accepts set -o pipefail
+*.sh text eol=lf

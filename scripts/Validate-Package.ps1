@@ -31,6 +31,11 @@ $requiredPaths = @(
     'LICENSE',
     'README.md',
     'icon.png',
+    'assets/icon.png',
+    'assets/logo.png',
+    'assets/flow-ide-diagnostics.svg',
+    'assets/flow-before-after-fix.svg',
+    'assets/flow-product-loop.svg',
     'contentFiles/any/any/profiles/default.editorconfig',
     'contentFiles/any/any/profiles/strict-ci.editorconfig',
     'contentFiles/any/any/profiles/brownfield-adoption.editorconfig',
@@ -41,6 +46,47 @@ foreach ($path in $requiredPaths) {
     if ($contents -notcontains $path) {
         throw "Package is missing $path"
     }
+}
+
+# Product-flow visuals referenced by PackageReadmeFile must match on-disk assets.
+$visualAssets = @(
+    'assets/flow-ide-diagnostics.svg',
+    'assets/flow-before-after-fix.svg',
+    'assets/flow-product-loop.svg',
+    'assets/logo.png',
+    'assets/icon.png'
+)
+
+$tempAssetDir = Join-Path ([System.IO.Path]::GetTempPath()) ('hcr-assets-' + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $tempAssetDir | Out-Null
+try {
+    tar -xf $resolvedPackage -C $tempAssetDir
+    foreach ($asset in $visualAssets) {
+        $diskPath = Join-Path $repoRoot $asset
+        $packedPath = Join-Path $tempAssetDir $asset
+        if (-not (Test-Path -LiteralPath $diskPath)) {
+            throw "Repository is missing visual asset: $asset"
+        }
+        if (-not (Test-Path -LiteralPath $packedPath)) {
+            throw "Package is missing packed visual asset: $asset"
+        }
+        $diskHash = (Get-FileHash -LiteralPath $diskPath -Algorithm SHA256).Hash
+        $packedHash = (Get-FileHash -LiteralPath $packedPath -Algorithm SHA256).Hash
+        if ($diskHash -ne $packedHash) {
+            throw "Packed asset does not match repository file: $asset"
+        }
+    }
+
+    $packedReadme = Join-Path $tempAssetDir 'README.md'
+    $sourceReadme = Join-Path $repoRoot 'PACKAGE_README.md'
+    $readmeDiskHash = (Get-FileHash -LiteralPath $sourceReadme -Algorithm SHA256).Hash
+    $readmePackedHash = (Get-FileHash -LiteralPath $packedReadme -Algorithm SHA256).Hash
+    if ($readmeDiskHash -ne $readmePackedHash) {
+        throw 'Packed README.md does not match PACKAGE_README.md.'
+    }
+}
+finally {
+    Remove-Item -LiteralPath $tempAssetDir -Recurse -Force
 }
 
 $libEntries = $contents | Where-Object { $_ -like 'lib/*' }
@@ -120,13 +166,18 @@ try {
     $requiredTags = @(
         'httpclient',
         'ihttpclientfactory',
+        'AddHttpClient',
         'resilience',
         'polly',
+        'AddStandardResilienceHandler',
+        'PooledConnectionLifetime',
         'dotnet',
         'csharp',
         'roslyn',
+        'roslyn-analyzer',
         'analyzer',
         'analyser',
+        'analyzers',
         'aspnetcore',
         'static-analysis',
         'socket-exhaustion',
@@ -142,6 +193,26 @@ try {
     foreach ($tag in $requiredTags) {
         if ($tags -notcontains $tag) {
             throw "Package tags are missing '$tag'."
+        }
+    }
+
+    # High-intent discoverability terms for NuGet search (description + tags surface).
+    $description = Get-MetadataText 'description'
+    $title = Get-MetadataText 'title'
+    $discoverabilityBlob = "$title $description $((Get-MetadataText 'tags'))"
+    $requiredDiscoverabilityTerms = @(
+        'IHttpClientFactory',
+        'HttpClient',
+        'Compile-time',
+        'PooledConnectionLifetime',
+        'AddStandardResilienceHandler',
+        'Roslyn',
+        'Polly'
+    )
+
+    foreach ($term in $requiredDiscoverabilityTerms) {
+        if ($discoverabilityBlob.IndexOf($term, [StringComparison]::Ordinal) -lt 0) {
+            throw "Package metadata is missing discoverability term: $term"
         }
     }
 }
