@@ -47,7 +47,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 Or add an explicit package reference:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.142" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.143" PrivateAssets="all" />
 ```
 
 `PrivateAssets="all"` prevents the analyzer from flowing to projects that consume your project.
@@ -209,6 +209,7 @@ Check the rule's documented detection scope, reduce its severity if needed, and 
 - [Documentation hub](docs/README.md)
 - [All analyzer rules](docs/rules/README.md)
 - [Implementation status and limitations](docs/implementation-status.md)
+- [Analyzer health audit and 30-iteration backlog](docs/analyzer-health.md)
 - [Contributing](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Support](SUPPORT.md)

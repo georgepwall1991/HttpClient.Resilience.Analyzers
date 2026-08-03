@@ -34,7 +34,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 For a library or shared project, keep the analyzer private to the project:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.142" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.143" PrivateAssets="all" />
 ```
 
 Build normally with `dotnet build`. Diagnostics appear in supported IDEs, command-line builds, and CI without application configuration.
@@ -86,6 +86,7 @@ Targets Roslyn via a `netstandard2.0` analyzer assembly. Works with modern .NET 
 - [Configuration guide](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/docs/configuration.md)
 - [Adoption guide](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/docs/adoption.md)
 - [Implementation status and limitations](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/docs/implementation-status.md)
+- [Analyzer health audit and 30-iteration backlog](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/docs/analyzer-health.md)
 - [Source and releases](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers)
 
 Licensed under the [MIT License](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/LICENSE).
