@@ -34,8 +34,9 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
         var diagnostic = context.Diagnostics[0];
         var node = root.FindNode(diagnostic.Location.SourceSpan);
         var statement = node.FirstAncestorOrSelf<ExpressionStatementSyntax>();
+        var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
 
-        if (statement is null)
+        if (statement is null || invocation is null || !CanSafelyRemove(statement, invocation))
         {
             return;
         }
@@ -46,6 +47,24 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
                 cancellationToken => RemoveStatementAsync(context.Document, statement, cancellationToken),
                 nameof(HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider)),
             diagnostic);
+    }
+
+    private static bool CanSafelyRemove(
+        ExpressionStatementSyntax statement,
+        InvocationExpressionSyntax invocation)
+    {
+        if (invocation.ArgumentList.Arguments.Count != 0)
+        {
+            return false;
+        }
+
+        var expression = statement.Expression;
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
+        return expression == invocation;
     }
 
     private static async Task<Document> RemoveStatementAsync(
