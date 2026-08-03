@@ -597,6 +597,39 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_UsesNearestLocalFunctionFactoryParameter()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory outerFactory)
+                {
+                    HttpClient CreateLocal(IHttpClientFactory localFactory)
+                    {
+                        return new HttpClient();
+                    }
+
+                    return CreateLocal(outerFactory);
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("return localFactory.CreateClient();", fixedSource);
+        Assert.DoesNotContain("return outerFactory.CreateClient();", fixedSource);
+        Assert.DoesNotContain("new HttpClient()", fixedSource);
+    }
+
+    [Fact]
     public async Task CodeFix_UsesExistingPrimaryConstructorFactoryParameter()
     {
         const string source = """
