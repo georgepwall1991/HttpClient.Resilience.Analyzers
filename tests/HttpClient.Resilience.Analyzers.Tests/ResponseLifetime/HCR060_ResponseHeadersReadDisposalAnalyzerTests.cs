@@ -1468,6 +1468,34 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_PreservesCommentsBetweenAdjacentDeclarationAndAssignment()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    HttpResponseMessage response;
+                    // The response owns the streaming content and must be disposed here.
+                    response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    _ = await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("The response owns the streaming content and must be disposed here.", fixedSource);
+        Assert.Contains("using HttpResponseMessage response = await client.SendAsync", fixedSource);
+        Assert.DoesNotContain("HttpResponseMessage response;", fixedSource);
+    }
+
+    [Fact]
     public async Task CodeFix_IsNotOfferedForNestedAssignment()
     {
         const string source = """
