@@ -141,7 +141,8 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
                 cancellationToken,
                 out var name,
                 out var nameExpression) ||
-            string.IsNullOrWhiteSpace(name))
+            string.IsNullOrWhiteSpace(name) ||
+            IsSharedStringConstant(nameExpression, semanticModel, cancellationToken))
         {
             return false;
         }
@@ -257,6 +258,19 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
             out valueExpression);
     }
 
+    private static bool IsSharedStringConstant(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return semanticModel.GetSymbolInfo(expression, cancellationToken).Symbol switch
+        {
+            IFieldSymbol field => field.IsConst && field.ConstantValue is string,
+            ILocalSymbol local => local.IsConst && local.ConstantValue is string,
+            _ => false
+        };
+    }
+
     private static bool TryGetInlineStringConstant(
         ExpressionSyntax expression,
         SemanticModel semanticModel,
@@ -269,8 +283,7 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
         }
 
         expression = UnwrapTransparentExpressions(expression);
-        if (IsSupportedInlineConstantExpression(expression) &&
-            semanticModel.GetConstantValue(expression, cancellationToken) is { HasValue: true, Value: string constantValue })
+        if (semanticModel.GetConstantValue(expression, cancellationToken) is { HasValue: true, Value: string constantValue })
         {
             value = constantValue;
             return true;
@@ -278,17 +291,6 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
 
         value = string.Empty;
         return false;
-    }
-
-    private static bool IsSupportedInlineConstantExpression(ExpressionSyntax expression)
-    {
-        return expression switch
-        {
-            BinaryExpressionSyntax binary => binary.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.AddExpression),
-            ConditionalExpressionSyntax => true,
-            InterpolatedStringExpressionSyntax => true,
-            _ => false
-        };
     }
 
     private static bool IsServiceCollectionReceiver(
