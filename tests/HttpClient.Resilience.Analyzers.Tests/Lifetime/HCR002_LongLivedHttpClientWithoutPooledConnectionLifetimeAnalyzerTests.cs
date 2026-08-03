@@ -1134,8 +1134,39 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         var fixedSource = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
             .ApplyFirstCodeFixAsync(source);
 
-        Assert.Contains("new HttpClient(new SocketsHttpHandler", fixedSource);
-        Assert.Contains("PooledConnectionLifetime = System.TimeSpan.FromMinutes(2)", fixedSource);
+        Assert.Contains("new global::System.Net.Http.HttpClient(new global::System.Net.Http.SocketsHttpHandler", fixedSource);
+        Assert.Contains("PooledConnectionLifetime = global::System.TimeSpan.FromMinutes(2)", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_UsesFullyQualifiedFrameworkTypesWhenNamesAreShadowed()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            namespace Demo
+            {
+                public sealed class SocketsHttpHandler
+                {
+                }
+
+                public sealed class TimeSpan
+                {
+                }
+
+                public sealed class GitHubClient
+                {
+                    private static readonly HttpClient Client = new();
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("new global::System.Net.Http.HttpClient", fixedSource);
+        Assert.Contains("new global::System.Net.Http.SocketsHttpHandler", fixedSource);
+        Assert.Contains("global::System.TimeSpan.FromMinutes(2)", fixedSource);
     }
 
     [Fact]

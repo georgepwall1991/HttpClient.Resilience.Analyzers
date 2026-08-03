@@ -69,7 +69,7 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
         }
 
         var replacement = SyntaxFactory.ParseExpression(
-                "new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = System.TimeSpan.FromMinutes(2) })")
+                "new global::System.Net.Http.HttpClient(new global::System.Net.Http.SocketsHttpHandler { PooledConnectionLifetime = global::System.TimeSpan.FromMinutes(2) })")
             .WithTriviaFrom(variable.Initializer!.Value)
             .WithAdditionalAnnotations(Formatter.Annotation);
 
