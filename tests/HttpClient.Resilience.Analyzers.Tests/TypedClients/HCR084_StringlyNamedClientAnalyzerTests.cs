@@ -876,6 +876,67 @@ public sealed class HCR084_StringlyNamedClientAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenRegistrationUsesCrossFileConstantAndUsageUsesLiteral()
+    {
+        const string namesAndRegistration = """
+            using System.Net.Http;
+
+            public static class ClientNames
+            {
+                public const string Payments = "payments";
+            }
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient(ClientNames.Payments);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        const string usage = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory factory)
+                {
+                    return factory.CreateClient("payments");
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR084_StringlyNamedClientAnalyzer>
+            .GetDiagnosticsAsync(namesAndRegistration, usage);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR084, diagnostic.Id);
+        Assert.Equal("Test1.cs", diagnostic.Location.SourceTree?.FilePath);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenCreateClientUsesDifferentName()
     {
         const string source = """
