@@ -132,6 +132,17 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
         replacement = replacement
             .WithTriviaFrom(blockingExpression)
             .WithAdditionalAnnotations(Formatter.Annotation);
+        var comments = operation
+            .DescendantTokens()
+            .SelectMany(token => token.LeadingTrivia.Concat(token.TrailingTrivia))
+            .Where(trivia => trivia.IsKind(SyntaxKind.SingleLineCommentTrivia) ||
+                trivia.IsKind(SyntaxKind.MultiLineCommentTrivia))
+            .ToArray();
+        if (comments.Length > 0)
+        {
+            replacement = replacement.WithLeadingTrivia(
+                replacement.GetLeadingTrivia().AddRange(comments));
+        }
 
         return document.WithSyntaxRoot(root.ReplaceNode(blockingExpression, replacement));
     }
