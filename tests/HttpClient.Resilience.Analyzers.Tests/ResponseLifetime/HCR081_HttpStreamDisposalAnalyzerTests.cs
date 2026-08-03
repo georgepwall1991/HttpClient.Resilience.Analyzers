@@ -160,6 +160,33 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenAwaitUsingStatementOwnsStream()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response, Stream destination, CancellationToken cancellationToken)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    await using (stream)
+                    {
+                        await stream.CopyToAsync(destination, cancellationToken);
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenStreamIsDisposedAsync()
     {
         const string source = """
@@ -767,6 +794,35 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
                 {
                     Stream stream;
                     if (destination.CanWrite)
+                    {
+                        stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                        await stream.CopyToAsync(destination, cancellationToken);
+                    }
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedForNestedAssignmentInsideAwaitUsing()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response, Stream destination, CancellationToken cancellationToken)
+                {
+                    Stream stream;
+                    await using (var owner = new MemoryStream())
                     {
                         stream = await response.Content.ReadAsStreamAsync(cancellationToken);
                         await stream.CopyToAsync(destination, cancellationToken);

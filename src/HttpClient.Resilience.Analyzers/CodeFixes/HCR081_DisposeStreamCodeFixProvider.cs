@@ -38,6 +38,7 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
 
         if (declaration is not null &&
             declaration.UsingKeyword == default &&
+            declaration.AwaitKeyword == default &&
             declaration.Declaration.Variables.Count == 1)
         {
             context.RegisterCodeFix(
