@@ -537,7 +537,9 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
                 assignment.Left is MemberAccessExpressionSyntax memberAccess &&
                 IsPooledConnectionLifetimeMember(memberAccess.Name) &&
                 SymbolEqualityComparer.Default.Equals(
-                    semanticModel.GetSymbolInfo(memberAccess.Expression, cancellationToken).Symbol,
+                    semanticModel.GetSymbolInfo(
+                        UnwrapTransparentExpressions(memberAccess.Expression),
+                        cancellationToken).Symbol,
                     local));
     }
 

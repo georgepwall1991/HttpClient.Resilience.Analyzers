@@ -369,6 +369,31 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenStaticHttpClientUsesNullForgivingConfiguredLocalHandlerAssignment()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static HttpClient Client = null!;
+
+                public static void Initialize()
+                {
+                    var handler = new SocketsHttpHandler();
+                    handler!.PooledConnectionLifetime = TimeSpan.FromMinutes(2);
+                    Client = new HttpClient(handler!);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenStaticHttpClientPropertyHasPooledConnectionLifetime()
     {
         const string source = """
