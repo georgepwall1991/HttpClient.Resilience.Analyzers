@@ -13,6 +13,7 @@ New to the package? Follow the root [quick start](../README.md#quick-start), the
 | [Adoption](adoption.md) | Practical rollout steps for brownfield and new .NET services. |
 | [False-positive policy](false-positive-policy.md) | The diagnostic quality bar and how to report noisy analyzer behavior. |
 | [Implementation status](implementation-status.md) | Current analyzer and code-fix coverage for every rule ID. |
+| [Analyzer health](analyzer-health.md) | Evidence-backed rule scorecard and 30-iteration improvement backlog. |
 | [Releasing](releasing.md) | Maintainer workflow for package validation and NuGet publishing. |
 
 ## Common Tasks
