@@ -530,6 +530,35 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_PreservesCommentsInsideConfigureAwaitChain()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    return client.GetAsync("https://example.com")
+                        // Keep this explicit continuation choice.
+                        .ConfigureAwait(false)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("Keep this explicit continuation choice.", fixedSource);
+        Assert.Contains("await client.GetAsync(\"https://example.com\")", fixedSource, StringComparison.Ordinal);
+        Assert.Contains(".ConfigureAwait(false);", fixedSource, StringComparison.Ordinal);
+        Assert.DoesNotContain(".GetAwaiter()", fixedSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenConfiguredHttpTaskLocalBlocks()
     {
         const string source = """
