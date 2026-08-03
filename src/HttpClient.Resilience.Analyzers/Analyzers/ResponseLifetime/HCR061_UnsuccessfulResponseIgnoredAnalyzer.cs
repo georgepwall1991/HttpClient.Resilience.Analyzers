@@ -63,7 +63,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
                 continue;
             }
 
-            if (HasSuccessCheckBefore(variable, responseLocal, contentRead.SpanStart, context.SemanticModel, context.CancellationToken))
+            if (HasSuccessCheckBefore(variable, responseLocal, contentRead, context.SemanticModel, context.CancellationToken))
             {
                 continue;
             }
@@ -86,7 +86,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         }
 
         if (FindFirstContentRead(assignment, responseLocal, context.SemanticModel, context.CancellationToken) is not { } contentRead ||
-            HasSuccessCheckBefore(assignment, responseLocal, contentRead.SpanStart, context.SemanticModel, context.CancellationToken))
+            HasSuccessCheckBefore(assignment, responseLocal, contentRead, context.SemanticModel, context.CancellationToken))
         {
             return;
         }
@@ -484,7 +484,7 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
     private static bool HasSuccessCheckBefore(
         SyntaxNode origin,
         ILocalSymbol responseLocal,
-        int contentReadStart,
+        InvocationExpressionSyntax contentRead,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
@@ -495,7 +495,8 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
 
         return block
             .DescendantNodes()
-            .Where(node => node.SpanStart > origin.SpanStart && node.SpanStart < contentReadStart)
+            .Where(node => node.SpanStart > origin.SpanStart && node.SpanStart < contentRead.SpanStart)
+            .Where(node => IsInContentReadScope(node, contentRead))
             .Any(node => node switch
             {
                 InvocationExpressionSyntax invocation => IsEnsureSuccessStatusCodeCall(
@@ -512,6 +513,17 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
                     cancellationToken),
                 _ => false
             });
+    }
+
+    private static bool IsInContentReadScope(SyntaxNode candidate, InvocationExpressionSyntax contentRead)
+    {
+        var candidateBlock = candidate.FirstAncestorOrSelf<BlockSyntax>();
+        var contentReadBlock = contentRead.FirstAncestorOrSelf<BlockSyntax>();
+
+        return candidateBlock is null ||
+            contentReadBlock is null ||
+            contentReadBlock == candidateBlock ||
+            contentReadBlock.Ancestors().OfType<BlockSyntax>().Contains(candidateBlock);
     }
 
     private static bool IsEnsureSuccessStatusCodeCall(
