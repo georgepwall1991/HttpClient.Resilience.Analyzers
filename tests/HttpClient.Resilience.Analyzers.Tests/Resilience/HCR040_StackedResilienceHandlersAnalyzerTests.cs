@@ -930,6 +930,55 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_PreservesCommentsWhenRemovingDuplicateFromBuilderChain()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<GitHubClient>()
+                        .AddStandardResilienceHandler()
+                        // Keep the shared timeout policy on the builder.
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services)
+                {
+                    return null!;
+                }
+
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR040_StackedResilienceHandlersAnalyzer, HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Equal(1, CountOccurrences(fixedSource, ".AddStandardResilienceHandler()"));
+        Assert.Contains("Keep the shared timeout policy on the builder.", fixedSource);
+    }
+
+    [Fact]
     public async Task CodeFix_RemovesDuplicateNamedCustomResilienceHandler()
     {
         const string source = """
