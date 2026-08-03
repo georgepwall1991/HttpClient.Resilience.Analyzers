@@ -51,6 +51,28 @@ public sealed class HCR085_MultipleTypedClientsShareImplicitNameAnalyzerTests
         }
         """;
 
+    private const string OptionalNameFramework = """
+        using System;
+        using System.Net.Http;
+
+        public interface IServiceCollection
+        {
+        }
+
+        public interface IHttpClientBuilder
+        {
+        }
+
+        public static class ServiceCollectionExtensions
+        {
+            public static IHttpClientBuilder AddHttpClient<TService, TImplementation>(
+                this IServiceCollection services,
+                string name = "implicit")
+                where TImplementation : TService =>
+                default!;
+        }
+        """;
+
     [Fact]
     public async Task ReportsDiagnostic_WhenDifferentImplementationsShareImplicitServiceName()
     {
@@ -281,6 +303,38 @@ public sealed class HCR085_MultipleTypedClientsShareImplicitNameAnalyzerTests
             .GetDiagnosticsAsync(source, Framework);
 
         Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenOptionalNameParameterIsOmitted()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<IPaymentsClient, StripePaymentsClient>();
+                    services.AddHttpClient<IPaymentsClient, AdyenPaymentsClient>();
+                }
+            }
+
+            public interface IPaymentsClient
+            {
+            }
+
+            public sealed class StripePaymentsClient : IPaymentsClient
+            {
+            }
+
+            public sealed class AdyenPaymentsClient : IPaymentsClient
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR085_MultipleTypedClientsShareImplicitNameAnalyzer>
+            .GetDiagnosticsAsync(source, OptionalNameFramework);
+
+        Assert.Single(diagnostics);
     }
 
     [Fact]
