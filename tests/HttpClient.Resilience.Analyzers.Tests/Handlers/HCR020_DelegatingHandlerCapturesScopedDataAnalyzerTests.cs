@@ -506,6 +506,49 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenDelegatingHandlerCapturesReadOnlyScopedServiceCollection()
+    {
+        const string source = """
+            using System.Collections.Generic;
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<IUserContext, UserContext>();
+                }
+            }
+
+            public sealed class UserHeaderHandler(IReadOnlyCollection<IUserContext> userContexts) : DelegatingHandler
+            {
+            }
+
+            public interface IUserContext
+            {
+            }
+
+            public sealed class UserContext : IUserContext
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddScoped<TService, TImplementation>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenScopedRegistrationUsesQualifiedTypeName()
     {
         const string source = """

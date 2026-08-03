@@ -361,7 +361,12 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
 
     private static bool IsRequestScopedWrapperName(string typeName)
     {
-        return typeName is "Func" or "Lazy" or "IEnumerable";
+        return typeName is
+            "Func" or
+            "Lazy" or
+            "IEnumerable" or
+            "IReadOnlyCollection" or
+            "IReadOnlyList";
     }
 
     private static bool IsQualifiedRequestScopedWrapperName(string qualifier, string typeName)
@@ -371,7 +376,8 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
         return typeName switch
         {
             "Func" or "Lazy" => qualifier == "System",
-            "IEnumerable" => qualifier == "System.Collections.Generic",
+            "IEnumerable" or "IReadOnlyCollection" or "IReadOnlyList" =>
+                qualifier == "System.Collections.Generic",
             _ => false
         };
     }
