@@ -89,7 +89,7 @@ public sealed class HCR085_MultipleTypedClientsShareImplicitNameAnalyzer : Diagn
 
         var semanticModel = GetSemanticModel(compilation, registration.Invocation.SyntaxTree);
         if (semanticModel.GetSymbolInfo(registration.Invocation, cancellationToken).Symbol is not IMethodSymbol method ||
-            method.Parameters.Any(parameter => parameter.Type.SpecialType == SpecialType.System_String))
+            HasExplicitNameArgument(registration.Invocation, semanticModel, cancellationToken))
         {
             return null;
         }
@@ -110,6 +110,16 @@ public sealed class HCR085_MultipleTypedClientsShareImplicitNameAnalyzer : Diagn
                 serviceType,
                 implementationType,
                 registration.Location);
+    }
+
+    private static bool HasExplicitNameArgument(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return invocation.ArgumentList.Arguments.Any(argument =>
+            semanticModel.GetTypeInfo(argument.Expression, cancellationToken).ConvertedType?.SpecialType ==
+            SpecialType.System_String);
     }
 
 #pragma warning disable RS1030 // HCR085 performs compilation-wide DI matching and needs cross-tree semantic type checks.
