@@ -36,7 +36,11 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         var node = root.FindNode(diagnostic.Location.SourceSpan);
         var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
 
-        if (invocation is null || invocation.ArgumentList.Arguments.Count != 0)
+        if (invocation?.Expression is not MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "AddStandardResilienceHandler"
+            } ||
+            invocation.ArgumentList.Arguments.Count != 0)
         {
             return;
         }

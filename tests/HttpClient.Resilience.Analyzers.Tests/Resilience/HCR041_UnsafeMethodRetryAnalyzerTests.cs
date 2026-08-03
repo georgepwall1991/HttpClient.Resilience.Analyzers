@@ -3257,4 +3257,85 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
 
         Assert.Contains(".AddStandardResilienceHandler(options => options.Retry.DisableForUnsafeHttpMethods())", fixedSource);
     }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenExistingRetryPredicateMustBePreserved()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<PaymentsClient>()
+                        .AddStandardResilienceHandler(options =>
+                        {
+                            options.Retry.ShouldHandle = args =>
+                                args.Outcome.Result?.RequestMessage?.Method == HttpMethod.Post;
+                        });
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(
+                    this IHttpClientBuilder builder,
+                    Action<HttpStandardResilienceOptions> configure)
+                {
+                    configure(new HttpStandardResilienceOptions());
+                    return builder;
+                }
+            }
+
+            public sealed class HttpStandardResilienceOptions
+            {
+                public RetryOptions Retry { get; } = new();
+            }
+
+            public sealed class RetryOptions
+            {
+                public Func<RetryPredicateArgs, bool> ShouldHandle { get; set; } = _ => true;
+            }
+
+            public sealed class RetryPredicateArgs
+            {
+                public RetryOutcome Outcome { get; } = new();
+            }
+
+            public sealed class RetryOutcome
+            {
+                public HttpResponseMessage? Result { get; } = new();
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Single(diagnostics);
+
+        var titles = await CodeFixVerifier<HCR041_UnsafeMethodRetryAnalyzer, HCR041_DisableUnsafeMethodRetriesCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
 }
