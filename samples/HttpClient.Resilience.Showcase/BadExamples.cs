@@ -11,6 +11,15 @@ public sealed class BadPaymentsService
     }
 }
 
+public sealed class BadPrimaryConstructorService(IHttpClientFactory factory)
+{
+    public HttpClient Create()
+    {
+        _ = factory;
+        return new HttpClient();
+    }
+}
+
 public sealed class BadStaticClient
 {
     private static readonly HttpClient Client = new();
