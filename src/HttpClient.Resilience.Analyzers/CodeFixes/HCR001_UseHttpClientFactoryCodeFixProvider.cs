@@ -58,25 +58,29 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
 
     private static string? FindFactoryParameterName(SyntaxNode node)
     {
-        if (node.FirstAncestorOrSelf<MethodDeclarationSyntax>() is { } method)
+        foreach (var ancestor in node.AncestorsAndSelf())
         {
-            if (FindFactoryParameterName(method.ParameterList.Parameters) is { } factoryName)
+            if (ancestor is LocalFunctionStatementSyntax localFunction &&
+                FindFactoryParameterName(localFunction.ParameterList.Parameters) is { } localFactoryName)
             {
-                return factoryName;
+                return localFactoryName;
+            }
+
+            if (ancestor is MethodDeclarationSyntax method &&
+                FindFactoryParameterName(method.ParameterList.Parameters) is { } methodFactoryName)
+            {
+                return methodFactoryName;
+            }
+
+            if (ancestor is ClassDeclarationSyntax classDeclaration &&
+                classDeclaration.ParameterList is { } parameterList &&
+                FindFactoryParameterName(parameterList.Parameters) is { } classFactoryName)
+            {
+                return classFactoryName;
             }
         }
 
-        if (node.FirstAncestorOrSelf<LocalFunctionStatementSyntax>() is { } localFunction)
-        {
-            if (FindFactoryParameterName(localFunction.ParameterList.Parameters) is { } factoryName)
-            {
-                return factoryName;
-            }
-        }
-
-        return node.FirstAncestorOrSelf<ClassDeclarationSyntax>()?.ParameterList is { } parameterList
-            ? FindFactoryParameterName(parameterList.Parameters)
-            : null;
+        return null;
     }
 
     private static string? FindFactoryParameterName(SeparatedSyntaxList<ParameterSyntax> parameters)

@@ -5,7 +5,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>HttpClient.Resilience.Analyzers</PackageId>
-    <Version>0.1.143</Version>
+    <Version>0.1.144</Version>
     <Title>HttpClient Resilience Analyzers — IHttpClientFactory, Polly, and Http.Resilience</Title>
     <Authors>George Wall</Authors>
     <Copyright>Copyright (c) George Wall and contributors 2026</Copyright>
@@ -17,7 +17,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Add a repository-specific analyzer health audit, 30-iteration improvement backlog, and validation coverage for the health contract. Diagnostic IDs and severities are unchanged.</PackageReleaseNotes>
+    <PackageReleaseNotes>Make the HCR001 code fix choose the nearest local-function IHttpClientFactory parameter and add regression coverage for nested factory scopes.</PackageReleaseNotes>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
