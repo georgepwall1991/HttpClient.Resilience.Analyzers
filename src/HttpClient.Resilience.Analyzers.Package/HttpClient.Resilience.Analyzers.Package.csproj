@@ -5,7 +5,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>HttpClient.Resilience.Analyzers</PackageId>
-    <Version>0.1.151</Version>
+    <Version>0.1.152</Version>
     <Title>HttpClient Resilience Analyzers — IHttpClientFactory, Polly, and Http.Resilience</Title>
     <Authors>George Wall</Authors>
     <Copyright>Copyright (c) George Wall and contributors 2026</Copyright>
@@ -17,7 +17,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Keep HCR041 fixes from overwriting existing retry predicates, with regression coverage and documentation.</PackageReleaseNotes>
+    <PackageReleaseNotes>Preserve comments when HCR060 merges response declarations with assignments into using declarations.</PackageReleaseNotes>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
