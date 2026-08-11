@@ -207,11 +207,12 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         }
 
         var localName = declarator.Identifier.ValueText;
+        var localSymbol = semanticModel.GetDeclaredSymbol(declarator, cancellationToken) as ILocalSymbol;
         var declarationIndex = block.Statements.IndexOf(declaration);
         for (var index = declarationIndex + 1; index < block.Statements.Count; index++)
         {
             var statement = block.Statements[index];
-            if (StatementReassignsLocal(statement, localName))
+            if (StatementReassignsLocal(statement, localName, localSymbol, semanticModel, cancellationToken))
             {
                 return false;
             }
@@ -223,7 +224,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
                     Expression: IdentifierNameSyntax receiver,
                     Name.Identifier.ValueText: "ConfigureHttpClient"
                 } &&
-                    receiver.Identifier.ValueText == localName &&
+                    ReceiverMatchesLocal(receiver, localName, localSymbol, semanticModel, cancellationToken) &&
                     IsFrameworkConfigureHttpClientInvocation(candidate, semanticModel, cancellationToken) &&
                     InvocationArgumentsConfigureBaseAddress(candidate, semanticModel, cancellationToken)))
             {
@@ -234,12 +235,37 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         return false;
     }
 
-    private static bool StatementReassignsLocal(StatementSyntax statement, string localName)
+    private static bool ReceiverMatchesLocal(
+        IdentifierNameSyntax receiver,
+        string localName,
+        ILocalSymbol? localSymbol,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (localSymbol is not null &&
+            semanticModel.GetSymbolInfo(receiver, cancellationToken).Symbol is { } receiverSymbol)
+        {
+            return SymbolEqualityComparer.Default.Equals(receiverSymbol, localSymbol);
+        }
+
+        return receiver.Identifier.ValueText == localName;
+    }
+
+    private static bool StatementReassignsLocal(
+        StatementSyntax statement,
+        string localName,
+        ILocalSymbol? localSymbol,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
     {
         return statement.DescendantNodes()
             .OfType<AssignmentExpressionSyntax>()
             .Any(assignment => assignment.Left is IdentifierNameSyntax identifier &&
-                identifier.Identifier.ValueText == localName);
+                (localSymbol is null
+                    ? identifier.Identifier.ValueText == localName
+                    : SymbolEqualityComparer.Default.Equals(
+                        semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol,
+                        localSymbol)));
     }
 
     private static bool IsFrameworkConfigureHttpClientMethod(IMethodSymbol method)
@@ -345,10 +371,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         System.Threading.CancellationToken cancellationToken,
         out ExpressionSyntax urlExpression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
-        {
-            expression = parenthesized.Expression;
-        }
+        expression = UnwrapTransparentExpressions(expression);
 
         urlExpression = expression;
         if (expression is IdentifierNameSyntax identifier)
@@ -529,10 +552,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         System.Threading.CancellationToken cancellationToken,
         out ExpressionSyntax urlExpression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
-        {
-            expression = parenthesized.Expression;
-        }
+        expression = UnwrapTransparentExpressions(expression);
 
         urlExpression = expression;
         if (expression is IdentifierNameSyntax identifier &&
@@ -585,10 +605,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         System.Threading.CancellationToken cancellationToken,
         out ExpressionSyntax urlExpression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
-        {
-            expression = parenthesized.Expression;
-        }
+        expression = UnwrapTransparentExpressions(expression);
 
         urlExpression = expression;
         if (IsRelativeStringUrl(expression, semanticModel, cancellationToken))
@@ -611,6 +628,25 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
             semanticModel,
             cancellationToken,
             out urlExpression);
+    }
+
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix when
+                    postfix.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
+        }
     }
 
     private static bool TryGetVisibleLocalValue(

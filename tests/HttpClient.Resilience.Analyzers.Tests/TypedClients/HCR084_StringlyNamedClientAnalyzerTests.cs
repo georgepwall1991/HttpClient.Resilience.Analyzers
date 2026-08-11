@@ -57,6 +57,57 @@ public sealed class HCR084_StringlyNamedClientAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenNamedClientNamesUseNullForgivingSyntax()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient("payments"!);
+                }
+            }
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory factory)
+                {
+                    var name = "payments";
+                    return factory.CreateClient(name!);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR084_StringlyNamedClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR084, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenRegistrationUsesInlineConstantConcatenation()
     {
         const string source = """
@@ -822,6 +873,67 @@ public sealed class HCR084_StringlyNamedClientAnalyzerTests
         var diagnostics = await AnalyzerVerifier<HCR084_StringlyNamedClientAnalyzer>.GetDiagnosticsAsync(source);
 
         Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenRegistrationUsesCrossFileConstantAndUsageUsesLiteral()
+    {
+        const string namesAndRegistration = """
+            using System.Net.Http;
+
+            public static class ClientNames
+            {
+                public const string Payments = "payments";
+            }
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient(ClientNames.Payments);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        const string usage = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory factory)
+                {
+                    return factory.CreateClient("payments");
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR084_StringlyNamedClientAnalyzer>
+            .GetDiagnosticsAsync(namesAndRegistration, usage);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR084, diagnostic.Id);
+        Assert.Equal("Test1.cs", diagnostic.Location.SourceTree?.FilePath);
     }
 
     [Fact]

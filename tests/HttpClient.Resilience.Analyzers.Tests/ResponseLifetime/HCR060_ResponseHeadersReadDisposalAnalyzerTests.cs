@@ -32,6 +32,33 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenResponseHeadersReadResultHasExplicitCast()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = (HttpResponseMessage)await client.SendAsync(
+                        request,
+                        HttpCompletionOption.ResponseHeadersRead,
+                        cancellationToken);
+                    _ = await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR060, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenGetAsyncUsesResponseHeadersRead()
     {
         const string source = """
@@ -952,6 +979,30 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenExplicitlyCastResponseIsDisposed()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    _ = await response.Content.ReadAsStringAsync(cancellationToken);
+                    ((HttpResponseMessage)response).Dispose();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenResponseIsDisposedThroughLocalAlias()
     {
         const string source = """
@@ -1414,6 +1465,34 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
         Assert.Equal(
             fixedSource.IndexOf("response = await client.SendAsync", StringComparison.Ordinal),
             fixedSource.LastIndexOf("response = await client.SendAsync", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CodeFix_PreservesCommentsBetweenAdjacentDeclarationAndAssignment()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    HttpResponseMessage response;
+                    // The response owns the streaming content and must be disposed here.
+                    response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    _ = await response.Content.ReadAsStringAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("The response owns the streaming content and must be disposed here.", fixedSource);
+        Assert.Contains("using HttpResponseMessage response = await client.SendAsync", fixedSource);
+        Assert.DoesNotContain("HttpResponseMessage response;", fixedSource);
     }
 
     [Fact]

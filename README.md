@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/georgepwall1991/HttpClient.Resilience.Analyzers/main/assets/logo.png" alt="HttpClient.Resilience.Analyzers logo" width="180">
+  <img src="https://raw.githubusercontent.com/georgepwall1991/HttpClient.Resilience.Analyzers/main/assets/logo.png" alt="HttpClient.Resilience.Analyzers logo — Roslyn analyzers for HttpClient and IHttpClientFactory" width="180">
 </p>
 
 # HttpClient.Resilience.Analyzers
@@ -10,15 +10,35 @@
 [![GitHub release](https://img.shields.io/github/v/release/georgepwall1991/HttpClient.Resilience.Analyzers)](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Production-focused Roslyn analyzers and code fixes for .NET `HttpClient`, `IHttpClientFactory`, typed and named clients, Polly, and `Microsoft.Extensions.Http.Resilience`.
+Compile-time Roslyn analyzers and code fixes for .NET `HttpClient`, `IHttpClientFactory`, `AddHttpClient` typed and named clients, Polly, and `Microsoft.Extensions.Http.Resilience`.
 
-Catch outbound HTTP reliability bugs during development—not after deployment. The analyzer detects socket-exhaustion risks, stale DNS clients, DI lifetime leaks, unsafe retries, undisposed responses and streams, sync-over-async, dropped cancellation tokens, unbounded fan-out, and fragile named-client strings.
+Catch outbound HTTP reliability bugs during development—not after deployment. The analyzer detects socket-exhaustion risks, missing `PooledConnectionLifetime`, stale DNS clients, DI lifetime leaks, typed-client configuration collisions, unsafe retries, undisposed responses and streams, sync-over-async, dropped cancellation tokens, unbounded fan-out, and fragile named-client strings.
 
-> The package is analyzer-only and adds no runtime dependency to your application.
+> The package is analyzer-only and adds no runtime dependency to your application. The analyzer stays quiet when a case is unprovable.
 
-## Quick Start
+## The problem
 
-### 1. Install the analyzer
+Most .NET services use `HttpClient`, but many production issues come from patterns that compile cleanly and look harmless in review:
+
+- Per-request `new HttpClient()` that exhausts sockets under load
+- Static clients without `PooledConnectionLifetime` that hold stale DNS
+- Typed clients captured by singletons or registered twice
+- `AddStandardResilienceHandler` retrying non-idempotent POST
+- Undisposed streaming responses and sync-over-async on outbound calls
+
+Those failures often appear only under traffic—after deploy.
+
+## What it catches
+
+- **Lifetime:** per-request clients, long-lived clients without `PooledConnectionLifetime`, cached factory clients
+- **DI / typed clients:** singleton injection, duplicate registrations, implicit shared names, relative URLs without `BaseAddress`
+- **Handlers:** `DelegatingHandler` capturing scoped request data
+- **Resilience / Polly:** stacked handlers, unsafe-method retries, per-request pipeline construction
+- **Response ownership:** undisposed `ResponseHeadersRead` responses and content streams
+- **Correctness:** unchecked failure responses, shared `DefaultRequestHeaders` mutation, missing `CancellationToken`
+- **Concurrency:** sync-over-async and obvious unbounded `Task.WhenAll` HTTP fan-out
+
+## Install
 
 ```bash
 dotnet add package HttpClient.Resilience.Analyzers
@@ -27,22 +47,31 @@ dotnet add package HttpClient.Resilience.Analyzers
 Or add an explicit package reference:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.120" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.159" PrivateAssets="all" />
 ```
 
 `PrivateAssets="all"` prevents the analyzer from flowing to projects that consume your project.
 
-### 2. Build normally
+## See it work
+
+Product-flow diagrams derived from the real [showcase sample](samples/HttpClient.Resilience.Showcase) diagnostics (not stock IDE screenshots):
+
+![HttpClient analyzer build diagnostics HCR001 HCR002 HCR041 for IHttpClientFactory and resilience](https://raw.githubusercontent.com/georgepwall1991/HttpClient.Resilience.Analyzers/main/assets/flow-ide-diagnostics.svg)
+
+![Before and after code fix for HCR041 unsafe POST retries with AddStandardResilienceHandler](https://raw.githubusercontent.com/georgepwall1991/HttpClient.Resilience.Analyzers/main/assets/flow-before-after-fix.svg)
+
+![HttpClient.Resilience.Analyzers product loop from source code to IDE and CI profiles](https://raw.githubusercontent.com/georgepwall1991/HttpClient.Resilience.Analyzers/main/assets/flow-product-loop.svg)
+
+## 30-second path
+
+1. Install the package (snippet above).
+2. Build normally — no service registration or runtime configuration is required.
 
 ```bash
 dotnet build
 ```
 
-Diagnostics appear in supported IDEs and in normal command-line or CI builds. No application code, service registration, or runtime configuration is required.
-
-### 3. Review or fix the warning
-
-For example, this typed client can send a non-idempotent `POST` through the standard retry pipeline:
+3. Review or fix a warning. For example, a typed client can send a non-idempotent `POST` through the standard retry pipeline:
 
 ```csharp
 services.AddHttpClient<PaymentsClient>()
@@ -68,7 +97,7 @@ services.AddHttpClient<PaymentsClient>()
 
 Several rules include automatic code fixes; every diagnostic links to a rule page explaining the risk, detection scope, safe alternatives, and suppression guidance.
 
-## What It Protects
+## Feature snapshot
 
 | Area | Examples of detected risk |
 |---|---|
@@ -78,9 +107,18 @@ Several rules include automatic code fixes; every diagnostic links to a rule pag
 | Response ownership | Undisposed `ResponseHeadersRead` responses and HTTP content streams |
 | Request correctness | Unchecked failure responses, shared default-header mutation, missing cancellation |
 | Async and concurrency | Sync-over-async and obvious unbounded HTTP fan-out |
-| Typed and named clients | Relative URLs without `BaseAddress` and duplicated string client names |
+| Typed and named clients | Relative URLs without `BaseAddress`, duplicated string client names, and implicit-name configuration collisions |
 
 The rules intentionally focus on concrete production risks. Heuristic checks use a lower default severity, and deliberate exceptions can be configured per rule.
+
+## Compatibility
+
+| Requirement | Notes |
+|---|---|
+| Analyzer TFM | `netstandard2.0` analyzer assembly |
+| Host projects | Modern .NET SDK / ASP.NET Core and class libraries using `HttpClient` patterns |
+| Runtime dependency | None — development dependency only |
+| IDE / CI | Diagnostics appear in supported IDEs and normal `dotnet build` / CI |
 
 ## Rule Catalog
 
@@ -104,6 +142,7 @@ The rules intentionally focus on concrete production risks. Heuristic checks use
 | [`HCR082`](docs/rules/HCR082.md) | Resilience | Per-request resilience pipeline construction | Warning | Guide |
 | [`HCR083`](docs/rules/HCR083.md) | Typed clients | Relative URLs used without a configured `BaseAddress` | Warning | Guide |
 | [`HCR084`](docs/rules/HCR084.md) | Named clients | Duplicated string literals for named-client names | Warning | Guide |
+| [`HCR085`](docs/rules/HCR085.md) | Typed clients | Different implementations sharing one implicit client name | Warning | Guide |
 
 See the [rules index](docs/rules/README.md) for categories and recommended rollout order, or open an individual rule for exact detection details and limitations.
 
@@ -170,6 +209,7 @@ Check the rule's documented detection scope, reduce its severity if needed, and 
 - [Documentation hub](docs/README.md)
 - [All analyzer rules](docs/rules/README.md)
 - [Implementation status and limitations](docs/implementation-status.md)
+- [Analyzer health audit and 30-iteration backlog](docs/analyzer-health.md)
 - [Contributing](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Support](SUPPORT.md)

@@ -35,6 +35,34 @@ public sealed class HCR003_CachedFactoryClientAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenNullForgivingFactoryClientIsAssignedToStaticField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ClientCache
+            {
+                private static HttpClient _client = null!;
+
+                public static void Initialize(IHttpClientFactory factory)
+                {
+                    _client = factory.CreateClient("github")!;
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR003, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenFactoryClientLocalIsAssignedToStaticField()
     {
         const string source = """
@@ -48,6 +76,35 @@ public sealed class HCR003_CachedFactoryClientAnalyzerTests
                 {
                     var client = factory.CreateClient("github");
                     _client = client;
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR003_CachedFactoryClientAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR003, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenNullForgivingFactoryClientLocalIsAssignedToStaticField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ClientCache
+            {
+                private static HttpClient _client = null!;
+
+                public static void Initialize(IHttpClientFactory factory)
+                {
+                    var client = factory.CreateClient("github");
+                    _client = client!;
                 }
             }
 

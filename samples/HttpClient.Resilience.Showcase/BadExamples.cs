@@ -11,6 +11,15 @@ public sealed class BadPaymentsService
     }
 }
 
+public sealed class BadPrimaryConstructorService(IHttpClientFactory factory)
+{
+    public HttpClient Create()
+    {
+        _ = factory;
+        return new HttpClient();
+    }
+}
+
 public sealed class BadStaticClient
 {
     private static readonly HttpClient Client = new();
@@ -58,6 +67,27 @@ public static class BadDuplicateTypedClientRegistration
         services.AddHttpClient<BadPaymentsService>();
         services.AddTransient<BadPaymentsService>();
     }
+}
+
+public static class BadSharedTypedClientNameRegistration
+{
+    public static void Configure(IServiceCollection services)
+    {
+        services.AddHttpClient<IBadSharedPaymentsClient, BadStripePaymentsClient>();
+        services.AddHttpClient<IBadSharedPaymentsClient, BadAdyenPaymentsClient>();
+    }
+}
+
+public interface IBadSharedPaymentsClient
+{
+}
+
+public sealed class BadStripePaymentsClient : IBadSharedPaymentsClient
+{
+}
+
+public sealed class BadAdyenPaymentsClient : IBadSharedPaymentsClient
+{
 }
 
 public static class BadRelativeTypedClientRegistration
@@ -223,6 +253,12 @@ public interface IHttpClientBuilder
 public static class HttpClientBuilderExtensions
 {
     public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+    {
+        return new DemoHttpClientBuilder();
+    }
+
+    public static IHttpClientBuilder AddHttpClient<TService, TImplementation>(this IServiceCollection services)
+        where TImplementation : TService
     {
         return new DemoHttpClientBuilder();
     }

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Composition;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -67,6 +68,11 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
             return;
         }
 
+        var cancellationTokenParameterName = GetCancellationTokenParameterName(
+            invocation,
+            semanticModel,
+            context.CancellationToken);
+
         foreach (var cancellationTokenSymbol in cancellationTokens.OrderBy(
                      symbol => symbol.Name,
                      System.StringComparer.Ordinal))
@@ -90,7 +96,7 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
             }
 
             var tokenArgument = SyntaxFactory.Argument(tokenExpression)
-                .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("cancellationToken")));
+                .WithNameColon(SyntaxFactory.NameColon(CreateIdentifierName(cancellationTokenParameterName)));
 
             context.RegisterCodeFix(
                 CodeAction.Create(
@@ -103,6 +109,61 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
                         cancellationToken),
                     $"{nameof(HCR064_PassCancellationTokenCodeFixProvider)}.{cancellationTokenSymbol.Name}"),
                 diagnostic);
+        }
+    }
+
+    private static string GetCancellationTokenParameterName(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        CancellationToken cancellationToken)
+    {
+        foreach (var method in GetCandidateMethods(invocation, semanticModel, cancellationToken))
+        {
+            if (method.Parameters.FirstOrDefault(parameter => IsCancellationToken(parameter.Type)) is { } parameter)
+            {
+                return parameter.Name;
+            }
+        }
+
+        return "cancellationToken";
+    }
+
+    private static IEnumerable<IMethodSymbol> GetCandidateMethods(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol resolvedMethod)
+        {
+            yield return resolvedMethod;
+        }
+
+        foreach (var candidate in symbolInfo.CandidateSymbols.OfType<IMethodSymbol>())
+        {
+            yield return candidate;
+        }
+
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+        {
+            yield break;
+        }
+
+        foreach (var member in semanticModel.GetMemberGroup(memberAccess, cancellationToken).OfType<IMethodSymbol>())
+        {
+            yield return member;
+        }
+
+        if (semanticModel.GetTypeInfo(memberAccess.Expression, cancellationToken).Type is not { } receiverType)
+        {
+            yield break;
+        }
+
+        foreach (var member in receiverType
+            .GetMembers(memberAccess.Name.Identifier.ValueText)
+            .OfType<IMethodSymbol>())
+        {
+            yield return member;
         }
     }
 
@@ -240,9 +301,25 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
         SemanticModel semanticModel,
         CancellationToken cancellationToken)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        while (true)
         {
-            expression = parenthesized.Expression;
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix
+                    when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                case CastExpressionSyntax cast:
+                    expression = cast.Expression;
+                    continue;
+                default:
+                    break;
+            }
+
+            break;
         }
 
         if (expression.IsKind(SyntaxKind.DefaultLiteralExpression) || expression is DefaultExpressionSyntax)

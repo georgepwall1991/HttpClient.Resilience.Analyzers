@@ -125,7 +125,7 @@ public sealed class HCR082_PerRequestResiliencePipelineAnalyzer : DiagnosticAnal
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         var expressionType = semanticModel.GetTypeInfo(expression, cancellationToken).Type;
         if (expressionType is not null && expressionType is not IErrorTypeSymbol)
@@ -324,7 +324,7 @@ public sealed class HCR082_PerRequestResiliencePipelineAnalyzer : DiagnosticAnal
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         if (ExpressionTypeLooksLikeEndpointBuilder(expression, semanticModel, cancellationToken))
         {
@@ -521,13 +521,22 @@ public sealed class HCR082_PerRequestResiliencePipelineAnalyzer : DiagnosticAnal
                 identifier.Identifier.ValueText == localName);
     }
 
-    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        while (true)
         {
-            expression = parenthesized.Expression;
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix
+                    when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
         }
-
-        return expression;
     }
 }

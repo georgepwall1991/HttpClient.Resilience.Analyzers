@@ -353,6 +353,9 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                     when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
                     expression = postfix.Operand;
                     continue;
+                case CastExpressionSyntax cast:
+                    expression = cast.Expression;
+                    continue;
                 default:
                     return expression;
             }

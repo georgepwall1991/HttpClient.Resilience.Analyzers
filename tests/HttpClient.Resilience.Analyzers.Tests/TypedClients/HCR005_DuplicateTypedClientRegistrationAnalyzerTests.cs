@@ -272,6 +272,46 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenDuplicateRegistrationUsesNullForgivingTypeofTypes()
+    {
+        const string source = """
+            using System;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<IPaymentsClient, PaymentsClient>();
+                    services.AddTransient((typeof(IPaymentsClient)!), typeof(PaymentsClient)!);
+                }
+            }
+
+            public interface IPaymentsClient
+            {
+            }
+
+            public sealed class PaymentsClient : IPaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TService, TImplementation>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient(this IServiceCollection services, Type serviceType, Type implementationType) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR005, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenDuplicateRegistrationUsesTypeofFactory()
     {
         const string source = """
@@ -880,5 +920,84 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
 
         Assert.Contains("services.AddHttpClient<PaymentsClient>();", fixedSource);
         Assert.DoesNotContain("services.AddTransient<PaymentsClient>();", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenDuplicateRegistrationHasFactoryPolicy()
+    {
+        const string source = """
+            using System;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddTransient<PaymentsClient>(serviceProvider => new PaymentsClient());
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(
+                    this IServiceCollection services,
+                    Func<IServiceProvider, TService> factory) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Single(diagnostics);
+
+        var titles = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenDuplicateRegistrationIsPartOfFluentPolicyChain()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddTransient<PaymentsClient>().Configure<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+                public static IServiceCollection Configure<TOptions>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Single(diagnostics);
+
+        var titles = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
     }
 }

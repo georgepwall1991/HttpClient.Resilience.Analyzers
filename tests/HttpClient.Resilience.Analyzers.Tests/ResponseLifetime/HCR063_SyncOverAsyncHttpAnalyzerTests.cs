@@ -50,6 +50,28 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenExplicitlyCastHttpClientTaskResultIsRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public HttpResponseMessage Get(HttpClient client)
+                {
+                    return ((Task<HttpResponseMessage>)client.GetAsync("https://example.com")).Result;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR063, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenHttpClientAsyncWaitIsCalled()
     {
         const string source = """
@@ -82,6 +104,29 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
                 {
                     var responseTask = client.GetAsync("https://example.com");
                     responseTask!.Wait();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR063, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenExplicitlyCastHttpTaskAliasWaitIsCalled()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public void Get(HttpClient client)
+                {
+                    var responseTask = (Task<HttpResponseMessage>)client.GetAsync("https://example.com");
+                    responseTask.Wait();
                 }
             }
             """;
@@ -480,6 +525,35 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
             "await client.GetAsync(\"https://example.com\")",
             fixedSource,
             StringComparison.Ordinal);
+        Assert.Contains(".ConfigureAwait(false);", fixedSource, StringComparison.Ordinal);
+        Assert.DoesNotContain(".GetAwaiter()", fixedSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CodeFix_PreservesCommentsInsideConfigureAwaitChain()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    return client.GetAsync("https://example.com")
+                        // Keep this explicit continuation choice.
+                        .ConfigureAwait(false)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("Keep this explicit continuation choice.", fixedSource);
+        Assert.Contains("await client.GetAsync(\"https://example.com\")", fixedSource, StringComparison.Ordinal);
         Assert.Contains(".ConfigureAwait(false);", fixedSource, StringComparison.Ordinal);
         Assert.DoesNotContain(".GetAwaiter()", fixedSource, StringComparison.Ordinal);
     }

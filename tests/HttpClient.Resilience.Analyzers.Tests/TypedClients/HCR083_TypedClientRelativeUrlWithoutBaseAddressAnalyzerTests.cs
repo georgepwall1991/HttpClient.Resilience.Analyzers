@@ -62,6 +62,53 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenRegisteredTypedClientUsesNullForgivingRelativeUrl()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient client)
+            {
+                public Task<HttpResponseMessage> SendAsync(CancellationToken cancellationToken)
+                {
+                    return client.GetAsync("/payments"!, cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenDirectHttpCallUsesRelativeUri()
     {
         const string source = """
@@ -694,6 +741,58 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzerTests
                         new HttpRequestMessage(
                             HttpMethod.Get,
                             new Uri("/payments", UriKind.Relative)),
+                        cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenNullForgivingInlineRequestConstructorUsesRelativeUri()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient client)
+            {
+                public Task<HttpResponseMessage> SendAsync(CancellationToken cancellationToken)
+                {
+                    return client.SendAsync(
+                        new HttpRequestMessage(
+                            HttpMethod.Get,
+                            new Uri("/payments", UriKind.Relative)!)!,
                         cancellationToken);
                 }
             }
@@ -1574,6 +1673,66 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzerTests
         var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
 
         Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenOnlyShadowedBuilderLocalIsConfigured()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    var builder = services.AddHttpClient<PaymentsClient>();
+                    void ConfigureOther()
+                    {
+                        var builder = services.AddHttpClient<OtherClient>();
+                        builder.ConfigureHttpClient(client => client.BaseAddress = new Uri("https://other.example"));
+                    }
+
+                    ConfigureOther();
+                    _ = builder;
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient client)
+            {
+                public Task<HttpResponseMessage> GetAsync()
+                {
+                    return client.GetAsync("/payments");
+                }
+            }
+
+            public sealed class OtherClient(HttpClient client)
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+
+                public static IHttpClientBuilder ConfigureHttpClient(
+                    this IHttpClientBuilder builder,
+                    Action<HttpClient> configure) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
     }
 
     [Fact]

@@ -150,16 +150,20 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
         Compilation compilation,
         System.Threading.CancellationToken cancellationToken)
     {
-        return invocation.Expression is MemberAccessExpressionSyntax
-        {
-            Expression: IdentifierNameSyntax receiver,
-            Name: GenericNameSyntax
+        if (invocation.Expression is not MemberAccessExpressionSyntax
             {
-                Identifier.ValueText: "GetService" or "GetRequiredService",
-                TypeArgumentList.Arguments.Count: 1
-            } genericName
-        } &&
-        IsServiceProviderFactoryParameter(
+                Name: GenericNameSyntax
+                {
+                    Identifier.ValueText: "GetService" or "GetRequiredService",
+                    TypeArgumentList.Arguments.Count: 1
+                } genericName
+            } memberAccess ||
+            UnwrapTransparentExpressions(memberAccess.Expression) is not IdentifierNameSyntax receiver)
+        {
+            return false;
+        }
+
+        return IsServiceProviderFactoryParameter(
             receiver,
             containingFactory,
             compilation,
@@ -170,6 +174,25 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
             typedClients,
             compilation,
             cancellationToken);
+    }
+
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix when
+                    postfix.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
+        }
     }
 
     private static bool IsFrameworkServiceProviderResolution(

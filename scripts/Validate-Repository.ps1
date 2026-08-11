@@ -44,7 +44,8 @@ $expectedDiagnosticIds = @(
     'HCR081',
     'HCR082',
     'HCR083',
-    'HCR084'
+    'HCR084',
+    'HCR085'
 )
 
 $unexpectedIds = @($diagnosticIds | Where-Object { $expectedDiagnosticIds -notcontains $_ })
@@ -116,6 +117,7 @@ $requiredTopLevelDocs = @(
     'docs\adoption.md',
     'docs\configuration.md',
     'docs\false-positive-policy.md',
+    'docs\analyzer-health.md',
     'docs\implementation-status.md',
     'docs\launch-blog-post.md',
     'docs\releasing.md'

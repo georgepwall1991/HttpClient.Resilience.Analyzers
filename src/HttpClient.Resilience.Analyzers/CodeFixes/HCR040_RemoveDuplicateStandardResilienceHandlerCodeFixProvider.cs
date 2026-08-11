@@ -1,11 +1,13 @@
 using System.Collections.Immutable;
 using System.Composition;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Formatting;
 
@@ -68,6 +70,17 @@ public sealed class HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvid
         var replacement = previousInvocation
             .WithTriviaFrom(duplicateInvocation)
             .WithAdditionalAnnotations(Formatter.Annotation);
+        var comments = duplicateInvocation
+            .DescendantTokens()
+            .SelectMany(token => token.LeadingTrivia.Concat(token.TrailingTrivia))
+            .Where(trivia => trivia.IsKind(SyntaxKind.SingleLineCommentTrivia) ||
+                trivia.IsKind(SyntaxKind.MultiLineCommentTrivia))
+            .ToArray();
+        if (comments.Length > 0)
+        {
+            replacement = replacement.WithLeadingTrivia(
+                replacement.GetLeadingTrivia().AddRange(comments));
+        }
 
         return document.WithSyntaxRoot(root.ReplaceNode(duplicateInvocation, replacement));
     }

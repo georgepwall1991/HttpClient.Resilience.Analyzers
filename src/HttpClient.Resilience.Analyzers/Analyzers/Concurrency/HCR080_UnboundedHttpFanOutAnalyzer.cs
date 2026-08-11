@@ -121,7 +121,7 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         System.Threading.CancellationToken cancellationToken,
         ImmutableHashSet<ISymbol> visitedLocals)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
 
         if (ExpressionContainsSelectWithHttpCall(expression, semanticModel, cancellationToken))
         {
@@ -360,14 +360,23 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         return SyntacticReceiverLooksLikeHttpClient(expression);
     }
 
-    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        while (true)
         {
-            expression = parenthesized.Expression;
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix
+                    when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
         }
-
-        return expression;
     }
 
     private static bool SyntacticReceiverLooksLikeHttpClient(ExpressionSyntax expression)
@@ -400,7 +409,8 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             .Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
                 variable.Parent is VariableDeclarationSyntax declaration &&
                 (HttpClientSymbols.IsHttpClientName(declaration.Type) ||
-                    variable.Initializer?.Value is BaseObjectCreationExpressionSyntax creation &&
+                    variable.Initializer?.Value is { } initializer &&
+                    UnwrapTransparentExpressions(initializer) is BaseObjectCreationExpressionSyntax creation &&
                     IsHttpClientCreation(creation))) == true;
     }
 
@@ -521,6 +531,8 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
+        expression = UnwrapTransparentExpressions(expression);
+
         if (expression is not BaseObjectCreationExpressionSyntax creation ||
             !IsHttpClientCreation(creation) ||
             creation.ArgumentList is not { Arguments.Count: > 0 } argumentList)
@@ -552,6 +564,8 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
+        expression = UnwrapTransparentExpressions(expression);
+
         if (expression is BaseObjectCreationExpressionSyntax creation)
         {
             return IsFrameworkConnectionLimitedHandlerCreation(creation, semanticModel, cancellationToken) &&
@@ -566,7 +580,8 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         var handlerDeclaration = declarations
             .FirstOrDefault(declaration => declaration.Identifier.ValueText == identifier.Identifier.ValueText);
 
-        return handlerDeclaration?.Initializer?.Value is BaseObjectCreationExpressionSyntax handlerCreation &&
+        return handlerDeclaration?.Initializer?.Value is { } initializer &&
+            UnwrapTransparentExpressions(initializer) is BaseObjectCreationExpressionSyntax handlerCreation &&
             IsFrameworkConnectionLimitedHandlerCreation(
                 handlerCreation,
                 semanticModel,

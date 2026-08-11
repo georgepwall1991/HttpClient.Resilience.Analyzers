@@ -76,7 +76,7 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        initializer = UnwrapParentheses(initializer);
+        initializer = UnwrapTransparentExpressions(initializer);
         if (initializer is AwaitExpressionSyntax awaitExpression)
         {
             return awaitExpression.Expression
@@ -343,20 +343,22 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
 
     private static bool IsDisposeInvocation(ExpressionSyntax expression, string variableName)
     {
-        expression = UnwrapParentheses(expression);
+        expression = UnwrapTransparentExpressions(expression);
         if (expression is AwaitExpressionSyntax awaitExpression)
         {
-            expression = UnwrapParentheses(awaitExpression.Expression);
+            expression = UnwrapTransparentExpressions(awaitExpression.Expression);
         }
 
         return expression is InvocationExpressionSyntax
         {
             Expression: MemberAccessExpressionSyntax
             {
-                Expression: IdentifierNameSyntax identifier,
+                Expression: { } receiver,
                 Name.Identifier.ValueText: "Dispose" or "DisposeAsync"
             }
-        } && identifier.Identifier.ValueText == variableName;
+        } &&
+            UnwrapTransparentExpressions(receiver) is IdentifierNameSyntax identifier &&
+            identifier.Identifier.ValueText == variableName;
     }
 
     private static bool IsOwnedByUsingStatement(BlockSyntax containingBlock, string variableName, int declarationStart)
@@ -366,7 +368,8 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
         return containingBlock
             .DescendantNodes()
             .OfType<UsingStatementSyntax>()
-            .Any(usingStatement => usingStatement.Expression is IdentifierNameSyntax identifier &&
+            .Any(usingStatement => usingStatement.Expression is { } expression &&
+                UnwrapTransparentExpressions(expression) is IdentifierNameSyntax identifier &&
                 AliasIsValidAt(
                     containingBlock,
                     aliases,
@@ -455,7 +458,7 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
         ExpressionSyntax value,
         int assignmentStart)
     {
-        value = UnwrapParentheses(value);
+        value = UnwrapTransparentExpressions(value);
         if (value is IdentifierNameSyntax source &&
             AliasIsValidAt(
                 containingBlock,
@@ -512,6 +515,7 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
         int declarationStart,
         int evidenceStart)
     {
+        expression = UnwrapTransparentExpressions(expression);
         return expression switch
         {
             IdentifierNameSyntax identifier => AliasIsValidAt(
@@ -525,12 +529,6 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
                     aliases,
                     declarationStart,
                     evidenceStart),
-            ParenthesizedExpressionSyntax parenthesized => TransfersStreamOwnership(
-                parenthesized.Expression,
-                containingBlock,
-                aliases,
-                declarationStart,
-                evidenceStart),
             ObjectCreationExpressionSyntax objectCreation => ObjectCreationTransfersStreamOwnership(
                 objectCreation,
                 containingBlock,
@@ -577,6 +575,7 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
         IReadOnlyDictionary<string, int> aliases,
         int evidenceStart)
     {
+        expression = UnwrapTransparentExpressions(expression);
         return expression switch
         {
             ObjectCreationExpressionSyntax objectCreation => ObjectCreationTransfersStreamOwnership(
@@ -586,11 +585,6 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
                 evidenceStart),
             ImplicitObjectCreationExpressionSyntax implicitObjectCreation => ObjectCreationTransfersStreamOwnership(
                 implicitObjectCreation,
-                containingBlock,
-                aliases,
-                evidenceStart),
-            ParenthesizedExpressionSyntax parenthesized => InitializerCreatesStreamOwner(
-                parenthesized.Expression,
                 containingBlock,
                 aliases,
                 evidenceStart),
@@ -623,7 +617,7 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
         int evidenceStart)
     {
         return argumentList?.Arguments
-            .Select(argument => argument.Expression)
+            .Select(argument => UnwrapTransparentExpressions(argument.Expression))
             .OfType<IdentifierNameSyntax>()
             .Any(identifier => AliasIsValidAt(
                 containingBlock,
@@ -640,7 +634,7 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
     {
         return initializer?.Expressions
             .OfType<AssignmentExpressionSyntax>()
-            .Select(assignment => assignment.Right)
+            .Select(assignment => UnwrapTransparentExpressions(assignment.Right))
             .OfType<IdentifierNameSyntax>()
             .Any(identifier => AliasIsValidAt(
                 containingBlock,
@@ -665,13 +659,22 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
                 identifier.Identifier.ValueText == variableName);
     }
 
-    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
     {
-        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        while (true)
         {
-            expression = parenthesized.Expression;
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix
+                    when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
         }
-
-        return expression;
     }
 }

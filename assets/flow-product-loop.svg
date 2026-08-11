@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="440" viewBox="0 0 920 440" role="img" aria-labelledby="title desc">
+  <title id="title">HttpClient.Resilience.Analyzers product loop: Roslyn analyzer, IDE, and CI</title>
+  <desc id="desc">Diagram of HttpClient and IHttpClientFactory code feeding the analyzer package for build warnings in IDE and CI with editorconfig profiles.</desc>
+  <rect width="920" height="440" rx="12" fill="#0f172a"/>
+  <text x="32" y="40" fill="#f1f5f9" font-family="ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="700">Product loop: analyzer → IDE → CI (HttpClient resilience)</text>
+  <text x="32" y="64" fill="#94a3b8" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">Compile-time HCR rules · no runtime dependency · profile-based rollout</text>
+
+  <rect x="310" y="100" width="300" height="100" rx="10" fill="#1e293b" stroke="#475569" stroke-width="1.5"/>
+  <text x="460" y="140" text-anchor="middle" fill="#e2e8f0" font-family="ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="700">Your outbound HTTP code</text>
+  <text x="460" y="164" text-anchor="middle" fill="#94a3b8" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">HttpClient · IHttpClientFactory · AddHttpClient</text>
+  <text x="460" y="184" text-anchor="middle" fill="#94a3b8" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">Polly · Microsoft.Extensions.Http.Resilience</text>
+
+  <rect x="32" y="250" width="400" height="150" rx="10" fill="#172554" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="52" y="284" fill="#93c5fd" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="700">HttpClient.Resilience.Analyzers</text>
+  <text x="52" y="312" fill="#e2e8f0" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">Roslyn build + IDE diagnostics HCR001–HCR085</text>
+  <text x="52" y="336" fill="#cbd5e1" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">• socket exhaustion · PooledConnectionLifetime</text>
+  <text x="52" y="356" fill="#cbd5e1" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">• typed-client DI · unsafe retries · disposal</text>
+  <text x="52" y="376" fill="#cbd5e1" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">• cancellation · fan-out · named clients</text>
+
+  <rect x="488" y="250" width="400" height="150" rx="10" fill="#14532d" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="508" y="284" fill="#86efac" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="700">IDE + CI profiles</text>
+  <text x="508" y="312" fill="#e2e8f0" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13">dotnet build · VS / Rider / VS Code Error List</text>
+  <text x="508" y="336" fill="#cbd5e1" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">• default · brownfield · strict-ci · library-author</text>
+  <text x="508" y="356" fill="#cbd5e1" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">• per-rule severity via .editorconfig</text>
+  <text x="508" y="376" fill="#cbd5e1" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12">• code fixes for common lifetime &amp; retry cases</text>
+
+  <path d="M360 200 L180 250" stroke="#60a5fa" stroke-width="2.5" fill="none"/>
+  <path d="M560 200 L740 250" stroke="#4ade80" stroke-width="2.5" fill="none"/>
+  <polygon points="172,248 188,242 182,258" fill="#60a5fa"/>
+  <polygon points="748,248 732,242 738,258" fill="#4ade80"/>
+  <text x="200" y="220" fill="#60a5fa" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="600">analyze</text>
+  <text x="680" y="220" fill="#4ade80" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" font-weight="600">gate / fix</text>
+</svg>
