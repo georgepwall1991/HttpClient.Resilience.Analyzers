@@ -94,18 +94,25 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _localFactories = new();
         private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _memberHttpClients = new();
         private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _memberFactories = new();
-        private readonly Dictionary<(string TypeName, string ConstantName), string> _constantStrings;
+        private readonly IReadOnlyList<SyntaxNode> _roots;
+        private readonly System.Threading.CancellationToken _cancellationToken;
+        private Dictionary<(string TypeName, string ConstantName), string>? _constantStrings;
 
         public UnsafeCallScan(IReadOnlyList<SyntaxNode> roots, System.Threading.CancellationToken cancellationToken)
         {
-            Roots = roots;
-            _constantStrings = CollectConstantStrings(roots, cancellationToken);
+            _roots = roots;
+            _cancellationToken = cancellationToken;
         }
 
-        public IReadOnlyList<SyntaxNode> Roots { get; }
-
+        /// <summary>
+        /// Resolves a constant string field by name, optionally qualified by declaring type.
+        /// The table is built on first use, so a compilation whose client names are all
+        /// literals never walks the field declarations.
+        /// </summary>
         public string? TryGetConstantString(string constantName, string? typeName)
         {
+            _constantStrings ??= CollectConstantStrings(_roots, _cancellationToken);
+
             return _constantStrings.TryGetValue((typeName ?? string.Empty, constantName), out var value)
                 ? value
                 : null;
