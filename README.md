@@ -5,6 +5,7 @@
 # HttpClient.Resilience.Analyzers
 
 [![CI](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/actions/workflows/ci.yml/badge.svg)](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/)
 [![NuGet](https://img.shields.io/nuget/v/HttpClient.Resilience.Analyzers.svg)](https://www.nuget.org/packages/HttpClient.Resilience.Analyzers)
 [![NuGet downloads](https://img.shields.io/nuget/dt/HttpClient.Resilience.Analyzers.svg)](https://www.nuget.org/packages/HttpClient.Resilience.Analyzers)
 [![GitHub release](https://img.shields.io/github/v/release/georgepwall1991/HttpClient.Resilience.Analyzers)](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/releases/latest)
@@ -15,6 +16,10 @@ Compile-time Roslyn analyzers and code fixes for .NET `HttpClient`, `IHttpClient
 Catch outbound HTTP reliability bugs during development—not after deployment. The analyzer detects socket-exhaustion risks, missing `PooledConnectionLifetime`, stale DNS clients, DI lifetime leaks, typed-client configuration collisions, unsafe retries, undisposed responses and streams, sync-over-async, dropped cancellation tokens, unbounded fan-out, and fragile named-client strings.
 
 > The package is analyzer-only and adds no runtime dependency to your application. The analyzer stays quiet when a case is unprovable.
+
+## Who this is for
+
+ASP.NET Core and .NET teams that use `HttpClient`, `IHttpClientFactory`, typed clients, Polly, or `Microsoft.Extensions.Http.Resilience`. It does not replace those libraries—it flags production-safety mistakes they cannot see at compile time, unlike general `IDisposable` rules such as CA2000.
 
 ## The problem
 
@@ -52,6 +57,19 @@ Or add an explicit package reference:
 
 `PrivateAssets="all"` prevents the analyzer from flowing to projects that consume your project.
 
+For a whole solution, add the package once in `Directory.Build.props`:
+
+```xml
+<Project>
+  <ItemGroup>
+    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.161">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>
+```
+
 ## See it work
 
 Product-flow diagrams derived from the real [showcase sample](samples/HttpClient.Resilience.Showcase) diagnostics (not stock IDE screenshots):
@@ -62,7 +80,7 @@ Product-flow diagrams derived from the real [showcase sample](samples/HttpClient
 
 ![HttpClient.Resilience.Analyzers product loop from source code to IDE and CI profiles](https://raw.githubusercontent.com/georgepwall1991/HttpClient.Resilience.Analyzers/main/assets/flow-product-loop.svg)
 
-## 30-second path
+## Quick start
 
 1. Install the package (snippet above).
 2. Build normally — no service registration or runtime configuration is required.
@@ -145,7 +163,7 @@ The rules intentionally focus on concrete production risks. Heuristic checks use
 | [`HCR084`](docs/rules/HCR084.md) | Named clients | Duplicated string literals for named-client names | Warning | Guide |
 | [`HCR085`](docs/rules/HCR085.md) | Typed clients | Different implementations sharing one implicit client name | Warning | Guide |
 
-See the [rules index](docs/rules/README.md) for categories and recommended rollout order, or open an individual rule for exact detection details and limitations.
+See the [rules index](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/) for categories and recommended rollout order, or open an individual rule for exact detection details and limitations.
 
 ## Configuration
 
@@ -178,7 +196,7 @@ services.AddHttpClient<PaymentsClient>()
 #pragma warning restore HCR041
 ```
 
-See [configuration](docs/configuration.md), [adoption](docs/adoption.md), and the [false-positive policy](docs/false-positive-policy.md) for team rollout guidance.
+See [configuration](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/configuration/), [adoption](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/adoption/), and the [false-positive policy](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/false-positive-policy/) for team rollout guidance.
 
 ## Recommended Adoption
 
@@ -204,14 +222,17 @@ Yes. Configure `dotnet_diagnostic.HCRxxx.severity` in `.editorconfig`. Each rule
 
 ### What should I do if a diagnostic is noisy or incorrect?
 
-Check the rule's documented detection scope, reduce its severity if needed, and open an issue with a minimal reproduction. The project's [false-positive policy](docs/false-positive-policy.md) treats diagnostic trust as a release requirement.
+Check the rule's documented detection scope, reduce its severity if needed, and open an issue with a minimal reproduction. The project's [false-positive policy](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/false-positive-policy/) treats diagnostic trust as a release requirement.
 
 ## Documentation and Community
 
-- [Documentation hub](docs/README.md)
-- [All analyzer rules](docs/rules/README.md)
-- [Implementation status and limitations](docs/implementation-status.md)
-- [Analyzer health audit and 30-iteration backlog](docs/analyzer-health.md)
+- [Documentation site](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/)
+- [Getting started](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/getting-started/)
+- [All analyzer rules](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/)
+- [Configuration](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/configuration/)
+- [Adoption](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/adoption/)
+- [FAQ](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/faq/)
+- [Implementation status and limitations](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/implementation-status/)
 - [Contributing](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Support](SUPPORT.md)

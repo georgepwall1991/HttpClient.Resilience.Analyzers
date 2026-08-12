@@ -1,0 +1,21 @@
+title: "[Question]: "
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [documentation](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/) and [FAQ](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/faq/) before asking. Include a rule ID when the question is about a diagnostic.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What are you trying to do with HttpClient.Resilience.Analyzers?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      placeholder: 0.1.161
+    validations:
+      required: true

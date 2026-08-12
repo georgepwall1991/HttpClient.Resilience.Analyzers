@@ -1,3 +1,8 @@
+---
+title: Releasing HttpClient.Resilience.Analyzers
+description: Maintainer workflow for validating and publishing the HttpClient.Resilience.Analyzers NuGet package.
+---
+
 # Releasing
 
 This repository has a guarded release workflow at `.github/workflows/release.yml`.

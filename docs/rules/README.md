@@ -1,3 +1,8 @@
+---
+title: HttpClient analyzer rule catalog (HCR001–HCR085)
+description: All HttpClient.Resilience.Analyzers diagnostics for IHttpClientFactory, typed clients, Polly retries, hedging, and response ownership.
+---
+
 # HttpClient.Resilience.Analyzers Rules
 
 This page is the rule catalog for `HttpClient.Resilience.Analyzers`, a Roslyn analyzer package for .NET `HttpClient`, `IHttpClientFactory`, typed clients, Polly, and `Microsoft.Extensions.Http.Resilience`.
@@ -75,13 +80,13 @@ For brownfield services, start with the rules most likely to prevent production 
 
 ## Severity Profiles
 
-The package ships with profiles under [`profiles/`](../../profiles):
+The package ships with profiles under [`profiles/`](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/tree/main/profiles):
 
 | Profile | Purpose |
 |---|---|
-| [`default.editorconfig`](../../profiles/default.editorconfig) | Keeps production-safety diagnostics visible for new or actively maintained services. |
-| [`brownfield-adoption.editorconfig`](../../profiles/brownfield-adoption.editorconfig) | Reduces noise while an existing codebase is being triaged. |
-| [`strict-ci.editorconfig`](../../profiles/strict-ci.editorconfig) | Promotes production-safety warnings to CI-enforced errors. |
-| [`library-author.editorconfig`](../../profiles/library-author.editorconfig) | Tightens response and stream ownership expectations for reusable libraries. |
+| [`default.editorconfig`](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/profiles/default.editorconfig) | Keeps production-safety diagnostics visible for new or actively maintained services. |
+| [`brownfield-adoption.editorconfig`](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/profiles/brownfield-adoption.editorconfig) | Reduces noise while an existing codebase is being triaged. |
+| [`strict-ci.editorconfig`](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/profiles/strict-ci.editorconfig) | Promotes production-safety warnings to CI-enforced errors. |
+| [`library-author.editorconfig`](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/profiles/library-author.editorconfig) | Tightens response and stream ownership expectations for reusable libraries. |
 
 Prefer changing individual `dotnet_diagnostic.<RULE_ID>.severity` values over disabling the whole package.

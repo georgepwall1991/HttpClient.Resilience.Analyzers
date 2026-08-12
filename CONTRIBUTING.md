@@ -75,6 +75,17 @@ checks, and method-name filters.
 ./scripts/Invoke-MutationTests.ps1
 ```
 
+## Documentation Site
+
+The public docs site is MkDocs Material, published to GitHub Pages from `docs/`. Preview locally:
+
+```bash
+pip install -r requirements-docs.txt
+mkdocs serve
+```
+
+`mkdocs build --strict` must succeed before merging documentation or `mkdocs.yml` changes. The Docs workflow runs that check on pull requests.
+
 ## Pull Requests
 
 Keep pull requests focused. Prefer one diagnostic or one infrastructure concern per pull request. Include the verification commands you ran and call out any known limitations that remain intentional.

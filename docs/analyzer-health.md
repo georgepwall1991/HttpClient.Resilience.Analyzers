@@ -1,3 +1,8 @@
+---
+title: Analyzer health audit for HttpClient.Resilience.Analyzers
+description: Evidence-backed scorecard, throughput guardrails, and improvement backlog for the HttpClient Roslyn analyzer package.
+---
+
 # Analyzer Health
 
 Reviewed: 2026-08-03

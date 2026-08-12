@@ -17,6 +17,7 @@ body:
         - HCR020
         - HCR040
         - HCR041
+        - HCR042
         - HCR060
         - HCR061
         - HCR062
@@ -27,6 +28,7 @@ body:
         - HCR082
         - HCR083
         - HCR084
+        - HCR085
     validations:
       required: true
   - type: textarea
@@ -48,6 +50,6 @@ body:
     id: version
     attributes:
       label: Package version or commit
-      placeholder: 0.1.0-preview.1 or commit SHA
+      placeholder: 0.1.161 or commit SHA
     validations:
       required: true

@@ -27,8 +27,12 @@ public sealed class DiscoverabilityMetadataTests
         var title = Assert.Single(csproj.Descendants("Title")).Value;
         var readmeFile = Assert.Single(csproj.Descendants("PackageReadmeFile")).Value;
         var version = Assert.Single(csproj.Descendants("Version")).Value;
+        var projectUrl = Assert.Single(csproj.Descendants("PackageProjectUrl")).Value;
 
         Assert.Equal("README.md", readmeFile);
+        Assert.Equal(
+            "https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/",
+            projectUrl);
         Assert.Contains("IHttpClientFactory", title, StringComparison.Ordinal);
         Assert.Contains("Polly", title, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Http.Resilience", title, StringComparison.Ordinal);
@@ -66,6 +70,8 @@ public sealed class DiscoverabilityMetadataTests
                 "socket-exhaustion",
                 "typed-client",
                 "microsoft-extensions-http-resilience",
+                "AddStandardHedgingHandler",
+                "hedging",
             })
         {
             Assert.True(
@@ -103,7 +109,7 @@ public sealed class DiscoverabilityMetadataTests
                     "## What it catches",
                     "## Install",
                     "## See it work",
-                    "## 30-second path",
+                    "## Quick start",
                     "## Feature snapshot",
                 })
             {

@@ -1,0 +1,21 @@
+title: "[Idea]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Propose a new diagnostic, code fix, or docs improvement. Rules should prevent a plausible production HttpClient failure, not encode style preferences.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Production risk
+      description: What outbound HTTP failure should this catch at compile time?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the diagnostic, code fix, profile, or documentation change.
+    validations:
+      required: true

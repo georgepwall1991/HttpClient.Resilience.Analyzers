@@ -1,3 +1,8 @@
+---
+title: Adopt the HttpClient analyzer on a brownfield .NET service
+description: Roll out HttpClient.Resilience.Analyzers without failing CI on day one. Start with retry, hedging, and response-ownership rules.
+---
+
 # Adoption
 
 Start with `profiles/brownfield-adoption.editorconfig` when introducing the analyzer to an existing codebase. Move to `profiles/default.editorconfig` once the high-confidence warnings are understood.
