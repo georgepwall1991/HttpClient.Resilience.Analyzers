@@ -255,9 +255,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         Compilation compilation,
         System.Threading.CancellationToken cancellationToken)
     {
-        var roots = compilation.SyntaxTrees
-            .Select(tree => tree.GetRoot(cancellationToken))
-            .ToArray();
+        var roots = CompilationSyntaxIndex.GetRoots(compilation, cancellationToken);
         var scan = new UnsafeCallScan(roots, cancellationToken);
 
         // One invocation pass per tree. An unsafe call is owned by every enclosing class

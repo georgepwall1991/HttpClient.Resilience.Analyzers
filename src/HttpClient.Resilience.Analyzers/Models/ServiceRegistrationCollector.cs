@@ -14,6 +14,8 @@ internal static class ServiceRegistrationCollector
     {
         public IReadOnlyList<ServiceRegistrationModel>? Registrations;
         public readonly object Gate = new();
+        public int Scans;
+        public int ReceiverClassifications;
     }
 
     public static IReadOnlyList<ServiceRegistrationModel> CollectFrameworkRegistrations(
@@ -35,60 +37,67 @@ internal static class ServiceRegistrationCollector
                 return cachedLocked;
             }
 
-            var registrations = CollectFrameworkRegistrationsUncached(compilation, cancellationToken);
+            var registrations = CollectFrameworkRegistrationsUncached(compilation, cache, cancellationToken);
+            cache.Scans++;
             cache.Registrations = registrations;
             return registrations;
         }
     }
 
-    public static IReadOnlyList<ServiceRegistrationModel> CollectFrameworkRegistrations(
-        SyntaxNode root,
-        SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
+    /// <summary>
+    /// How many full registration scans <paramref name="compilation"/> has paid for. Tests
+    /// use it to assert every analyzer shares one scan.
+    /// </summary>
+    internal static int GetScanCount(Compilation compilation)
     {
-        return CollectCore(root, semanticModel, cancellationToken)
-            .Where(registration => IsFrameworkServiceCollectionRegistration(
-                registration,
-                semanticModel,
-                cancellationToken))
-            .ToArray();
+        return CompilationCache.TryGetValue(compilation, out var cache) ? cache.Scans : 0;
+    }
+
+    /// <summary>
+    /// How many invocations had their receiver classified during the scan. Registration
+    /// method names are matched syntactically first, so this counts only candidates rather
+    /// than every member invocation in the compilation.
+    /// </summary>
+    internal static int GetReceiverClassificationCount(Compilation compilation)
+    {
+        return CompilationCache.TryGetValue(compilation, out var cache) ? cache.ReceiverClassifications : 0;
     }
 
     private static IReadOnlyList<ServiceRegistrationModel> CollectFrameworkRegistrationsUncached(
         Compilation compilation,
+        RegistrationCache cache,
         System.Threading.CancellationToken cancellationToken)
     {
         var registrations = new List<ServiceRegistrationModel>();
 
-        foreach (var tree in compilation.SyntaxTrees)
+        foreach (var root in CompilationSyntaxIndex.GetRoots(compilation, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var root = tree.GetRoot(cancellationToken);
-            var semanticModel = compilation.GetSemanticModel(tree);
-            registrations.AddRange(CollectFrameworkRegistrations(root, semanticModel, cancellationToken));
+            var semanticModel = compilation.GetSemanticModel(root.SyntaxTree);
+            CollectFrameworkRegistrations(root, semanticModel, cache, cancellationToken, registrations);
         }
 
         return registrations;
     }
 
-    private static IReadOnlyList<ServiceRegistrationModel> CollectCore(
+    private static void CollectFrameworkRegistrations(
         SyntaxNode root,
-        SemanticModel? semanticModel,
-        System.Threading.CancellationToken cancellationToken)
+        SemanticModel semanticModel,
+        RegistrationCache cache,
+        System.Threading.CancellationToken cancellationToken,
+        List<ServiceRegistrationModel> registrations)
     {
-        var registrations = new List<ServiceRegistrationModel>();
-
         foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var registration = TryCreate(invocation, semanticModel, cancellationToken);
-            if (registration is not null)
+
+            var registration = TryCreate(invocation, semanticModel, cache, cancellationToken);
+            if (registration is not null &&
+                IsFrameworkServiceCollectionRegistration(registration, semanticModel, cancellationToken))
             {
                 registrations.Add(registration);
             }
         }
-
-        return registrations;
     }
 
     public static ISet<string> GetTypedClientTypeNames(IEnumerable<ServiceRegistrationModel> registrations)
@@ -139,11 +148,25 @@ internal static class ServiceRegistrationCollector
     private static ServiceRegistrationModel? TryCreate(
         InvocationExpressionSyntax invocation,
         SemanticModel? semanticModel,
+        RegistrationCache? cache,
         System.Threading.CancellationToken cancellationToken)
     {
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
         {
             return null;
+        }
+
+        // Match the registration method name before classifying the receiver. Both creation
+        // paths below reject an unrecognized name anyway, and classifying a receiver costs a
+        // semantic binding plus, when that fails, a scope-wide syntactic search.
+        if (TryGetKind(memberAccess.Name.Identifier.ValueText) is null)
+        {
+            return null;
+        }
+
+        if (cache is not null)
+        {
+            cache.ReceiverClassifications++;
         }
 
         if (!IsLikelyServiceCollectionReceiver(

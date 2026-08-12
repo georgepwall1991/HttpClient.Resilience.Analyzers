@@ -41,9 +41,7 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
 
     private static void AnalyzeCompilation(CompilationStartAnalysisContext context)
     {
-        var roots = context.Compilation.SyntaxTrees
-            .Select(tree => tree.GetRoot(context.CancellationToken))
-            .ToArray();
+        var roots = CompilationSyntaxIndex.GetRoots(context.Compilation, context.CancellationToken);
         var scopedTypes = GetKnownScopedTypes(
             context.Compilation,
             context.CancellationToken);

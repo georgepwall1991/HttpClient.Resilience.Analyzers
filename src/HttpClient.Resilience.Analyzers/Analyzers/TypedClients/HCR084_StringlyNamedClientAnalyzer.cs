@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.KnownSymbols;
+using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -24,16 +25,20 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
 
     private static void AnalyzeCompilation(CompilationAnalysisContext context)
     {
-        var roots = context.Compilation.SyntaxTrees
-            .Select(tree => tree.GetRoot(context.CancellationToken))
-            .ToArray();
-        var namedRegistrations = GetNamedClientRegistrations(roots, context.Compilation, context.CancellationToken);
+        var roots = CompilationSyntaxIndex.GetRoots(context.Compilation, context.CancellationToken);
+        CollectNamedClients(
+            roots,
+            context.Compilation,
+            context.CancellationToken,
+            out var namedRegistrations,
+            out var usages);
+
         if (namedRegistrations.Count == 0)
         {
             return;
         }
 
-        foreach (var createClient in GetNamedClientUsages(roots, context.Compilation, context.CancellationToken))
+        foreach (var createClient in usages)
         {
             if (!namedRegistrations.Contains(createClient.Name))
             {
@@ -46,37 +51,49 @@ public sealed class HCR084_StringlyNamedClientAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    private static ISet<string> GetNamedClientRegistrations(
-        IEnumerable<SyntaxNode> roots,
+    /// <summary>
+    /// Collects registrations and usages in one pass. Both are recognized by distinct method
+    /// names, so a single traversal finds them without changing the order either is reported in.
+    /// </summary>
+    private static void CollectNamedClients(
+        IReadOnlyList<SyntaxNode> roots,
         Compilation compilation,
-        System.Threading.CancellationToken cancellationToken)
+        System.Threading.CancellationToken cancellationToken,
+        out ISet<string> namedRegistrations,
+        out IReadOnlyList<NamedClientUsage> usages)
     {
         var names = new HashSet<string>(System.StringComparer.Ordinal);
-        foreach (var invocation in roots.SelectMany(root => root.DescendantNodes().OfType<InvocationExpressionSyntax>()))
+        var collectedUsages = new List<NamedClientUsage>();
+
+        foreach (var root in roots)
         {
-            var semanticModel = GetSemanticModel(compilation, invocation.SyntaxTree);
-            if (TryGetNamedClientRegistration(invocation, semanticModel, cancellationToken, out var name))
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
             {
-                names.Add(name);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+                {
+                    continue;
+                }
+
+                var semanticModel = GetSemanticModel(compilation, invocation.SyntaxTree);
+                switch (memberAccess.Name.Identifier.ValueText)
+                {
+                    case "AddHttpClient"
+                        when TryGetNamedClientRegistration(invocation, semanticModel, cancellationToken, out var name):
+                        names.Add(name);
+                        break;
+                    case "CreateClient"
+                        when TryGetNamedClientUsage(invocation, semanticModel, cancellationToken, out var usage):
+                        collectedUsages.Add(usage);
+                        break;
+                }
             }
         }
 
-        return names;
-    }
-
-    private static IEnumerable<NamedClientUsage> GetNamedClientUsages(
-        IEnumerable<SyntaxNode> roots,
-        Compilation compilation,
-        System.Threading.CancellationToken cancellationToken)
-    {
-        foreach (var invocation in roots.SelectMany(root => root.DescendantNodes().OfType<InvocationExpressionSyntax>()))
-        {
-            var semanticModel = GetSemanticModel(compilation, invocation.SyntaxTree);
-            if (TryGetNamedClientUsage(invocation, semanticModel, cancellationToken, out var usage))
-            {
-                yield return usage;
-            }
-        }
+        namedRegistrations = names;
+        usages = collectedUsages;
     }
 
     private static bool TryGetNamedClientRegistration(
