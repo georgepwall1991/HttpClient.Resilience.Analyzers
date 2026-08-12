@@ -1,0 +1,43 @@
+# HttpClient.Resilience.Analyzers
+
+> Compile-time Roslyn analyzers and code fixes for .NET HttpClient, IHttpClientFactory, AddHttpClient typed and named clients, Polly, and Microsoft.Extensions.Http.Resilience. Analyzer-only: no application runtime dependency.
+
+The package catches outbound HTTP reliability bugs at build time, including socket exhaustion, missing PooledConnectionLifetime, typed-client lifetime leaks, unsafe POST retries, concurrent hedging of unsafe methods, undisposed responses, and dropped cancellation tokens.
+
+## Docs
+
+- [Home](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/): Product overview and install
+- [Getting started](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/getting-started/): 30-second path and solution-wide Directory.Build.props install
+- [Rule catalog](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/): All HCR001–HCR085 diagnostics
+- [Configuration](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/configuration/): .editorconfig severity and adoption profiles
+- [Adoption](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/adoption/): Brownfield rollout
+- [FAQ](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/faq/): Resilience libraries, CA2000, runtime impact
+- [Launch article](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/launch-blog-post/): Why compile-time HTTP safety
+
+## Rules
+
+- [HCR001](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR001/): Do not create and dispose HttpClient per request
+- [HCR002](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR002/): Long-lived HttpClient should set PooledConnectionLifetime
+- [HCR003](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR003/): Do not cache IHttpClientFactory.CreateClient() results
+- [HCR004](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR004/): Do not inject typed HttpClient clients into singletons
+- [HCR005](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR005/): Duplicate typed-client registrations
+- [HCR020](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR020/): DelegatingHandler capturing scoped request data
+- [HCR040](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR040/): Duplicate resilience handlers
+- [HCR041](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR041/): AddStandardResilienceHandler retrying unsafe HTTP methods
+- [HCR042](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR042/): AddStandardHedgingHandler replaying unsafe HTTP methods
+- [HCR060](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR060/): Dispose ResponseHeadersRead responses
+- [HCR061](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR061/): Check HTTP success before reading content
+- [HCR062](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR062/): Per-request DefaultRequestHeaders mutation
+- [HCR063](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR063/): Sync-over-async around outbound HTTP
+- [HCR064](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR064/): Missing CancellationToken on HttpClient calls
+- [HCR080](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR080/): Unbounded HTTP fan-out
+- [HCR081](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR081/): Undisposed HTTP content streams
+- [HCR082](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR082/): Per-request resilience pipeline construction
+- [HCR083](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR083/): Relative URLs without BaseAddress
+- [HCR084](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR084/): Duplicated named-client string literals
+- [HCR085](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR085/): Implicit typed-client name collisions
+
+## Optional
+
+- [NuGet package](https://www.nuget.org/packages/HttpClient.Resilience.Analyzers)
+- [GitHub repository](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers)

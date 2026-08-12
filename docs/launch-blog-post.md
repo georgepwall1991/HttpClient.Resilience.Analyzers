@@ -1,4 +1,9 @@
-# Launch Draft: Compile-Time Safety for .NET Outbound HTTP
+---
+title: Compile-time safety for .NET HttpClient and IHttpClientFactory
+description: Why HttpClient.Resilience.Analyzers catches socket exhaustion, unsafe POST retries, and typed-client bugs at build time instead of in production.
+---
+
+# Compile-Time Safety for .NET Outbound HTTP
 
 Most .NET services use `HttpClient`, but many production issues come from patterns that compile cleanly and look harmless in review: per-request clients, stale long-lived clients, duplicated retries, handler scope leaks, undisposed streaming responses, and unbounded fan-out.
 
@@ -57,4 +62,4 @@ The package is intentionally not a style analyzer. Warnings should feel like pro
 
 ## Status
 
-The initial preview implements the MVP diagnostics plus the starter's first future-rule expansion through `HCR085`, with tests, documentation, sample cases, `.editorconfig` profiles, and NuGet analyzer packaging.
+The package ships 20 documented diagnostics (`HCR001`–`HCR085`) as a stable `0.1.x` NuGet analyzer, with tests, documentation, sample cases, `.editorconfig` profiles, and code fixes for the highest-confidence lifetime, retry, hedging, disposal, and registration problems.

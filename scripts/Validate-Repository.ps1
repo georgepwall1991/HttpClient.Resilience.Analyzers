@@ -121,7 +121,12 @@ $requiredTopLevelDocs = @(
     'docs\analyzer-health.md',
     'docs\implementation-status.md',
     'docs\launch-blog-post.md',
-    'docs\releasing.md'
+    'docs\releasing.md',
+    'docs\index.md',
+    'docs\getting-started.md',
+    'docs\faq.md',
+    'docs\robots.txt',
+    'docs\llms.txt'
 )
 
 foreach ($path in $requiredTopLevelDocs) {
@@ -155,9 +160,17 @@ $requiredRepositoryFiles = @(
     '.github\ISSUE_TEMPLATE\false_positive.yml',
     '.github\ISSUE_TEMPLATE\feature_request.yml',
     '.github\ISSUE_TEMPLATE\question.yml',
+    '.github\DISCUSSION_TEMPLATE\q-a.yml',
+    '.github\DISCUSSION_TEMPLATE\ideas.yml',
     '.github\workflows\ci.yml',
+    '.github\workflows\docs.yml',
     '.github\workflows\release.yml',
-    'assets\social-preview.png'
+    'assets\social-preview.png',
+    'CITATION.cff',
+    'mkdocs.yml',
+    'docs_hooks.py',
+    'requirements-docs.txt',
+    'overrides\main.html'
 )
 
 foreach ($path in $requiredRepositoryFiles) {
@@ -181,6 +194,46 @@ Assert-Contains 'PACKAGE_README.md' `
     "<PackageReference Include=\x22HttpClient\.Resilience\.Analyzers\x22 Version=\x22$escapedPackageVersion\x22" `
     "PACKAGE_README.md package version does not match package project version $packageVersion."
 
+Assert-Contains 'docs\getting-started.md' `
+    "<PackageReference Include=\x22HttpClient\.Resilience\.Analyzers\x22 Version=\x22$escapedPackageVersion\x22" `
+    "docs/getting-started.md package version does not match package project version $packageVersion."
+
+$docsSiteUrl = 'https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/'
+$escapedDocsSiteUrl = [regex]::Escape($docsSiteUrl)
+
+Assert-Contains 'mkdocs.yml' `
+    "(?m)^site_url:\s+$escapedDocsSiteUrl" `
+    "mkdocs.yml site_url must be $docsSiteUrl."
+
+Assert-Contains 'src\HttpClient.Resilience.Analyzers\Diagnostics\DiagnosticDescriptors.cs' `
+    "DocsSiteUrl = `"$escapedDocsSiteUrl`"" `
+    "DiagnosticDescriptors.DocsSiteUrl must be $docsSiteUrl."
+
+Assert-Contains 'src\HttpClient.Resilience.Analyzers\Diagnostics\DiagnosticDescriptors.cs' `
+    'helpLinkUri:\s+\$"{DocsSiteUrl}rules/{id}/"' `
+    'Diagnostic help links must point at the GitHub Pages rule URLs.'
+
+$packageProjectUrl = [string]($packageProject.Project.PropertyGroup.PackageProjectUrl | Select-Object -First 1)
+if ($packageProjectUrl -ne $docsSiteUrl) {
+    throw "PackageProjectUrl must be '$docsSiteUrl' but was '$packageProjectUrl'."
+}
+
+Assert-Contains 'README.md' '(?m)^## Quick start\r?$' 'README.md must include a Quick start heading.'
+Assert-Contains 'README.md' $escapedDocsSiteUrl 'README.md must link to the GitHub Pages docs site.'
+Assert-Contains 'PACKAGE_README.md' $escapedDocsSiteUrl 'PACKAGE_README.md must link to the GitHub Pages docs site.'
+Assert-Contains '.github\ISSUE_TEMPLATE\config.yml' $escapedDocsSiteUrl 'Issue template documentation hub must point at the GitHub Pages docs site.'
+Assert-Contains '.github\workflows\docs.yml' 'mkdocs build --strict' 'Docs workflow must build the site with --strict.'
+Assert-Contains '.github\ISSUE_TEMPLATE\false_positive.yml' '(?m)^\s+-\s+HCR042\s*$' 'False-positive template must include HCR042.'
+Assert-Contains '.github\ISSUE_TEMPLATE\false_positive.yml' '(?m)^\s+-\s+HCR085\s*$' 'False-positive template must include HCR085.'
+Assert-Contains 'SECURITY.md' '(?m)^## Supported Versions\r?$' 'SECURITY.md must document supported versions.'
+Assert-Contains 'SECURITY.md' '`0\.1\.x`' 'SECURITY.md must list the stable 0.1.x line as supported.'
+Assert-Contains 'CITATION.cff' $escapedDocsSiteUrl 'CITATION.cff must point at the GitHub Pages docs site.'
+
+$securityDocumentation = Get-Text 'SECURITY.md'
+if ($securityDocumentation -match '(?i)0\.1\.0-preview') {
+    throw 'SECURITY.md must not describe the package as a 0.1.0-preview line.'
+}
+
 $releaseDocumentation = Get-Text 'docs\releasing.md'
 if ($releaseDocumentation -match '(?i)\bpreview release\b') {
     throw 'docs/releasing.md must describe stable releases only.'
@@ -199,6 +252,7 @@ Assert-Contains '.github\release.yml' 'changelog:' '.github/release.yml must con
 Assert-Contains 'CODE_OF_CONDUCT.md' 'Our Standards' 'CODE_OF_CONDUCT.md must describe community standards.'
 Assert-Contains 'SECURITY.md' 'Reporting a Vulnerability' 'SECURITY.md must document vulnerability reporting.'
 Assert-Contains 'CONTRIBUTING.md' 'Diagnostic Quality Bar' 'CONTRIBUTING.md must document diagnostic quality expectations.'
+Assert-Contains 'CONTRIBUTING.md' 'mkdocs serve' 'CONTRIBUTING.md must document local docs site preview.'
 Assert-Contains 'SUPPORT.md' 'False positives' 'SUPPORT.md must document support paths for false positives.'
 
 "repository validation ok: $($diagnosticIds -join ', ')"

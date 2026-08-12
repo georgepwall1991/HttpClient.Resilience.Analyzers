@@ -6,6 +6,10 @@ obj/
 TestResults/
 artifacts/
 StrykerOutput/
+site/
+docs/site-assets/
+__pycache__/
+*.pyc
 *.user
 *.suo
 *.nupkg

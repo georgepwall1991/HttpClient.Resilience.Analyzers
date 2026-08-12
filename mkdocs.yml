@@ -1,0 +1,102 @@
+site_name: HttpClient.Resilience.Analyzers
+site_description: >-
+  .NET HttpClient analyzer for IHttpClientFactory, Polly, and
+  Microsoft.Extensions.Http.Resilience. Catch socket exhaustion, unsafe POST
+  retries, and typed-client bugs at compile time.
+site_author: George Wall
+site_url: https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/
+repo_url: https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers
+repo_name: georgepwall1991/HttpClient.Resilience.Analyzers
+copyright: Copyright &copy; 2026 George Wall and contributors
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  custom_dir: overrides
+  logo: site-assets/logo.png
+  favicon: site-assets/icon.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tracking
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+
+hooks:
+  - docs_hooks.py
+
+exclude_docs: |
+  /README.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers
+      name: GitHub repository
+    - icon: fontawesome/solid/cubes
+      link: https://www.nuget.org/packages/HttpClient.Resilience.Analyzers
+      name: NuGet package
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Rules:
+      - Catalog: rules/README.md
+      - HCR001: rules/HCR001.md
+      - HCR002: rules/HCR002.md
+      - HCR003: rules/HCR003.md
+      - HCR004: rules/HCR004.md
+      - HCR005: rules/HCR005.md
+      - HCR020: rules/HCR020.md
+      - HCR040: rules/HCR040.md
+      - HCR041: rules/HCR041.md
+      - HCR042: rules/HCR042.md
+      - HCR060: rules/HCR060.md
+      - HCR061: rules/HCR061.md
+      - HCR062: rules/HCR062.md
+      - HCR063: rules/HCR063.md
+      - HCR064: rules/HCR064.md
+      - HCR080: rules/HCR080.md
+      - HCR081: rules/HCR081.md
+      - HCR082: rules/HCR082.md
+      - HCR083: rules/HCR083.md
+      - HCR084: rules/HCR084.md
+      - HCR085: rules/HCR085.md
+  - Configuration: configuration.md
+  - Adoption: adoption.md
+  - FAQ: faq.md
+  - Why compile-time HTTP safety: launch-blog-post.md
+  - Maintainers:
+      - False-positive policy: false-positive-policy.md
+      - Implementation status: implementation-status.md
+      - Analyzer health: analyzer-health.md
+      - Releasing: releasing.md

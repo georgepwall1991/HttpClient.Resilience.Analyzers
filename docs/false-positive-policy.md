@@ -1,3 +1,8 @@
+---
+title: False-positive policy for HttpClient.Resilience.Analyzers
+description: How HttpClient analyzer diagnostics stay high-signal, when to suppress HCR warnings, and how to report noisy rules.
+---
+
 # False Positive Policy
 
 Rules should prefer fewer, stronger diagnostics. Promote a heuristic to warning only when the analyzer has enough evidence to make the diagnostic actionable.

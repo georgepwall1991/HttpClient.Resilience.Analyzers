@@ -4,6 +4,8 @@ namespace HttpClient.Resilience.Analyzers.Diagnostics;
 
 public static class DiagnosticDescriptors
 {
+    public const string DocsSiteUrl = "https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/";
+
     public static readonly DiagnosticDescriptor HCR001 = Create(
         DiagnosticIds.HCR001,
         "Do not create and dispose HttpClient per request",
@@ -139,6 +141,6 @@ public static class DiagnosticDescriptors
             category,
             defaultSeverity,
             isEnabledByDefault: true,
-            helpLinkUri: $"https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/docs/rules/{id}.md");
+            helpLinkUri: $"{DocsSiteUrl}rules/{id}/");
     }
 }

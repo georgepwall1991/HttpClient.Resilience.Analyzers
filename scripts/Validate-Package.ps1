@@ -170,6 +170,8 @@ try {
         'resilience',
         'polly',
         'AddStandardResilienceHandler',
+        'AddStandardHedgingHandler',
+        'hedging',
         'PooledConnectionLifetime',
         'dotnet',
         'csharp',
@@ -206,6 +208,7 @@ try {
         'Compile-time',
         'PooledConnectionLifetime',
         'AddStandardResilienceHandler',
+        'AddStandardHedgingHandler',
         'Roslyn',
         'Polly'
     )

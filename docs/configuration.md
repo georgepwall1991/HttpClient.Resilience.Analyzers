@@ -1,3 +1,8 @@
+---
+title: Configure HttpClient analyzer severity in .editorconfig
+description: Set HCR diagnostic severity, copy brownfield or strict-ci profiles, and tune HttpClient.Resilience.Analyzers per project.
+---
+
 # Configuration
 
 Rule severities are controlled through `.editorconfig` using `dotnet_diagnostic.<RULE_ID>.severity`.

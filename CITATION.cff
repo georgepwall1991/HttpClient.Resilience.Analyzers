@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it using these metadata.
+title: HttpClient.Resilience.Analyzers
+type: software
+authors:
+  - family-names: Wall
+    given-names: George
+repository-code: https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers
+url: https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/
+license: MIT
+keywords:
+  - HttpClient
+  - IHttpClientFactory
+  - Roslyn
+  - analyzer
+  - resilience
+  - Polly
+  - ASP.NET Core

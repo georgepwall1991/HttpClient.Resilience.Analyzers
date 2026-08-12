@@ -10,6 +10,9 @@
 *.ps1 text eol=crlf
 *.yml text eol=crlf
 *.yaml text eol=crlf
+*.py text eol=crlf
+*.html text eol=crlf
+*.cff text eol=crlf
 
 *.png binary
 *.nupkg binary

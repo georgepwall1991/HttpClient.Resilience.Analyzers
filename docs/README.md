@@ -2,7 +2,7 @@
 
 Documentation for `HttpClient.Resilience.Analyzers`, the .NET Roslyn analyzer package for `HttpClient`, `IHttpClientFactory`, typed clients, Polly, and outbound HTTP resilience.
 
-New to the package? Follow the root [quick start](../README.md#quick-start), then use this hub to configure adoption and investigate individual diagnostics.
+New to the package? Follow the [getting started](getting-started.md) guide, then use this hub to configure adoption and investigate individual diagnostics.
 
 ## Start Here
 
@@ -18,7 +18,7 @@ New to the package? Follow the root [quick start](../README.md#quick-start), the
 
 ## Common Tasks
 
-- **Install and see the first diagnostic:** [Quick start](../README.md#quick-start)
+- **Install and see the first diagnostic:** [Getting started](getting-started.md)
 - **Understand a warning:** Search the [rules index](rules/README.md) by its `HCR` ID.
 - **Change severity:** Use the [configuration guide](configuration.md).
 - **Roll out to an existing service:** Start with the [adoption guide](adoption.md).

@@ -1,3 +1,8 @@
+---
+title: HttpClient.Resilience.Analyzers implementation status
+description: Analyzer and code-fix coverage for every HCR rule, including IHttpClientFactory, Polly, and Http.Resilience diagnostics.
+---
+
 # Implementation Status
 
 This project currently implements every MVP diagnostic ID from the starter document plus the starter's first future-rule expansion through `HCR085`.

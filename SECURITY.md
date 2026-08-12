@@ -2,11 +2,11 @@
 
 ## Supported Versions
 
-Security fixes are accepted for the active preview line.
+Security fixes are accepted for the current stable `0.1.x` line.
 
 | Version | Supported |
 |---|---|
-| `0.1.0-preview.x` | Yes |
+| `0.1.x` | Yes |
 
 ## Reporting a Vulnerability
 
@@ -19,4 +19,4 @@ Use GitHub private vulnerability reporting when available for this repository, o
 - Impacted package version or commit.
 - Whether the issue can affect analyzer consumers at build time.
 
-Expected response: triage within 7 days. Confirmed vulnerabilities will be fixed in a patched preview release and documented in the release notes without exposing exploit details before a fix is available.
+Expected response: triage within 7 days. Confirmed vulnerabilities will be fixed in a patched release and documented in the release notes without exposing exploit details before a fix is available.

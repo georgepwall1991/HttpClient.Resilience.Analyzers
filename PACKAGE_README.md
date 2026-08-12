@@ -82,11 +82,12 @@ Targets Roslyn via a `netstandard2.0` analyzer assembly. Works with modern .NET 
 
 ## Documentation
 
-- [Complete rule catalog](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/docs/rules/README.md)
-- [Configuration guide](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/docs/configuration.md)
-- [Adoption guide](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/docs/adoption.md)
-- [Implementation status and limitations](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/docs/implementation-status.md)
-- [Analyzer health audit and 30-iteration backlog](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/docs/analyzer-health.md)
+- [Documentation site](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/)
+- [Getting started](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/getting-started/)
+- [Complete rule catalog](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/)
+- [Configuration guide](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/configuration/)
+- [Adoption guide](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/adoption/)
+- [FAQ](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/faq/)
 - [Source and releases](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers)
 
 Licensed under the [MIT License](https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers/blob/main/LICENSE).
