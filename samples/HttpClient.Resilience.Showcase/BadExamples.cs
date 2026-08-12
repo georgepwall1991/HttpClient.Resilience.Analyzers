@@ -108,6 +108,16 @@ public static class BadUnsafeRetryRegistration
     }
 }
 
+public static class BadUnsafeHedgingRegistration
+{
+    public static IHttpClientBuilder Configure(IServiceCollection services)
+    {
+        return services
+            .AddHttpClient<BadUnsafePaymentsClient>()
+            .AddStandardHedgingHandler();
+    }
+}
+
 public static class BadNamedUnsafeRetryRegistration
 {
     public static IHttpClientBuilder Configure(IServiceCollection services)
@@ -269,6 +279,11 @@ public static class HttpClientBuilderExtensions
     }
 
     public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder)
+    {
+        return builder;
+    }
+
+    public static IHttpClientBuilder AddStandardHedgingHandler(this IHttpClientBuilder builder)
     {
         return builder;
     }

@@ -1,0 +1,28 @@
+{
+  "stryker-config": {
+    "project": "src/HttpClient.Resilience.Analyzers/HttpClient.Resilience.Analyzers.csproj",
+    "test-projects": [
+      "tests/HttpClient.Resilience.Analyzers.Tests/HttpClient.Resilience.Analyzers.Tests.csproj"
+    ],
+    "mutate": [
+      "**/HCR042*.cs",
+      "**/HttpMethodSafety.cs",
+      "**/ResilienceHandlerInvocation.cs",
+      "**/SafeHttpMethodPredicate.cs"
+    ],
+    "thresholds": {
+      "high": 80,
+      "low": 70,
+      "break": 70
+    },
+    "concurrency": 2,
+    "reporters": [
+      "html",
+      "cleartext"
+    ],
+    "ignore-methods": [
+      "ConfigureGeneratedCodeAnalysis",
+      "EnableConcurrentExecution"
+    ]
+  }
+}

@@ -43,6 +43,11 @@ public static class ServiceCollectionExtensions
         return builder;
     }
 
+    public static IHttpClientBuilder AddStandardHedgingHandler(this IHttpClientBuilder builder)
+    {
+        return builder;
+    }
+
     public static IHttpClientBuilder AddResilienceHandler(this IHttpClientBuilder builder, string name)
     {
         return builder;

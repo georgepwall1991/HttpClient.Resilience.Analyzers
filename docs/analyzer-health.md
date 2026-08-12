@@ -30,6 +30,7 @@ Scores use a 1–5 scale. `Analyzer` measures semantic depth and diagnostic plac
 | HCR020 | Handlers | Warning | 4 | 4 | 1 | 5 | 4 | 5 | P2 | Scoped dependency ownership is reported but intentionally has no automatic rewrite. |
 | HCR040 | Resilience | Warning | 4 | 4 | 4 | 5 | 4 | 4 | P2 | Chained and reassigned builder shapes need continued fix-safety coverage. |
 | HCR041 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P2 | Retry-policy fixes need more preservation tests for custom predicates and configuration. |
+| HCR042 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P1 | New: standard hedging of unsafe methods; keep predicate and lookalike coverage aligned with HCR041. |
 | HCR060 | Response lifetime | Warning | 4 | 4 | 4 | 5 | 4 | 5 | P1 | Disposal fix is limited to simple declarations and adjacent assignments. |
 | HCR061 | Response lifetime | Warning | 4 | 4 | 3 | 5 | 4 | 5 | P1 | Success-check insertion is safe for known shapes but still partial for complex ownership/control flow. |
 | HCR062 | Response lifetime | Warning | 4 | 5 | 1 | 4 | 4 | 4 | P2 | Shared-header ownership is high-confidence; guidance should better show request-message migration. |
@@ -91,7 +92,8 @@ Compilation-wide work is bounded by three deterministic invariants, each asserte
   needs a semantic binding and, on failure, a scope-wide syntactic search, so it must never
   run for arbitrary member invocations.
 - HCR041 builds its unsafe-call index only when a compilation actually registers a standard
-  resilience handler, and never more than once.
+  resilience handler, and never more than once. HCR042 shares that index for
+  `AddStandardHedgingHandler` so a compilation with both handlers still pays for one scan.
 
 Behavior is pinned independently by `AnalyzerBehaviorSnapshotTests`, which compares every
 analyzer's output over a fixed corpus against `tests/HttpClient.Resilience.Analyzers.Tests/Corpus/expected-diagnostics.txt`.
@@ -110,6 +112,12 @@ dotnet format HttpClient.Resilience.Analyzers.slnx --verify-no-changes --exclude
 ./scripts/Validate-SampleDiagnostics.ps1 -NoRestore
 dotnet build HttpClient.Resilience.Analyzers.slnx --configuration Release --no-restore
 dotnet test HttpClient.Resilience.Analyzers.slnx --configuration Release --no-build
+```
+
+When changing analyzer logic, also run mutation tests against the new surface:
+
+```powershell
+./scripts/Invoke-MutationTests.ps1
 ```
 
 When packaging files or analyzer delivery changes, also run `Validate-Package.ps1` and `Validate-PackageConsumption.ps1` against the freshly packed `.nupkg`. A release tag is valid only when it matches the package's stable three-part version and points at the merged `main` commit.

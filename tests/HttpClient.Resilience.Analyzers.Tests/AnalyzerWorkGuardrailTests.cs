@@ -39,6 +39,77 @@ public sealed class AnalyzerWorkGuardrailTests
     }
 
     [Fact]
+    public async Task Hcr042SkipsTheUnsafeCallIndexWhenNoHedgingHandlerIsRegistered()
+    {
+        var analyzer = new HCR042_UnsafeMethodHedgingAnalyzer();
+
+        await RunAsync(analyzer, BuildHttpHeavySource(clients: 40, registerResilienceHandler: false, registerHedgingHandler: false));
+
+        Assert.Equal(0, analyzer.UnsafeCallIndexBuilds);
+    }
+
+    [Fact]
+    public async Task Hcr042BuildsTheUnsafeCallIndexAtMostOncePerCompilation()
+    {
+        var analyzer = new HCR042_UnsafeMethodHedgingAnalyzer();
+
+        var diagnostics = await RunAsync(
+            analyzer,
+            BuildHttpHeavySource(clients: 40, registerResilienceHandler: false, registerHedgingHandler: true));
+
+        Assert.Equal(1, analyzer.UnsafeCallIndexBuilds);
+        Assert.Equal(40, diagnostics.Count(diagnostic => diagnostic.Id == "HCR042"));
+    }
+
+    [Fact]
+    public async Task Hcr042LeavesTheUnsafeCallIndexUnbuiltForLookalikeApis()
+    {
+        var analyzer = new HCR042_UnsafeMethodHedgingAnalyzer();
+
+        await RunAsync(analyzer, """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Sender(HttpClient client)
+            {
+                public Task<HttpResponseMessage> PostAsync(CancellationToken token) =>
+                    client.PostAsync("/x", null, token);
+            }
+
+            public static class NotDependencyInjection
+            {
+                public static object AddStandardHedgingHandler(this object builder) => builder;
+
+                public static void Configure() => new object().AddStandardHedgingHandler();
+            }
+            """);
+
+        Assert.Equal(0, analyzer.UnsafeCallIndexBuilds);
+    }
+
+    [Fact]
+    public async Task Hcr041AndHcr042ShareOneUnsafeCallIndexBuild()
+    {
+        var retry = new HCR041_UnsafeMethodRetryAnalyzer();
+        var hedging = new HCR042_UnsafeMethodHedgingAnalyzer();
+        var source = BuildHttpHeavySource(clients: 8, registerResilienceHandler: true, registerHedgingHandler: true);
+        var compilation = TestCompilationFactory.Create("SharedUnsafeCallIndex", source);
+        TestCompilationFactory.EnsureNoCompilerErrors(compilation);
+
+        var diagnostics = await compilation
+            .WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(retry, hedging))
+            .GetAnalyzerDiagnosticsAsync();
+
+        Assert.Equal(8, diagnostics.Count(diagnostic => diagnostic.Id == "HCR041"));
+        Assert.Equal(8, diagnostics.Count(diagnostic => diagnostic.Id == "HCR042"));
+        Assert.Equal(1, retry.UnsafeCallIndexBuilds + hedging.UnsafeCallIndexBuilds);
+        Assert.True(
+            retry.UnsafeCallIndexBuilds == 1 ^ hedging.UnsafeCallIndexBuilds == 1,
+            "Exactly one analyzer instance should perform the shared index build.");
+    }
+
+    [Fact]
     public async Task Hcr041LeavesTheUnsafeCallIndexUnbuiltForLookalikeApis()
     {
         var analyzer = new HCR041_UnsafeMethodRetryAnalyzer();
@@ -166,7 +237,10 @@ public sealed class AnalyzerWorkGuardrailTests
     /// Generates a compilation with many HTTP-calling typed clients, so a rebuilt index or a
     /// per-node rescan would be obvious.
     /// </summary>
-    private static string BuildHttpHeavySource(int clients, bool registerResilienceHandler)
+    private static string BuildHttpHeavySource(
+        int clients,
+        bool registerResilienceHandler,
+        bool registerHedgingHandler = false)
     {
         var builder = new StringBuilder();
         builder.AppendLine("using System.Net.Http;");
@@ -183,13 +257,24 @@ public sealed class AnalyzerWorkGuardrailTests
         for (var index = 0; index < clients; index++)
         {
             builder.Append("        services.AddHttpClient<Client").Append(index).Append(">()");
-            builder.AppendLine(registerResilienceHandler ? ".AddStandardResilienceHandler();" : ";");
+            if (registerResilienceHandler)
+            {
+                builder.Append(".AddStandardResilienceHandler()");
+            }
+
+            if (registerHedgingHandler)
+            {
+                builder.Append(".AddStandardHedgingHandler()");
+            }
+
+            builder.AppendLine(";");
         }
 
         builder.AppendLine("    }");
         builder.AppendLine();
         builder.AppendLine("    public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;");
         builder.AppendLine("    public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;");
+        builder.AppendLine("    public static IHttpClientBuilder AddStandardHedgingHandler(this IHttpClientBuilder builder) => builder;");
         builder.AppendLine("}");
 
         for (var index = 0; index < clients; index++)

@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
@@ -10,10 +9,10 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace HttpClient.Resilience.Analyzers.Analyzers.Resilience;
 
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
+public sealed class HCR042_UnsafeMethodHedgingAnalyzer : DiagnosticAnalyzer
 {
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(DiagnosticDescriptors.HCR041);
+        ImmutableArray.Create(DiagnosticDescriptors.HCR042);
 
     private int _unsafeCallIndexBuilds;
 
@@ -48,8 +47,8 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                 invocation,
                 context.SemanticModel,
                 context.CancellationToken,
-                "AddStandardResilienceHandler") ||
-            HasUnsafeMethodRetryGuard(
+                "AddStandardHedgingHandler") ||
+            HasUnsafeMethodHedgingGuard(
                 invocation,
                 context.SemanticModel,
                 context.CancellationToken))
@@ -91,62 +90,20 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
     {
         var memberAccess = (MemberAccessExpressionSyntax)invocation.Expression;
         context.ReportDiagnostic(Diagnostic.Create(
-            DiagnosticDescriptors.HCR041,
+            DiagnosticDescriptors.HCR042,
             memberAccess.Name.GetLocation()));
     }
 
-    private static bool HasUnsafeMethodRetryGuard(
+    private static bool HasUnsafeMethodHedgingGuard(
         InvocationExpressionSyntax invocation,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        return ContainsDisableForUnsafeHttpMethods(invocation, semanticModel, cancellationToken) ||
-            SafeHttpMethodPredicate.ContainsSafeOnlyShouldHandle(
-                invocation,
-                semanticModel,
-                cancellationToken,
-                expectedNamespace: "Polly.Retry",
-                requiredOwnerName: null);
-    }
-
-    private static bool ContainsDisableForUnsafeHttpMethods(
-        InvocationExpressionSyntax invocation,
-        SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
-    {
-        return invocation
-            .DescendantNodes()
-            .OfType<InvocationExpressionSyntax>()
-            .Any(child => IsDisableForUnsafeHttpMethodsInvocation(child, semanticModel, cancellationToken));
-    }
-
-    private static bool IsDisableForUnsafeHttpMethodsInvocation(
-        InvocationExpressionSyntax invocation,
-        SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
-    {
-        if (invocation.Expression is not MemberAccessExpressionSyntax
-            {
-                Name.Identifier.ValueText: "DisableForUnsafeHttpMethods"
-            })
-        {
-            return false;
-        }
-
-        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
-        if (symbolInfo.Symbol is IMethodSymbol method)
-        {
-            return IsFrameworkUnsafeMethodRetryGuard(method);
-        }
-
-        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
-        return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkUnsafeMethodRetryGuard);
-    }
-
-    private static bool IsFrameworkUnsafeMethodRetryGuard(IMethodSymbol method)
-    {
-        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
-        return containingNamespace.IsGlobalNamespace ||
-            containingNamespace.ToDisplayString() == "Microsoft.Extensions.Http.Resilience";
+        return SafeHttpMethodPredicate.ContainsSafeOnlyShouldHandle(
+            invocation,
+            semanticModel,
+            cancellationToken,
+            expectedNamespace: "Polly.Hedging",
+            requiredOwnerName: "Hedging");
     }
 }

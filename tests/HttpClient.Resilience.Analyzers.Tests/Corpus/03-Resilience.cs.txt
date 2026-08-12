@@ -23,6 +23,13 @@ public static class CorpusResilienceRegistrations
             .AddStandardResilienceHandler();
     }
 
+    public static IHttpClientBuilder ConfigureUnsafeHedgedTypedClient(IServiceCollection services)
+    {
+        return services
+            .AddHttpClient<CorpusUnsafePaymentsClient>()
+            .AddStandardHedgingHandler();
+    }
+
     // The unsafe call lives in a nested type, so the enclosing declaration still owns it.
     public static IHttpClientBuilder ConfigureEnclosingTypeOfUnsafeNestedClient(IServiceCollection services)
     {
