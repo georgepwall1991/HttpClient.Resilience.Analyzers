@@ -44,7 +44,7 @@ internal static class HttpClientSymbols
         string typeName,
         params string[] namespaceSegments)
     {
-        if (type is not INamedTypeSymbol { Arity: 0 } named ||
+        if (type is not INamedTypeSymbol { Arity: 0, ContainingType: null } named ||
             named.Name != typeName)
         {
             return false;
