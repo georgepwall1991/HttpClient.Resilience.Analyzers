@@ -33,6 +33,25 @@ $package = Get-ChildItem artifacts\packages\*.nupkg | Sort-Object LastWriteTime 
 ./scripts/Validate-PackageConsumption.ps1 -PackagePath $package.FullName
 ```
 
+## Behavior Snapshot
+
+`AnalyzerBehaviorSnapshotTests` runs every analyzer over the corpus in
+`tests/HttpClient.Resilience.Analyzers.Tests/Corpus/` and compares the result against the
+committed `expected-diagnostics.txt`. Refactoring and performance work is expected to leave
+that file untouched, so a diff there is a signal to stop and explain why behavior moved.
+
+When a change intentionally alters diagnostics, regenerate the baseline and review the diff
+as part of the pull request:
+
+```powershell
+$env:HCR_UPDATE_SNAPSHOTS = '1'
+dotnet test HttpClient.Resilience.Analyzers.slnx --configuration Release --filter FullyQualifiedName~AnalyzerBehaviorSnapshotTests
+Remove-Item env:HCR_UPDATE_SNAPSHOTS
+```
+
+The corpus must keep triggering every shipped rule; a dedicated test fails if one stops
+appearing.
+
 ## Diagnostic Quality Bar
 
 For a new or expanded diagnostic, include:
