@@ -41,7 +41,9 @@ public sealed class HCR040_StackedResilienceHandlersAnalyzer : DiagnosticAnalyze
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        if (!ChainLooksLikeHttpClientBuilder(invocation, semanticModel, cancellationToken))
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+            memberAccess.Name.Identifier.ValueText is not ("AddStandardResilienceHandler" or "AddResilienceHandler") ||
+            !ChainLooksLikeHttpClientBuilder(invocation, semanticModel, cancellationToken))
         {
             return false;
         }

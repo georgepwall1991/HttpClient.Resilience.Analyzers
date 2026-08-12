@@ -58,6 +58,7 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+            !IsKnownCancellationAwareMethodName(memberAccess.Name.Identifier.ValueText) ||
             InvocationAlreadyPassesCancellationToken(invocation, context.SemanticModel, context.CancellationToken) ||
             !VisibleCancellationTokenExists(invocation, context.SemanticModel, context.CancellationToken) ||
             !IsCancellationAwareHttpCall(invocation, memberAccess, context.SemanticModel, context.CancellationToken))
@@ -68,6 +69,12 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         context.ReportDiagnostic(Diagnostic.Create(
             DiagnosticDescriptors.HCR064,
             memberAccess.Name.GetLocation()));
+    }
+
+    private static bool IsKnownCancellationAwareMethodName(string methodName)
+    {
+        return HttpClientMethodNames.Contains(methodName, System.StringComparer.Ordinal) ||
+            HttpContentMethodNames.Contains(methodName, System.StringComparer.Ordinal);
     }
 
     private static bool IsCancellationAwareHttpCall(
