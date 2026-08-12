@@ -64,6 +64,17 @@ For a new or expanded diagnostic, include:
 
 Code fixes should be conservative and limited to transformations that are obviously safe.
 
+## Mutation Testing
+
+New analyzer logic should keep a Stryker mutation score at or above the break threshold in
+`stryker-config.json` (currently 95%). Expand the `mutate` glob when a change introduces a
+new rule or shared helper, and add explicit mutant-killer tests for boolean gates, namespace
+checks, and method-name filters.
+
+```powershell
+./scripts/Invoke-MutationTests.ps1
+```
+
 ## Pull Requests
 
 Keep pull requests focused. Prefer one diagnostic or one infrastructure concern per pull request. Include the verification commands you ran and call out any known limitations that remain intentional.

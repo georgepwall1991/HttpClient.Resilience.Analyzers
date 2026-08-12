@@ -5,6 +5,7 @@ Rule severities are controlled through `.editorconfig` using `dotnet_diagnostic.
 ```ini
 [*.cs]
 dotnet_diagnostic.HCR041.severity = warning
+dotnet_diagnostic.HCR042.severity = warning
 dotnet_diagnostic.HCR080.severity = suggestion
 ```
 
@@ -19,7 +20,7 @@ dotnet_diagnostic.HCR080.severity = suggestion
 
 ## Severity Guidance
 
-Keep `HCR041`, `HCR060`, `HCR061`, `HCR062`, `HCR063`, `HCR064`, `HCR081`, `HCR082`, `HCR083`, `HCR084`, and `HCR085` visible during adoption. Unsafe retries, undisposed streaming responses, unchecked error responses, shared default header mutation, sync-over-async HTTP calls, dropped cancellation tokens, undisposed HTTP content streams, per-request resilience pipeline construction, typed-client relative URLs without a base address, duplicated named-client literals, and implicit typed-client name collisions can cause duplicated writes, connection pool pressure, misleading payload handling, cross-request data leakage, thread-pool starvation, runaway work after callers disconnect, leaked stream resources, avoidable allocation overhead, runtime URI failures, name drift, or requests using another client's configuration.
+Keep `HCR041`, `HCR042`, `HCR060`, `HCR061`, `HCR062`, `HCR063`, `HCR064`, `HCR081`, `HCR082`, `HCR083`, `HCR084`, and `HCR085` visible during adoption. Unsafe retries, concurrent hedging of unsafe methods, undisposed streaming responses, unchecked error responses, shared default header mutation, sync-over-async HTTP calls, dropped cancellation tokens, undisposed HTTP content streams, per-request resilience pipeline construction, typed-client relative URLs without a base address, duplicated named-client literals, and implicit typed-client name collisions can cause duplicated writes, connection pool pressure, misleading payload handling, cross-request data leakage, thread-pool starvation, runaway work after callers disconnect, leaked stream resources, avoidable allocation overhead, runtime URI failures, name drift, or requests using another client's configuration.
 
 Keep `HCR080` at `suggestion` or `warning` until the team agrees on fan-out limits. It is intentionally heuristic.
 

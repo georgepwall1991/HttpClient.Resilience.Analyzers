@@ -54,6 +54,7 @@ dotnet_diagnostic.HCR005.severity = warning
 dotnet_diagnostic.HCR020.severity = warning
 dotnet_diagnostic.HCR040.severity = warning
 dotnet_diagnostic.HCR041.severity = warning
+dotnet_diagnostic.HCR042.severity = warning
 dotnet_diagnostic.HCR060.severity = warning
 dotnet_diagnostic.HCR061.severity = warning
 dotnet_diagnostic.HCR062.severity = warning
@@ -166,6 +167,16 @@ public static class BadUnsafeRetryRegistration
         return services
             .AddHttpClient<BadUnsafePaymentsClient>()
             .AddStandardResilienceHandler();
+    }
+}
+
+public static class BadUnsafeHedgingRegistration
+{
+    public static IHttpClientBuilder Configure(IServiceCollection services)
+    {
+        return services
+            .AddHttpClient<BadUnsafePaymentsClient>()
+            .AddStandardHedgingHandler();
     }
 }
 
@@ -343,6 +354,11 @@ public static class HttpClientBuilderExtensions
         return builder;
     }
 
+    public static IHttpClientBuilder AddStandardHedgingHandler(this IHttpClientBuilder builder)
+    {
+        return builder;
+    }
+
     public static IServiceCollection AddSingleton<TService>(this IServiceCollection services)
     {
         return services;
@@ -401,6 +417,7 @@ namespace Polly
         'HCR020',
         'HCR040',
         'HCR041',
+        'HCR042',
         'HCR060',
         'HCR061',
         'HCR062',

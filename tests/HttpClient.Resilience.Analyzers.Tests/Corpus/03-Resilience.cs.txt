@@ -52,6 +52,13 @@ public static class CorpusResilienceRegistrations
             .AddHttpClient<CorpusSafeReadClient>()
             .AddStandardResilienceHandler();
     }
+
+    public static IHttpClientBuilder ConfigureUnsafeHedgedTypedClient(IServiceCollection services)
+    {
+        return services
+            .AddHttpClient<CorpusUnsafePaymentsClient>()
+            .AddStandardHedgingHandler();
+    }
 }
 
 public sealed class CorpusStackedClient(HttpClient httpClient)

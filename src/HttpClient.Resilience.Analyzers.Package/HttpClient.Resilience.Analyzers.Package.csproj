@@ -5,7 +5,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>HttpClient.Resilience.Analyzers</PackageId>
-    <Version>0.1.160</Version>
+    <Version>0.1.161</Version>
     <Title>HttpClient Resilience Analyzers — IHttpClientFactory, Polly, and Http.Resilience</Title>
     <Authors>George Wall</Authors>
     <Copyright>Copyright (c) George Wall and contributors 2026</Copyright>
@@ -17,7 +17,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Improve analyzer performance and reliability: HCR041 unsafe-call indexing, shared DI registration caching with cancellation, and cheaper HttpClient symbol/name gates. No diagnostic behavior changes.</PackageReleaseNotes>
+    <PackageReleaseNotes>Add HCR042 to warn when AddStandardHedgingHandler concurrently replays POST/PUT/PATCH/DELETE/CONNECT. Shares the HCR041 unsafe-call index. Conservative code fix switches parameterless hedging to standard resilience with unsafe-method retries disabled.</PackageReleaseNotes>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>

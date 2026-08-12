@@ -5,6 +5,7 @@ obj/
 .idea/
 TestResults/
 artifacts/
+StrykerOutput/
 *.user
 *.suo
 *.nupkg
