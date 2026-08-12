@@ -1,0 +1,35 @@
+// HCR020, HCR080, HCR084 shapes.
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+
+public static class CorpusNamedClientRegistrations
+{
+    public static void Configure(IServiceCollection services)
+    {
+        services.AddHttpClient("corpus-catalog");
+    }
+}
+
+public sealed class CorpusCatalogClientFactoryUser
+{
+    public HttpClient Create(IHttpClientFactory factory)
+    {
+        return factory.CreateClient("corpus-catalog");
+    }
+}
+
+public sealed class CorpusTraceHandler(IHttpContextAccessor accessor) : DelegatingHandler
+{
+    public IHttpContextAccessor Accessor { get; } = accessor;
+}
+
+public sealed class CorpusFanOutService
+{
+    public Task SendAsync(HttpClient client, IEnumerable<string> urls, CancellationToken cancellationToken)
+    {
+        return Task.WhenAll(urls.Select(url => client.GetAsync(url, cancellationToken)));
+    }
+}

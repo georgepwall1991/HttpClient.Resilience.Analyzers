@@ -1,0 +1,24 @@
+01-Lifetime.cs(10,28): warning HCR001: Do not create and dispose HttpClient per request
+01-Lifetime.cs(11,19): warning HCR061: Check HTTP response success before reading content
+01-Lifetime.cs(22,16): warning HCR001: Do not create and dispose HttpClient per request
+01-Lifetime.cs(28,40): warning HCR002: Long-lived manual HttpClient should configure PooledConnectionLifetime
+01-Lifetime.cs(42,9): warning HCR003: Do not cache IHttpClientFactory.CreateClient() results long-term
+02-TypedClients.cs(12,18): warning HCR004: Do not inject typed HttpClient clients into singleton services
+02-TypedClients.cs(13,18): warning HCR005: Do not separately register a typed client already registered by AddHttpClient<T>()
+02-TypedClients.cs(15,18): warning HCR085: Typed clients 'CorpusStripeClient' and 'CorpusAdyenClient' share the implicit HttpClient name for 'ICorpusSharedClient'; specify distinct names or link them to an explicit named client
+02-TypedClients.cs(56,33): warning HCR083: Configure BaseAddress for typed clients that use relative URLs
+03-Resilience.cs(16,14): warning HCR040: Do not stack duplicate resilience handlers
+03-Resilience.cs(23,14): warning HCR041: Standard resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
+03-Resilience.cs(31,14): warning HCR041: Standard resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
+03-Resilience.cs(46,14): warning HCR041: Standard resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
+03-Resilience.cs(105,62): warning HCR082: Avoid per-request creation of resilience pipelines
+04-ResponseLifetime.cs(11,13): warning HCR060: Dispose HttpResponseMessage when using ResponseHeadersRead
+04-ResponseLifetime.cs(11,13): warning HCR061: Check HTTP response success before reading content
+04-ResponseLifetime.cs(24,13): warning HCR061: Check HTTP response success before reading content
+04-ResponseLifetime.cs(33,38): warning HCR062: Prefer per-request headers over mutating DefaultRequestHeaders
+04-ResponseLifetime.cs(42,55): warning HCR063: Avoid sync-over-async around outbound HTTP
+04-ResponseLifetime.cs(50,23): warning HCR064: Use cancellation-aware HTTP APIs when a token is available
+04-ResponseLifetime.cs(63,13): warning HCR081: Dispose streams returned from HTTP content
+05-HandlersAndConcurrency.cs(20,37): warning HCR084: Avoid duplicated string literals for named HttpClient names
+05-HandlersAndConcurrency.cs(24,40): warning HCR020: DelegatingHandler should not capture scoped request data
+05-HandlersAndConcurrency.cs(33,21): info HCR080: High-concurrency HTTP fan-out should use bounded concurrency or connection limits

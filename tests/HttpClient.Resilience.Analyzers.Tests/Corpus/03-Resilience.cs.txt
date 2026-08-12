@@ -1,0 +1,108 @@
+// HCR040, HCR041, HCR082 shapes. Nested typed clients and constant-backed client
+// names are included because the HCR041 unsafe-call index resolves both.
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+
+public static class CorpusResilienceRegistrations
+{
+    public const string OrdersClientName = "corpus-orders";
+
+    public static IHttpClientBuilder ConfigureStacked(IServiceCollection services)
+    {
+        return services
+            .AddHttpClient<CorpusStackedClient>()
+            .AddStandardResilienceHandler()
+            .AddStandardResilienceHandler();
+    }
+
+    public static IHttpClientBuilder ConfigureUnsafeTypedClient(IServiceCollection services)
+    {
+        return services
+            .AddHttpClient<CorpusUnsafePaymentsClient>()
+            .AddStandardResilienceHandler();
+    }
+
+    // The unsafe call lives in a nested type, so the enclosing declaration still owns it.
+    public static IHttpClientBuilder ConfigureEnclosingTypeOfUnsafeNestedClient(IServiceCollection services)
+    {
+        return services
+            .AddHttpClient<CorpusOuterClient>()
+            .AddStandardResilienceHandler();
+    }
+
+    // The nested declaration itself is registered by its qualified name.
+    public static IHttpClientBuilder ConfigureNestedUnsafeClient(IServiceCollection services)
+    {
+        return services
+            .AddHttpClient<CorpusOuterClient.CorpusNestedUnsafeClient>()
+            .AddStandardResilienceHandler();
+    }
+
+    public static IHttpClientBuilder ConfigureUnsafeNamedClient(IServiceCollection services)
+    {
+        return services
+            .AddHttpClient(OrdersClientName)
+            .AddStandardResilienceHandler();
+    }
+
+    public static IHttpClientBuilder ConfigureSafeTypedClient(IServiceCollection services)
+    {
+        return services
+            .AddHttpClient<CorpusSafeReadClient>()
+            .AddStandardResilienceHandler();
+    }
+}
+
+public sealed class CorpusStackedClient(HttpClient httpClient)
+{
+    public Task<HttpResponseMessage> GetAsync(CancellationToken cancellationToken)
+    {
+        return httpClient.GetAsync("https://example.com/stacked", cancellationToken);
+    }
+}
+
+public sealed class CorpusUnsafePaymentsClient(HttpClient httpClient)
+{
+    public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+    {
+        return httpClient.PostAsync("https://example.com/payments", null, cancellationToken);
+    }
+}
+
+public sealed class CorpusOuterClient
+{
+    public sealed class CorpusNestedUnsafeClient(HttpClient httpClient)
+    {
+        public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+        {
+            return httpClient.PostAsync("https://example.com/nested", null, cancellationToken);
+        }
+    }
+}
+
+public sealed class CorpusSafeReadClient(HttpClient httpClient)
+{
+    public Task<HttpResponseMessage> ReadAsync(CancellationToken cancellationToken)
+    {
+        return httpClient.GetAsync("https://example.com/read", cancellationToken);
+    }
+}
+
+public sealed class CorpusOrdersJob(IHttpClientFactory factory)
+{
+    public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+    {
+        var client = factory.CreateClient(CorpusResilienceRegistrations.OrdersClientName);
+        return client.PostAsync("https://example.com/orders", null, cancellationToken);
+    }
+}
+
+public sealed class CorpusPerRequestPipelineService
+{
+    public void Send()
+    {
+        var pipeline = new Polly.ResiliencePipelineBuilder().Build();
+        pipeline.Execute();
+    }
+}

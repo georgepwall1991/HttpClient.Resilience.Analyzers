@@ -1,0 +1,58 @@
+// HCR004, HCR005, HCR083, HCR085 shapes, with registrations deliberately split
+// across corpus files so the compilation-wide analyzers must join cross-tree.
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+
+public static class CorpusTypedClientRegistrations
+{
+    public static void Configure(IServiceCollection services)
+    {
+        services.AddHttpClient<CorpusPaymentsClient>();
+        services.AddSingleton<CorpusPaymentsJob>();
+        services.AddTransient<CorpusPaymentsClient>();
+        services.AddHttpClient<ICorpusSharedClient, CorpusStripeClient>();
+        services.AddHttpClient<ICorpusSharedClient, CorpusAdyenClient>();
+        services.AddHttpClient<CorpusRelativeUrlClient>();
+    }
+}
+
+public interface ICorpusSharedClient
+{
+}
+
+public sealed class CorpusStripeClient : ICorpusSharedClient
+{
+}
+
+public sealed class CorpusAdyenClient : ICorpusSharedClient
+{
+}
+
+public sealed class CorpusPaymentsClient(HttpClient httpClient)
+{
+    public Task<HttpResponseMessage> GetAsync(CancellationToken cancellationToken)
+    {
+        return httpClient.GetAsync("https://example.com/payments", cancellationToken);
+    }
+}
+
+public sealed class CorpusPaymentsJob(CorpusPaymentsClient paymentsClient)
+{
+    public CorpusPaymentsClient PaymentsClient { get; } = paymentsClient;
+}
+
+public sealed class CorpusRelativeUrlClient
+{
+    private readonly HttpClient _client;
+
+    public CorpusRelativeUrlClient(HttpClient client)
+    {
+        _client = client;
+    }
+
+    public Task<HttpResponseMessage> SendAsync(CancellationToken cancellationToken)
+    {
+        return _client.GetAsync("/payments", cancellationToken);
+    }
+}
