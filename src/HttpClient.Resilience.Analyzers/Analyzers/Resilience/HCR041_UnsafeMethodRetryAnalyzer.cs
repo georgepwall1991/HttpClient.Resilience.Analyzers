@@ -30,16 +30,177 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
     private sealed class UnsafeCallIndex
     {
         public UnsafeCallIndex(
-            IReadOnlyList<ClassDeclarationSyntax> typedClientClassesWithUnsafeCalls,
+            IReadOnlyCollection<ClassDeclarationSyntax> typedClientClassesWithUnsafeCalls,
             IReadOnlyCollection<string> namedClientsWithUnsafeCalls)
         {
             TypedClientClassesWithUnsafeCalls = typedClientClassesWithUnsafeCalls;
             NamedClientsWithUnsafeCalls = namedClientsWithUnsafeCalls;
         }
 
-        public IReadOnlyList<ClassDeclarationSyntax> TypedClientClassesWithUnsafeCalls { get; }
+        public IReadOnlyCollection<ClassDeclarationSyntax> TypedClientClassesWithUnsafeCalls { get; }
 
         public IReadOnlyCollection<string> NamedClientsWithUnsafeCalls { get; }
+    }
+
+    /// <summary>
+    /// Builds the unsafe-call index on first use instead of at compilation start. Most
+    /// compilations never call <c>AddStandardResilienceHandler</c>, and those must not pay
+    /// for a scan of the whole syntax forest.
+    /// </summary>
+    private sealed class DeferredUnsafeCallIndex
+    {
+        private readonly Compilation _compilation;
+        private readonly System.Action _onBuilt;
+        private readonly object _gate = new();
+        private UnsafeCallIndex? _index;
+
+        public DeferredUnsafeCallIndex(Compilation compilation, System.Action onBuilt)
+        {
+            _compilation = compilation;
+            _onBuilt = onBuilt;
+        }
+
+        public UnsafeCallIndex GetOrBuild(System.Threading.CancellationToken cancellationToken)
+        {
+            if (System.Threading.Volatile.Read(ref _index) is { } published)
+            {
+                return published;
+            }
+
+            lock (_gate)
+            {
+                if (_index is { } cached)
+                {
+                    return cached;
+                }
+
+                // A cancelled build throws before publishing, so a partial index is never cached.
+                var index = BuildUnsafeCallIndex(_compilation, cancellationToken);
+                _onBuilt();
+                System.Threading.Volatile.Write(ref _index, index);
+                return index;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Per-build state for the unsafe-call scan. Caching the constant lookup and the
+    /// receiver classifications turns repeated whole-scope rescans into dictionary hits.
+    /// A scan runs single-threaded under <see cref="DeferredUnsafeCallIndex"/>'s lock.
+    /// </summary>
+    private sealed class UnsafeCallScan
+    {
+        private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _localHttpClients = new();
+        private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _localFactories = new();
+        private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _memberHttpClients = new();
+        private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _memberFactories = new();
+        private readonly IReadOnlyList<SyntaxNode> _roots;
+        private readonly System.Threading.CancellationToken _cancellationToken;
+        private Dictionary<(string TypeName, string ConstantName), string>? _constantStrings;
+
+        public UnsafeCallScan(IReadOnlyList<SyntaxNode> roots, System.Threading.CancellationToken cancellationToken)
+        {
+            _roots = roots;
+            _cancellationToken = cancellationToken;
+        }
+
+        /// <summary>
+        /// Resolves a constant string field by name, optionally qualified by declaring type.
+        /// The table is built on first use, so a compilation whose client names are all
+        /// literals never walks the field declarations.
+        /// </summary>
+        public string? TryGetConstantString(string constantName, string? typeName)
+        {
+            _constantStrings ??= CollectConstantStrings(_roots, _cancellationToken);
+
+            return _constantStrings.TryGetValue((typeName ?? string.Empty, constantName), out var value)
+                ? value
+                : null;
+        }
+
+        public bool GetOrAddLocalHttpClient(SyntaxNode scope, string name, System.Func<bool> compute) =>
+            GetOrAdd(_localHttpClients, scope, name, compute);
+
+        public bool GetOrAddLocalFactory(SyntaxNode scope, string name, System.Func<bool> compute) =>
+            GetOrAdd(_localFactories, scope, name, compute);
+
+        public bool GetOrAddMemberHttpClient(SyntaxNode scope, string name, System.Func<bool> compute) =>
+            GetOrAdd(_memberHttpClients, scope, name, compute);
+
+        public bool GetOrAddMemberFactory(SyntaxNode scope, string name, System.Func<bool> compute) =>
+            GetOrAdd(_memberFactories, scope, name, compute);
+
+        private static bool GetOrAdd(
+            Dictionary<(SyntaxNode Scope, string Name), bool> cache,
+            SyntaxNode scope,
+            string name,
+            System.Func<bool> compute)
+        {
+            var key = (scope, name);
+            if (cache.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+
+            var computed = compute();
+            cache[key] = computed;
+            return computed;
+        }
+
+        /// <summary>
+        /// Indexes every constant string field once. Keys are stored both unqualified and
+        /// qualified by declaring type name, and the first literal-initialized declaration
+        /// wins, which matches the document-order lookup this replaces.
+        /// </summary>
+        private static Dictionary<(string TypeName, string ConstantName), string> CollectConstantStrings(
+            IReadOnlyList<SyntaxNode> roots,
+            System.Threading.CancellationToken cancellationToken)
+        {
+            var constants = new Dictionary<(string, string), string>();
+
+            foreach (var root in roots)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                foreach (var field in root.DescendantNodes().OfType<FieldDeclarationSyntax>())
+                {
+                    if (!field.Modifiers.Any(SyntaxKind.ConstKeyword) ||
+                        !IsStringTypeName(field.Declaration.Type))
+                    {
+                        continue;
+                    }
+
+                    var declaringTypeName = (field.Parent as TypeDeclarationSyntax)?.Identifier.ValueText;
+                    foreach (var variable in field.Declaration.Variables)
+                    {
+                        if (variable.Initializer?.Value is not { } initializer ||
+                            TryGetStringLiteral(initializer) is not { } value)
+                        {
+                            continue;
+                        }
+
+                        var name = variable.Identifier.ValueText;
+                        AddIfAbsent(constants, (string.Empty, name), value);
+                        if (declaringTypeName is not null)
+                        {
+                            AddIfAbsent(constants, (declaringTypeName, name), value);
+                        }
+                    }
+                }
+            }
+
+            return constants;
+        }
+
+        private static void AddIfAbsent(
+            Dictionary<(string, string), string> constants,
+            (string, string) key,
+            string value)
+        {
+            if (!constants.ContainsKey(key))
+            {
+                constants[key] = value;
+            }
+        }
     }
 
     private static readonly string[] UnsafeHttpMethodPrefixes =
@@ -71,6 +232,14 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
         ImmutableArray.Create(DiagnosticDescriptors.HCR041);
 
+    private int _unsafeCallIndexBuilds;
+
+    /// <summary>
+    /// How many times this analyzer instance has built the unsafe-call index. Tests assert
+    /// the index stays demand-driven and is never built more than once per compilation.
+    /// </summary>
+    internal int UnsafeCallIndexBuilds => System.Threading.Volatile.Read(ref _unsafeCallIndexBuilds);
+
     public override void Initialize(AnalysisContext context)
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
@@ -78,12 +247,11 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         context.RegisterCompilationStartAction(AnalyzeCompilation);
     }
 
-    private static void AnalyzeCompilation(CompilationStartAnalysisContext context)
+    private void AnalyzeCompilation(CompilationStartAnalysisContext context)
     {
-        var roots = context.Compilation.SyntaxTrees
-            .Select(tree => tree.GetRoot(context.CancellationToken))
-            .ToArray();
-        var unsafeCallIndex = BuildUnsafeCallIndex(roots, context.CancellationToken);
+        var unsafeCallIndex = new DeferredUnsafeCallIndex(
+            context.Compilation,
+            () => System.Threading.Interlocked.Increment(ref _unsafeCallIndexBuilds));
 
         context.RegisterSyntaxNodeAction(
             nodeContext => AnalyzeInvocation(nodeContext, unsafeCallIndex),
@@ -91,60 +259,78 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
     }
 
     private static UnsafeCallIndex BuildUnsafeCallIndex(
-        SyntaxNode[] roots,
+        Compilation compilation,
         System.Threading.CancellationToken cancellationToken)
     {
-        var typedClientClassesWithUnsafeCalls = new List<ClassDeclarationSyntax>();
-        foreach (var root in roots)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            foreach (var type in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
-            {
-                if (type.DescendantNodes()
-                    .OfType<InvocationExpressionSyntax>()
-                    .Any(invocation => IsUnsafeHttpClientCall(invocation, roots)))
-                {
-                    typedClientClassesWithUnsafeCalls.Add(type);
-                }
-            }
-        }
+        var roots = CompilationSyntaxIndex.GetRoots(compilation, cancellationToken);
+        var scan = new UnsafeCallScan(roots, cancellationToken);
 
+        // One invocation pass per tree. An unsafe call is owned by every enclosing class
+        // declaration, which is what scanning each class's descendants used to establish.
+        var typedClientClassesWithUnsafeCalls = new HashSet<ClassDeclarationSyntax>();
         var namedClientsWithUnsafeCalls = new HashSet<string>(System.StringComparer.Ordinal);
+
         foreach (var root in roots)
         {
             cancellationToken.ThrowIfCancellationRequested();
             foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
             {
-                if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
-                    memberAccess.Name.Identifier.ValueText != "CreateClient" ||
-                    !SyntacticReceiverLooksLikeHttpClientFactory(memberAccess.Expression) ||
-                    invocation.ArgumentList.Arguments.Count == 0)
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (IsUnsafeHttpClientCall(invocation, scan))
                 {
-                    continue;
+                    AddEnclosingClasses(invocation, typedClientClassesWithUnsafeCalls);
                 }
 
-                var clientName = TryGetStringConstant(
-                    invocation.ArgumentList.Arguments[0].Expression,
-                    roots);
-                if (clientName is null)
-                {
-                    continue;
-                }
-
-                if (IsDirectUnsafeCall(invocation, roots) ||
-                    AssignedClientSendsUnsafeHttpMethod(invocation, roots))
-                {
-                    namedClientsWithUnsafeCalls.Add(clientName);
-                }
+                CollectNamedClientWithUnsafeCall(invocation, scan, namedClientsWithUnsafeCalls);
             }
         }
 
         return new UnsafeCallIndex(typedClientClassesWithUnsafeCalls, namedClientsWithUnsafeCalls);
     }
 
+    private static void AddEnclosingClasses(SyntaxNode node, HashSet<ClassDeclarationSyntax> classes)
+    {
+        for (var ancestor = node.Parent; ancestor is not null; ancestor = ancestor.Parent)
+        {
+            if (ancestor is ClassDeclarationSyntax classDeclaration)
+            {
+                classes.Add(classDeclaration);
+            }
+        }
+    }
+
+    private static void CollectNamedClientWithUnsafeCall(
+        InvocationExpressionSyntax invocation,
+        UnsafeCallScan scan,
+        HashSet<string> namedClientsWithUnsafeCalls)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+            memberAccess.Name.Identifier.ValueText != "CreateClient" ||
+            invocation.ArgumentList.Arguments.Count == 0 ||
+            !SyntacticReceiverLooksLikeHttpClientFactory(memberAccess.Expression, scan))
+        {
+            return;
+        }
+
+        var clientName = TryGetStringConstant(
+            invocation.ArgumentList.Arguments[0].Expression,
+            scan);
+        if (clientName is null)
+        {
+            return;
+        }
+
+        if (IsDirectUnsafeCall(invocation, scan) ||
+            AssignedClientSendsUnsafeHttpMethod(invocation, scan))
+        {
+            namedClientsWithUnsafeCalls.Add(clientName);
+        }
+    }
+
     private static void AnalyzeInvocation(
         SyntaxNodeAnalysisContext context,
-        UnsafeCallIndex unsafeCallIndex)
+        DeferredUnsafeCallIndex unsafeCallIndex)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
         if (!IsAddStandardResilienceHandlerInvocation(
@@ -165,7 +351,8 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             context.SemanticModel,
             context.CancellationToken);
 
-        if (typedClient is not null && TypedClientSendsUnsafeHttpMethod(unsafeCallIndex, typedClient))
+        if (typedClient is not null &&
+            TypedClientSendsUnsafeHttpMethod(unsafeCallIndex.GetOrBuild(context.CancellationToken), typedClient))
         {
             ReportDiagnostic(context, invocation);
             return;
@@ -174,7 +361,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         var namedClient = FindNamedClientInChain(invocation, context.SemanticModel, context.CancellationToken);
         namedClient ??= FindNamedClientForBuilderLocal(invocation, context.SemanticModel, context.CancellationToken);
         if (namedClient is not null &&
-            NamedClientSendsUnsafeHttpMethod(unsafeCallIndex, namedClient))
+            NamedClientSendsUnsafeHttpMethod(unsafeCallIndex.GetOrBuild(context.CancellationToken), namedClient))
         {
             ReportDiagnostic(context, invocation);
         }
@@ -755,33 +942,33 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         return unsafeCallIndex.NamedClientsWithUnsafeCalls.Contains(clientName);
     }
 
-    private static bool IsUnsafeHttpCall(InvocationExpressionSyntax invocation, IEnumerable<SyntaxNode> roots)
+    private static bool IsUnsafeHttpCall(InvocationExpressionSyntax invocation, UnsafeCallScan scan)
     {
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
         {
             return false;
         }
 
-        return IsUnsafeHttpCall(memberAccess.Name.Identifier.ValueText, invocation, roots);
+        return IsUnsafeHttpCall(memberAccess.Name.Identifier.ValueText, invocation, scan);
     }
 
     private static bool IsUnsafeHttpClientCall(
         InvocationExpressionSyntax invocation,
-        IEnumerable<SyntaxNode> roots)
+        UnsafeCallScan scan)
     {
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
-            !SyntacticReceiverLooksLikeHttpClient(memberAccess.Expression))
+            !SyntacticReceiverLooksLikeHttpClient(memberAccess.Expression, scan))
         {
             return false;
         }
 
-        return IsUnsafeHttpCall(memberAccess.Name.Identifier.ValueText, invocation, roots);
+        return IsUnsafeHttpCall(memberAccess.Name.Identifier.ValueText, invocation, scan);
     }
 
     private static bool IsUnsafeHttpCall(
         string methodName,
         InvocationExpressionSyntax invocation,
-        IEnumerable<SyntaxNode> roots)
+        UnsafeCallScan scan)
     {
         return UnsafeHttpMethodPrefixes.Any(prefix => methodName.StartsWith(prefix, System.StringComparison.Ordinal)) ||
             (methodName is "Send" or "SendAsync" &&
@@ -789,18 +976,18 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                 RequestExpressionUsesUnsafeHttpMethod(
                     invocation.ArgumentList.Arguments[0].Expression,
                     invocation,
-                    roots));
+                    scan));
     }
 
-    private static bool SyntacticReceiverLooksLikeHttpClient(ExpressionSyntax expression)
+    private static bool SyntacticReceiverLooksLikeHttpClient(ExpressionSyntax expression, UnsafeCallScan scan)
     {
         return expression switch
         {
             IdentifierNameSyntax identifier => ParameterLooksLikeHttpClient(identifier) ||
-                LocalLooksLikeHttpClient(identifier) ||
-                FieldOrPropertyLooksLikeHttpClient(identifier),
+                LocalLooksLikeHttpClient(identifier, scan) ||
+                FieldOrPropertyLooksLikeHttpClient(identifier, scan),
             MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax, Name: IdentifierNameSyntax name } =>
-                FieldOrPropertyLooksLikeHttpClient(name),
+                FieldOrPropertyLooksLikeHttpClient(name, scan),
             _ => false
         };
     }
@@ -819,28 +1006,40 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                     IsHttpClientTypeName(parameter.Type)) == true;
     }
 
-    private static bool LocalLooksLikeHttpClient(IdentifierNameSyntax identifier)
+    private static bool LocalLooksLikeHttpClient(IdentifierNameSyntax identifier, UnsafeCallScan scan)
     {
-        return identifier.FirstAncestorOrSelf<BlockSyntax>()?
+        if (identifier.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
+        {
+            return false;
+        }
+
+        var name = identifier.Identifier.ValueText;
+        return scan.GetOrAddLocalHttpClient(block, name, () => block
             .DescendantNodes()
             .OfType<VariableDeclaratorSyntax>()
-            .Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+            .Any(variable => variable.Identifier.ValueText == name &&
                 variable.Parent is VariableDeclarationSyntax declaration &&
-                IsHttpClientTypeName(declaration.Type)) == true;
+                IsHttpClientTypeName(declaration.Type)));
     }
 
-    private static bool FieldOrPropertyLooksLikeHttpClient(IdentifierNameSyntax identifier)
+    private static bool FieldOrPropertyLooksLikeHttpClient(IdentifierNameSyntax identifier, UnsafeCallScan scan)
     {
-        return identifier.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
+        if (identifier.FirstAncestorOrSelf<TypeDeclarationSyntax>() is not { } type)
+        {
+            return false;
+        }
+
+        var name = identifier.Identifier.ValueText;
+        return scan.GetOrAddMemberHttpClient(type, name, () => type
             .Members
             .Any(member => member switch
             {
                 FieldDeclarationSyntax field => IsHttpClientTypeName(field.Declaration.Type) &&
-                    field.Declaration.Variables.Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText),
+                    field.Declaration.Variables.Any(variable => variable.Identifier.ValueText == name),
                 PropertyDeclarationSyntax property => IsHttpClientTypeName(property.Type) &&
-                    property.Identifier.ValueText == identifier.Identifier.ValueText,
+                    property.Identifier.ValueText == name,
                 _ => false
-            }) == true;
+            }));
     }
 
     private static bool IsHttpClientTypeName(TypeSyntax type)
@@ -858,37 +1057,37 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
     private static bool RequestExpressionUsesUnsafeHttpMethod(
         ExpressionSyntax expression,
         SyntaxNode context,
-        IEnumerable<SyntaxNode> roots)
+        UnsafeCallScan scan)
     {
         expression = UnwrapTransparentExpressions(expression);
 
         return expression switch
         {
-            ObjectCreationExpressionSyntax objectCreation => HttpRequestCreationUsesUnsafeMethod(objectCreation, roots),
+            ObjectCreationExpressionSyntax objectCreation => HttpRequestCreationUsesUnsafeMethod(objectCreation, scan),
             ImplicitObjectCreationExpressionSyntax implicitObjectCreation =>
-                HttpRequestCreationUsesUnsafeMethod(implicitObjectCreation, roots),
-            IdentifierNameSyntax identifier => LocalRequestVariableUsesUnsafeMethod(identifier, context, roots),
+                HttpRequestCreationUsesUnsafeMethod(implicitObjectCreation, scan),
+            IdentifierNameSyntax identifier => LocalRequestVariableUsesUnsafeMethod(identifier, context, scan),
             _ => false
         };
     }
 
     private static bool HttpRequestCreationUsesUnsafeMethod(
         BaseObjectCreationExpressionSyntax objectCreation,
-        IEnumerable<SyntaxNode> roots)
+        UnsafeCallScan scan)
     {
         return objectCreation.ArgumentList?.Arguments
             .Select(argument => UnwrapTransparentExpressions(argument.Expression))
-            .Any(expression => IsUnsafeHttpMethodExpression(expression, roots)) == true ||
+            .Any(expression => IsUnsafeHttpMethodExpression(expression, scan)) == true ||
             objectCreation.Initializer?.Expressions
                 .OfType<AssignmentExpressionSyntax>()
                 .Any(assignment => IsMethodMember(assignment.Left) &&
-                    IsUnsafeHttpMethodExpression(UnwrapTransparentExpressions(assignment.Right), roots)) == true;
+                    IsUnsafeHttpMethodExpression(UnwrapTransparentExpressions(assignment.Right), scan)) == true;
     }
 
     private static bool LocalRequestVariableUsesUnsafeMethod(
         IdentifierNameSyntax identifier,
         SyntaxNode context,
-        IEnumerable<SyntaxNode> roots)
+        UnsafeCallScan scan)
     {
         var containingBlock = context.FirstAncestorOrSelf<BlockSyntax>();
         if (containingBlock is null)
@@ -907,7 +1106,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                     identifier.Identifier.ValueText,
                     variable.SpanStart,
                     context.SpanStart) &&
-                RequestExpressionUsesUnsafeHttpMethod(variable.Initializer!.Value, variable, roots));
+                RequestExpressionUsesUnsafeHttpMethod(variable.Initializer!.Value, variable, scan));
     }
 
     private static bool IsMethodMember(ExpressionSyntax expression)
@@ -922,7 +1121,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    private static bool IsUnsafeHttpMethodExpression(ExpressionSyntax expression, IEnumerable<SyntaxNode> roots)
+    private static bool IsUnsafeHttpMethodExpression(ExpressionSyntax expression, UnsafeCallScan scan)
     {
         expression = UnwrapTransparentExpressions(expression);
 
@@ -933,7 +1132,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                 UnsafeHttpMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal),
             ObjectCreationExpressionSyntax objectCreation when objectCreation.Type.ToString() == "HttpMethod" =>
                 objectCreation.ArgumentList?.Arguments.Count > 0 &&
-                TryGetStringConstant(objectCreation.ArgumentList.Arguments[0].Expression, roots) is { } method &&
+                TryGetStringConstant(objectCreation.ArgumentList.Arguments[0].Expression, scan) is { } method &&
                 UnsafeHttpMethodNames.Contains(method, System.StringComparer.OrdinalIgnoreCase),
             _ => false
         };
@@ -958,15 +1157,15 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    private static bool SyntacticReceiverLooksLikeHttpClientFactory(ExpressionSyntax expression)
+    private static bool SyntacticReceiverLooksLikeHttpClientFactory(ExpressionSyntax expression, UnsafeCallScan scan)
     {
         return expression switch
         {
             IdentifierNameSyntax identifier => ParameterLooksLikeHttpClientFactory(identifier) ||
-                LocalLooksLikeHttpClientFactory(identifier) ||
-                FieldOrPropertyLooksLikeHttpClientFactory(identifier),
+                LocalLooksLikeHttpClientFactory(identifier, scan) ||
+                FieldOrPropertyLooksLikeHttpClientFactory(identifier, scan),
             MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax, Name: IdentifierNameSyntax name } =>
-                FieldOrPropertyLooksLikeHttpClientFactory(name),
+                FieldOrPropertyLooksLikeHttpClientFactory(name, scan),
             _ => false
         };
     }
@@ -985,28 +1184,40 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                     IsHttpClientFactoryTypeName(parameter.Type)) == true;
     }
 
-    private static bool LocalLooksLikeHttpClientFactory(IdentifierNameSyntax identifier)
+    private static bool LocalLooksLikeHttpClientFactory(IdentifierNameSyntax identifier, UnsafeCallScan scan)
     {
-        return identifier.FirstAncestorOrSelf<BlockSyntax>()?
+        if (identifier.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
+        {
+            return false;
+        }
+
+        var name = identifier.Identifier.ValueText;
+        return scan.GetOrAddLocalFactory(block, name, () => block
             .DescendantNodes()
             .OfType<VariableDeclaratorSyntax>()
-            .Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText &&
+            .Any(variable => variable.Identifier.ValueText == name &&
                 variable.Parent is VariableDeclarationSyntax declaration &&
-                IsHttpClientFactoryTypeName(declaration.Type)) == true;
+                IsHttpClientFactoryTypeName(declaration.Type)));
     }
 
-    private static bool FieldOrPropertyLooksLikeHttpClientFactory(IdentifierNameSyntax identifier)
+    private static bool FieldOrPropertyLooksLikeHttpClientFactory(IdentifierNameSyntax identifier, UnsafeCallScan scan)
     {
-        return identifier.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
+        if (identifier.FirstAncestorOrSelf<TypeDeclarationSyntax>() is not { } type)
+        {
+            return false;
+        }
+
+        var name = identifier.Identifier.ValueText;
+        return scan.GetOrAddMemberFactory(type, name, () => type
             .Members
             .Any(member => member switch
             {
                 FieldDeclarationSyntax field => IsHttpClientFactoryTypeName(field.Declaration.Type) &&
-                    field.Declaration.Variables.Any(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText),
+                    field.Declaration.Variables.Any(variable => variable.Identifier.ValueText == name),
                 PropertyDeclarationSyntax property => IsHttpClientFactoryTypeName(property.Type) &&
-                    property.Identifier.ValueText == identifier.Identifier.ValueText,
+                    property.Identifier.ValueText == name,
                 _ => false
-            }) == true;
+            }));
     }
 
     private static bool IsHttpClientFactoryTypeName(TypeSyntax type)
@@ -1023,16 +1234,16 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
 
     private static bool IsDirectUnsafeCall(
         InvocationExpressionSyntax createClientInvocation,
-        IEnumerable<SyntaxNode> roots)
+        UnsafeCallScan scan)
     {
         return createClientInvocation.Parent is MemberAccessExpressionSyntax memberAccess &&
             memberAccess.Parent is InvocationExpressionSyntax invocation &&
-            IsUnsafeHttpCall(invocation, roots);
+            IsUnsafeHttpCall(invocation, scan);
     }
 
     private static bool AssignedClientSendsUnsafeHttpMethod(
         InvocationExpressionSyntax createClientInvocation,
-        IEnumerable<SyntaxNode> roots)
+        UnsafeCallScan scan)
     {
         var declarator = createClientInvocation.FirstAncestorOrSelf<VariableDeclaratorSyntax>();
         if (declarator is null)
@@ -1057,7 +1268,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                 identifier.Identifier.ValueText == localName &&
                 invocation.SpanStart > declarator.SpanStart &&
                 !LocalIsReassignedBetween(containingBlock, localName, declarator.SpanStart, invocation.SpanStart) &&
-                IsUnsafeHttpCall(invocation, roots));
+                IsUnsafeHttpCall(invocation, scan));
     }
 
     private static string? TryGetStringLiteral(ExpressionSyntax expression)
@@ -1084,7 +1295,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             : null;
     }
 
-    private static string? TryGetStringConstant(ExpressionSyntax expression, IEnumerable<SyntaxNode> roots)
+    private static string? TryGetStringConstant(ExpressionSyntax expression, UnsafeCallScan scan)
     {
         expression = UnwrapTransparentExpressions(expression);
 
@@ -1096,9 +1307,8 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         return expression switch
         {
             IdentifierNameSyntax identifier => TryGetLocalStringConstant(identifier) ??
-                TryGetFieldStringConstant(roots, identifier.Identifier.ValueText, typeName: null),
-            MemberAccessExpressionSyntax memberAccess => TryGetFieldStringConstant(
-                roots,
+                scan.TryGetConstantString(identifier.Identifier.ValueText, typeName: null),
+            MemberAccessExpressionSyntax memberAccess => scan.TryGetConstantString(
                 memberAccess.Name.Identifier.ValueText,
                 TypeNameUtilities.ToSimpleName(memberAccess.Expression.ToString())),
             _ => null
@@ -1118,26 +1328,6 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                 IsStringTypeName(localDeclaration.Declaration.Type))
             .SelectMany(localDeclaration => localDeclaration.Declaration.Variables)
             .Where(variable => variable.Identifier.ValueText == identifier.Identifier.ValueText)
-            .Select(variable => variable.Initializer?.Value)
-            .OfType<ExpressionSyntax>()
-            .Select(TryGetStringLiteral)
-            .FirstOrDefault(value => value is not null);
-    }
-
-    private static string? TryGetFieldStringConstant(
-        IEnumerable<SyntaxNode> roots,
-        string constantName,
-        string? typeName)
-    {
-        return roots
-            .SelectMany(root => root.DescendantNodes().OfType<FieldDeclarationSyntax>())
-            .Where(field => field.Modifiers.Any(SyntaxKind.ConstKeyword) &&
-                IsStringTypeName(field.Declaration.Type) &&
-                (typeName is null ||
-                    field.Parent is TypeDeclarationSyntax typeDeclaration &&
-                    typeDeclaration.Identifier.ValueText == typeName))
-            .SelectMany(field => field.Declaration.Variables)
-            .Where(variable => variable.Identifier.ValueText == constantName)
             .Select(variable => variable.Initializer?.Value)
             .OfType<ExpressionSyntax>()
             .Select(TryGetStringLiteral)

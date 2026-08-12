@@ -1,0 +1,57 @@
+// HCR001, HCR002, HCR003 shapes.
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+
+public sealed class CorpusPerRequestClientService
+{
+    public async Task<string> ReadAsync(CancellationToken cancellationToken)
+    {
+        using var client = new HttpClient();
+        using var response = await client.GetAsync("https://example.com", cancellationToken);
+
+        return await response.Content.ReadAsStringAsync(cancellationToken);
+    }
+}
+
+public sealed class CorpusPrimaryConstructorFactoryService(IHttpClientFactory factory)
+{
+    public HttpClient Create()
+    {
+        _ = factory;
+        return new HttpClient();
+    }
+}
+
+public sealed class CorpusStaticClientHolder
+{
+    private static readonly HttpClient Client = new();
+
+    public Task<HttpResponseMessage> GetAsync(CancellationToken cancellationToken)
+    {
+        return Client.GetAsync("https://example.com", cancellationToken);
+    }
+}
+
+public sealed class CorpusCachedFactoryClient
+{
+    private static HttpClient _client = null!;
+
+    public static void Initialize(IHttpClientFactory factory)
+    {
+        _client = factory.CreateClient("corpus-cached");
+    }
+}
+
+public sealed class CorpusConfiguredStaticClient
+{
+    private static readonly HttpClient Client = new(new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = System.TimeSpan.FromMinutes(2)
+    });
+
+    public Task<HttpResponseMessage> GetAsync(CancellationToken cancellationToken)
+    {
+        return Client.GetAsync("https://example.com", cancellationToken);
+    }
+}

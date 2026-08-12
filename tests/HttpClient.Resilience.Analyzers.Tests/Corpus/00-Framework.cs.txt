@@ -1,0 +1,87 @@
+// Stub framework surface shared by the corpus. Mirrors the shapes the analyzers
+// recognize without taking a package dependency in the test compilation.
+using System.Net.Http;
+
+public interface IServiceCollection
+{
+}
+
+public interface IHttpClientBuilder
+{
+}
+
+public interface IHttpClientFactory
+{
+    HttpClient CreateClient(string name);
+}
+
+public interface IHttpContextAccessor
+{
+    string? TraceIdentifier { get; }
+}
+
+public static class ServiceCollectionExtensions
+{
+    public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+    {
+        return new Builder();
+    }
+
+    public static IHttpClientBuilder AddHttpClient<TService, TImplementation>(this IServiceCollection services)
+        where TImplementation : class, TService
+    {
+        return new Builder();
+    }
+
+    public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name)
+    {
+        return new Builder();
+    }
+
+    public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder)
+    {
+        return builder;
+    }
+
+    public static IHttpClientBuilder AddResilienceHandler(this IHttpClientBuilder builder, string name)
+    {
+        return builder;
+    }
+
+    public static IServiceCollection AddSingleton<TService>(this IServiceCollection services)
+    {
+        return services;
+    }
+
+    public static IServiceCollection AddScoped<TService>(this IServiceCollection services)
+    {
+        return services;
+    }
+
+    public static IServiceCollection AddTransient<TService>(this IServiceCollection services)
+    {
+        return services;
+    }
+
+    private sealed class Builder : IHttpClientBuilder
+    {
+    }
+}
+
+namespace Polly
+{
+    public sealed class ResiliencePipeline
+    {
+        public void Execute()
+        {
+        }
+    }
+
+    public sealed class ResiliencePipelineBuilder
+    {
+        public ResiliencePipeline Build()
+        {
+            return new ResiliencePipeline();
+        }
+    }
+}

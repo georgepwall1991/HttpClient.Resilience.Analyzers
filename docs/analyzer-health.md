@@ -71,13 +71,34 @@ Each iteration is independently branched from a clean synchronized `main`, revie
 | 21 | Package validation | Add a packed-analyzer smoke test for representative warnings and code fixes. | Package-consumption validator passes. |
 | 22 | Fix All | Add a shared regression suite for equivalence keys and repeated diagnostics. | Fix All tests across two representative rules. |
 | 23 | False positives | Add lookalike API fixtures for the typed-client and response-lifetime families. | Negative analyzer tests. |
-| 24 | Performance | Add compilation-size guardrails for compilation-wide registration analyzers. | Benchmark-style test or bounded traversal assertion. |
+| 24 | Performance | Add compilation-size guardrails for compilation-wide registration analyzers. | Done. `AnalyzerWorkGuardrailTests` bounds registration scans, receiver classifications, and HCR041 index builds. |
 | 25 | Documentation | Generate a rule inventory table from diagnostic metadata and verify drift. | Generated docs check passes. |
 | 26 | Release tooling | Make release-version validation report package/tag/README mismatches together. | Script tests and clear failure output. |
 | 27 | Adoption | Add a brownfield example showing targeted suppression with ownership rationale. | Docs/sample validation. |
 | 28 | CI | Add a focused workflow job for rule-catalog and sample-diagnostic drift. | Workflow syntax and local script pass. |
 | 29 | Audit refresh | Re-score all rules from the accumulated test and release evidence. | Updated scorecard and backlog notes. |
 | 30 | Stable release | Run the complete verification stack, publish the final health audit, and tag the thirtieth release. | Clean `main`, 30 new tags, and release metadata aligned. |
+
+## Analyzer throughput
+
+Compilation-wide work is bounded by three deterministic invariants, each asserted by
+`tests/HttpClient.Resilience.Analyzers.Tests/AnalyzerWorkGuardrailTests.cs`:
+
+- A registration scan runs once per compilation, however many analyzers ask for it, and its
+  cost grows linearly with compilation size.
+- Only invocations whose method name matches a registration API (`AddHttpClient`,
+  `AddSingleton`, `AddScoped`, `AddTransient`) have their receiver classified. Classification
+  needs a semantic binding and, on failure, a scope-wide syntactic search, so it must never
+  run for arbitrary member invocations.
+- HCR041 builds its unsafe-call index only when a compilation actually registers a standard
+  resilience handler, and never more than once.
+
+Behavior is pinned independently by `AnalyzerBehaviorSnapshotTests`, which compares every
+analyzer's output over a fixed corpus against `tests/HttpClient.Resilience.Analyzers.Tests/Corpus/expected-diagnostics.txt`.
+Performance work is expected to leave that baseline byte-identical. `AnalyzerRobustnessTests`
+covers the other failure mode: an analyzer that throws is disabled by Roslyn behind an
+`AD0001`, so every rule is run over parse errors, unresolved symbols, and unusual declaration
+forms and required not to throw.
 
 ## Verification baseline
 

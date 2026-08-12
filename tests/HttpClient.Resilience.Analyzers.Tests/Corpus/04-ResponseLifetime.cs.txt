@@ -1,0 +1,66 @@
+// HCR060, HCR061, HCR062, HCR063, HCR064, HCR081 shapes.
+using System.IO;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+
+public sealed class CorpusUndisposedResponseService
+{
+    public async Task<string> ReadAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        var response = await client.GetAsync(
+            "https://example.com",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+
+        return await response.Content.ReadAsStringAsync(cancellationToken);
+    }
+}
+
+public sealed class CorpusUncheckedResponseService
+{
+    public async Task<string> ReadAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        var response = await client.GetAsync("https://example.com", cancellationToken);
+        return await response.Content.ReadAsStringAsync(cancellationToken);
+    }
+}
+
+public sealed class CorpusDefaultHeadersService
+{
+    public Task<HttpResponseMessage> SendAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        client.DefaultRequestHeaders.Add("X-Tenant", "corpus");
+        return client.GetAsync("https://example.com", cancellationToken);
+    }
+}
+
+public sealed class CorpusSyncOverAsyncService
+{
+    public HttpResponseMessage Send(HttpClient client)
+    {
+        return client.GetAsync("https://example.com").Result;
+    }
+}
+
+public sealed class CorpusMissingCancellationService
+{
+    public Task<HttpResponseMessage> SendAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        return client.GetAsync("https://example.com");
+    }
+}
+
+public sealed class CorpusUndisposedStreamService
+{
+    public async Task CopyAsync(HttpClient client, Stream destination, CancellationToken cancellationToken)
+    {
+        using var response = await client.GetAsync(
+            "https://example.com",
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await stream.CopyToAsync(destination, cancellationToken);
+    }
+}
