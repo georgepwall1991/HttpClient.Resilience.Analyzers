@@ -27,11 +27,8 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
         var roots = context.Compilation.SyntaxTrees
             .Select(tree => tree.GetRoot(context.CancellationToken))
             .ToArray();
-        var registrations = roots
-            .SelectMany(root => ServiceRegistrationCollector.CollectFrameworkRegistrations(
-                root,
-                GetSemanticModel(context.Compilation, root.SyntaxTree),
-                context.CancellationToken))
+        var registrations = ServiceRegistrationCollector
+            .CollectFrameworkRegistrations(context.Compilation, context.CancellationToken)
             .ToArray();
         var typedClients = GetTypedClientTypeNames(
             registrations,

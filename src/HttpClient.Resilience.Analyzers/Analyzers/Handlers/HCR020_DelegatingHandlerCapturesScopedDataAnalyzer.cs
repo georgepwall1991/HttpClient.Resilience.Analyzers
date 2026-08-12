@@ -45,7 +45,6 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
             .Select(tree => tree.GetRoot(context.CancellationToken))
             .ToArray();
         var scopedTypes = GetKnownScopedTypes(
-            roots,
             context.Compilation,
             context.CancellationToken);
         var handlerTypes = GetKnownDelegatingHandlerTypes(roots);

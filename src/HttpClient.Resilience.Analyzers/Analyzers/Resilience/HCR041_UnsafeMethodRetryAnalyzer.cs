@@ -958,20 +958,6 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         }
     }
 
-    private static bool IsCreateClientInvocation(
-        InvocationExpressionSyntax invocation,
-        IEnumerable<SyntaxNode> roots,
-        string clientName)
-    {
-        return invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
-        memberAccess.Name.Identifier.ValueText == "CreateClient" &&
-        SyntacticReceiverLooksLikeHttpClientFactory(memberAccess.Expression) &&
-        invocation.ArgumentList.Arguments.Count > 0 &&
-        TryGetStringConstant(
-            invocation.ArgumentList.Arguments[0].Expression,
-            roots) == clientName;
-    }
-
     private static bool SyntacticReceiverLooksLikeHttpClientFactory(ExpressionSyntax expression)
     {
         return expression switch

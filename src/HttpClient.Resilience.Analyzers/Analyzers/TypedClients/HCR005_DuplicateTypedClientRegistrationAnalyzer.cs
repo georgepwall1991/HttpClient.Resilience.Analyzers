@@ -52,12 +52,9 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzer : Diagnostic
 
     private static IReadOnlyList<ServiceRegistrationModel> GetCompilationRegistrations(CompilationAnalysisContext context)
     {
-        return context.Compilation.SyntaxTrees
-            .SelectMany(tree => ServiceRegistrationCollector.CollectFrameworkRegistrations(
-                tree.GetRoot(context.CancellationToken),
-                GetSemanticModel(context.Compilation, tree),
-                context.CancellationToken))
-            .ToArray();
+        return ServiceRegistrationCollector.CollectFrameworkRegistrations(
+            context.Compilation,
+            context.CancellationToken);
     }
 
     private static bool IsStandaloneServiceRegistration(ServiceRegistrationModel registration)
