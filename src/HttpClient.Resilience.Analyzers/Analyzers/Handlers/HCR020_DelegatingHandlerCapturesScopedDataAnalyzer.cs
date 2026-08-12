@@ -45,7 +45,6 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
             .Select(tree => tree.GetRoot(context.CancellationToken))
             .ToArray();
         var scopedTypes = GetKnownScopedTypes(
-            roots,
             context.Compilation,
             context.CancellationToken);
         var handlerTypes = GetKnownDelegatingHandlerTypes(roots);
@@ -232,15 +231,11 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
     }
 
     private static ISet<string> GetKnownScopedTypes(
-        IEnumerable<SyntaxNode> roots,
         Compilation compilation,
         System.Threading.CancellationToken cancellationToken)
     {
         return new HashSet<string>(
-            roots.SelectMany(root => ServiceRegistrationCollector.CollectFrameworkRegistrations(
-                    root,
-                    GetSemanticModel(compilation, root.SyntaxTree),
-                    cancellationToken))
+            ServiceRegistrationCollector.CollectFrameworkRegistrations(compilation, cancellationToken)
                 .Where(registration => registration.Kind == ServiceRegistrationKind.Scoped)
                 .SelectMany(registration => new[]
                 {

@@ -24,11 +24,8 @@ public sealed class HCR085_MultipleTypedClientsShareImplicitNameAnalyzer : Diagn
 
     private static void AnalyzeCompilation(CompilationAnalysisContext context)
     {
-        var registrations = context.Compilation.SyntaxTrees
-            .SelectMany(tree => ServiceRegistrationCollector.CollectFrameworkRegistrations(
-                tree.GetRoot(context.CancellationToken),
-                GetSemanticModel(context.Compilation, tree),
-                context.CancellationToken))
+        var registrations = ServiceRegistrationCollector
+            .CollectFrameworkRegistrations(context.Compilation, context.CancellationToken)
             .Where(registration => registration.Kind == ServiceRegistrationKind.HttpClient)
             .Select(registration => TryCreateRegistration(
                 registration,

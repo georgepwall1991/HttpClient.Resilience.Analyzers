@@ -59,11 +59,8 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
         var roots = context.Compilation.SyntaxTrees
             .Select(tree => tree.GetRoot(context.CancellationToken))
             .ToArray();
-        var typedClients = roots
-            .SelectMany(root => ServiceRegistrationCollector.CollectFrameworkRegistrations(
-                root,
-                GetSemanticModel(context.Compilation, root.SyntaxTree),
-                context.CancellationToken))
+        var typedClients = ServiceRegistrationCollector
+            .CollectFrameworkRegistrations(context.Compilation, context.CancellationToken)
             .Where(registration => registration.Kind == ServiceRegistrationKind.HttpClient &&
                 !RegistrationConfiguresBaseAddress(
                     registration,

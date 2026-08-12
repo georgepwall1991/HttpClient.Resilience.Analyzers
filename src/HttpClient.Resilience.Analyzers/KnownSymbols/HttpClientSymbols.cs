@@ -10,14 +10,12 @@ internal static class HttpClientSymbols
 
     public static bool IsHttpClient(ITypeSymbol? type)
     {
-        return type is not null &&
-            type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == "global::System.Net.Http.HttpClient";
+        return IsTypeInNamespace(type, "HttpClient", "System", "Net", "Http");
     }
 
     public static bool IsSocketsHttpHandler(ITypeSymbol? type)
     {
-        return type is not null &&
-            type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == "global::System.Net.Http.SocketsHttpHandler";
+        return IsTypeInNamespace(type, "SocketsHttpHandler", "System", "Net", "Http");
     }
 
     public static bool IsHttpClientFactory(ITypeSymbol? type)
@@ -39,6 +37,33 @@ internal static class HttpClientSymbols
     public static bool IsSocketsHttpHandlerName(TypeSyntax type)
     {
         return IsTypeName(type, "SocketsHttpHandler");
+    }
+
+    private static bool IsTypeInNamespace(
+        ITypeSymbol? type,
+        string typeName,
+        params string[] namespaceSegments)
+    {
+        if (type is not INamedTypeSymbol { Arity: 0, ContainingType: null } named ||
+            named.Name != typeName)
+        {
+            return false;
+        }
+
+        var containingNamespace = named.ContainingNamespace;
+        for (var index = namespaceSegments.Length - 1; index >= 0; index--)
+        {
+            if (containingNamespace is null ||
+                containingNamespace.IsGlobalNamespace ||
+                containingNamespace.Name != namespaceSegments[index])
+            {
+                return false;
+            }
+
+            containingNamespace = containingNamespace.ContainingNamespace;
+        }
+
+        return containingNamespace is null || containingNamespace.IsGlobalNamespace;
     }
 
     private static bool IsTypeName(TypeSyntax type, string name)

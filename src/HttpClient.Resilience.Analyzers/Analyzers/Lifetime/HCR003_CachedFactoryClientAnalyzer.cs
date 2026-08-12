@@ -30,7 +30,6 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
             .Select(tree => tree.GetRoot(context.CancellationToken))
             .ToArray();
         var singletonTypes = GetKnownSingletonTypes(
-            roots,
             context.Compilation,
             context.CancellationToken);
 
@@ -340,15 +339,10 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
     }
 
     private static IReadOnlyCollection<string> GetKnownSingletonTypes(
-        IEnumerable<SyntaxNode> roots,
         Compilation compilation,
         System.Threading.CancellationToken cancellationToken)
     {
-        return roots
-            .SelectMany(root => ServiceRegistrationCollector.CollectFrameworkRegistrations(
-                root,
-                GetSemanticModel(compilation, root.SyntaxTree),
-                cancellationToken))
+        return ServiceRegistrationCollector.CollectFrameworkRegistrations(compilation, cancellationToken)
             .Where(registration => registration.Kind == ServiceRegistrationKind.Singleton)
             .SelectMany(registration => new[]
             {

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -7,6 +8,39 @@ namespace HttpClient.Resilience.Analyzers.Models;
 
 internal static class ServiceRegistrationCollector
 {
+    private static readonly ConditionalWeakTable<Compilation, RegistrationCache> CompilationCache = new();
+
+    private sealed class RegistrationCache
+    {
+        public IReadOnlyList<ServiceRegistrationModel>? Registrations;
+        public readonly object Gate = new();
+    }
+
+    public static IReadOnlyList<ServiceRegistrationModel> CollectFrameworkRegistrations(
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var cache = CompilationCache.GetOrCreateValue(compilation);
+        if (cache.Registrations is { } cached)
+        {
+            return cached;
+        }
+
+        lock (cache.Gate)
+        {
+            if (cache.Registrations is { } cachedLocked)
+            {
+                return cachedLocked;
+            }
+
+            var registrations = CollectFrameworkRegistrationsUncached(compilation, cancellationToken);
+            cache.Registrations = registrations;
+            return registrations;
+        }
+    }
+
     public static IReadOnlyList<ServiceRegistrationModel> CollectFrameworkRegistrations(
         SyntaxNode root,
         SemanticModel semanticModel,
@@ -20,18 +54,41 @@ internal static class ServiceRegistrationCollector
             .ToArray();
     }
 
+    private static IReadOnlyList<ServiceRegistrationModel> CollectFrameworkRegistrationsUncached(
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var registrations = new List<ServiceRegistrationModel>();
+
+        foreach (var tree in compilation.SyntaxTrees)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var root = tree.GetRoot(cancellationToken);
+            var semanticModel = compilation.GetSemanticModel(tree);
+            registrations.AddRange(CollectFrameworkRegistrations(root, semanticModel, cancellationToken));
+        }
+
+        return registrations;
+    }
+
     private static IReadOnlyList<ServiceRegistrationModel> CollectCore(
         SyntaxNode root,
         SemanticModel? semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        return root
-            .DescendantNodes()
-            .OfType<InvocationExpressionSyntax>()
-            .Select(invocation => TryCreate(invocation, semanticModel, cancellationToken))
-            .Where(registration => registration is not null)
-            .Select(registration => registration!)
-            .ToArray();
+        var registrations = new List<ServiceRegistrationModel>();
+
+        foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var registration = TryCreate(invocation, semanticModel, cancellationToken);
+            if (registration is not null)
+            {
+                registrations.Add(registration);
+            }
+        }
+
+        return registrations;
     }
 
     public static ISet<string> GetTypedClientTypeNames(IEnumerable<ServiceRegistrationModel> registrations)
@@ -361,9 +418,10 @@ internal static class ServiceRegistrationCollector
 
     private static TypeSyntax? FindMemberType(MemberAccessExpressionSyntax memberAccess, string? typeName)
     {
-        return memberAccess
-            .SyntaxTree
-            .GetRoot()
+        var searchRoot = (SyntaxNode?)memberAccess.FirstAncestorOrSelf<CompilationUnitSyntax>() ??
+            memberAccess.SyntaxTree.GetRoot();
+
+        return searchRoot
             .DescendantNodes()
             .OfType<TypeDeclarationSyntax>()
             .Where(type => typeName is null || type.Identifier.ValueText == typeName)

@@ -298,11 +298,7 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         Compilation compilation,
         System.Threading.CancellationToken cancellationToken)
     {
-        return compilation.SyntaxTrees
-            .SelectMany(tree => ServiceRegistrationCollector.CollectFrameworkRegistrations(
-                tree.GetRoot(cancellationToken),
-                GetSemanticModel(compilation, tree),
-                cancellationToken))
+        return ServiceRegistrationCollector.CollectFrameworkRegistrations(compilation, cancellationToken)
             .Where(registration => registration.Kind == ServiceRegistrationKind.Singleton)
             .SelectMany(registration => new[]
             {
