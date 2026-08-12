@@ -11,13 +11,14 @@
       "**/SafeHttpMethodPredicate.cs"
     ],
     "thresholds": {
-      "high": 80,
-      "low": 70,
-      "break": 70
+      "high": 95,
+      "low": 95,
+      "break": 95
     },
     "concurrency": 2,
     "reporters": [
       "html",
+      "json",
       "cleartext"
     ],
     "ignore-methods": [

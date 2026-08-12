@@ -1,5 +1,5 @@
 param(
-    [int]$Break = 70
+    [int]$Break = 95
 )
 
 $ErrorActionPreference = 'Stop'
@@ -19,3 +19,4 @@ if ($manifest -notmatch 'dotnet-stryker') {
 
 dotnet tool restore | Out-Null
 dotnet stryker --config-file stryker-config.json --break-at $Break
+exit $LASTEXITCODE

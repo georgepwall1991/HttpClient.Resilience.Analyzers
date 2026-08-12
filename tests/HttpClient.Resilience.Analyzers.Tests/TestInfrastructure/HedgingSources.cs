@@ -48,4 +48,44 @@ internal static class HedgingSources
             {{extraTypes}}
             """;
     }
+
+    public static string TypedClientWithHedgingPredicate(string predicateExpression)
+    {
+        return TypedClient(
+            """httpClient.PostAsync("/payments", null, cancellationToken)""",
+            handlerCall: $$"""
+                .AddStandardHedgingHandler(options =>
+                {
+                    options.Hedging.ShouldHandle = args => {{predicateExpression}};
+                })
+                """,
+            extraTypes: """
+                public sealed class HttpStandardHedgingResilienceOptions
+                {
+                    public HedgingOptions Hedging { get; } = new();
+                }
+
+                public sealed class HedgingOptions
+                {
+                    public System.Func<HedgingPredicateArguments, bool>? ShouldHandle { get; set; }
+                }
+
+                public sealed class HedgingPredicateArguments
+                {
+                    public Outcome Outcome { get; } = new();
+                }
+
+                public sealed class Outcome
+                {
+                    public System.Net.Http.HttpResponseMessage? Result { get; set; }
+                }
+
+                public static class HedgingOptionExtensions
+                {
+                    public static IHttpClientBuilder AddStandardHedgingHandler(
+                        this IHttpClientBuilder builder,
+                        System.Action<HttpStandardHedgingResilienceOptions> configure) => builder;
+                }
+                """);
+    }
 }

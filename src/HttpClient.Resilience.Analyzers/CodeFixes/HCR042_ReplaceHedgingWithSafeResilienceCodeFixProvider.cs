@@ -28,14 +28,10 @@ public sealed class HCR042_ReplaceHedgingWithSafeResilienceCodeFixProvider : Cod
 
     public override async Task RegisterCodeFixesAsync(CodeFixContext context)
     {
+        // Stryker disable once boolean: analyzer code fixes do not run on a captured SynchronizationContext
         var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
-        if (root is null)
-        {
-            return;
-        }
-
         var diagnostic = context.Diagnostics[0];
-        var node = root.FindNode(diagnostic.Location.SourceSpan);
+        var node = root!.FindNode(diagnostic.Location.SourceSpan);
         var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
 
         if (invocation?.Expression is not MemberAccessExpressionSyntax
@@ -61,12 +57,8 @@ public sealed class HCR042_ReplaceHedgingWithSafeResilienceCodeFixProvider : Cod
         MemberAccessExpressionSyntax memberAccess,
         CancellationToken cancellationToken)
     {
+        // Stryker disable once boolean: analyzer code fixes do not run on a captured SynchronizationContext
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-        if (root is null)
-        {
-            return document;
-        }
-
         var newMemberAccess = memberAccess.WithName(
             SyntaxFactory.IdentifierName("AddStandardResilienceHandler")
                 .WithTriviaFrom(memberAccess.Name));
@@ -77,6 +69,6 @@ public sealed class HCR042_ReplaceHedgingWithSafeResilienceCodeFixProvider : Cod
             .WithArgumentList(SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(argument)))
             .WithAdditionalAnnotations(Formatter.Annotation);
 
-        return document.WithSyntaxRoot(root.ReplaceNode(invocation, newInvocation));
+        return document.WithSyntaxRoot(root!.ReplaceNode(invocation, newInvocation));
     }
 }

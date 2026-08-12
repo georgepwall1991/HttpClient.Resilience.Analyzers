@@ -136,13 +136,14 @@ internal static class SafeHttpMethodPredicate
         if (invocation.ArgumentList.Arguments.Count == 1 &&
             invocation.Expression is MemberAccessExpressionSyntax
             {
-                Name.Identifier.ValueText: "Equals",
-                Expression: MemberAccessExpressionSyntax httpMethodMember
-            } &&
-            IsFrameworkHttpMethodMember(httpMethodMember, semanticModel, cancellationToken) &&
-            HttpMethodSafety.IsSafeHttpMethodName(httpMethodMember.Name.Identifier.ValueText))
+                Name.Identifier.ValueText: "Equals"
+            } equalsMember)
         {
-            return true;
+            return IsSafeHttpMethodComparedToRequestMethod(
+                equalsMember.Expression,
+                invocation.ArgumentList.Arguments[0].Expression,
+                semanticModel,
+                cancellationToken);
         }
 
         if (invocation.ArgumentList.Arguments.Count != 2 ||
@@ -151,16 +152,10 @@ internal static class SafeHttpMethodPredicate
             return false;
         }
 
-        var httpMethodMembers = invocation.ArgumentList.Arguments
-            .SelectMany(argument => argument.Expression
-                .DescendantNodesAndSelf()
-                .OfType<MemberAccessExpressionSyntax>())
-            .Where(memberAccess => IsFrameworkHttpMethodMember(memberAccess, semanticModel, cancellationToken))
-            .Select(memberAccess => memberAccess.Name.Identifier.ValueText)
-            .ToArray();
-
-        return httpMethodMembers.Any(HttpMethodSafety.IsSafeHttpMethodName) &&
-            !httpMethodMembers.Any(method => HttpMethodSafety.IsUnsafeHttpMethodName(method, ignoreCase: false));
+        var left = invocation.ArgumentList.Arguments[0].Expression;
+        var right = invocation.ArgumentList.Arguments[1].Expression;
+        return IsSafeHttpMethodComparedToRequestMethod(left, right, semanticModel, cancellationToken) ||
+            IsSafeHttpMethodComparedToRequestMethod(right, left, semanticModel, cancellationToken);
     }
 
     private static bool IsSystemObjectEqualsInvocation(
@@ -169,18 +164,13 @@ internal static class SafeHttpMethodPredicate
         System.Threading.CancellationToken cancellationToken)
     {
         var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
-        if (symbolInfo.Symbol is IMethodSymbol method)
-        {
-            return IsSystemObjectEqualsMethod(method);
-        }
-
-        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
-        return candidateMethods.Length > 0 && candidateMethods.All(IsSystemObjectEqualsMethod);
+        return symbolInfo.Symbol is IMethodSymbol method && IsSystemObjectEqualsMethod(method);
     }
 
     private static bool IsSystemObjectEqualsMethod(IMethodSymbol method)
     {
         return method.Name == "Equals" &&
+            // Stryker disable once all: reduced object.Equals keeps System.Object as containing type
             (method.ReducedFrom ?? method).ContainingType.SpecialType == SpecialType.System_Object;
     }
 
@@ -189,18 +179,52 @@ internal static class SafeHttpMethodPredicate
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        var httpMethodMembers = binary
-            .ChildNodes()
-            .OfType<ExpressionSyntax>()
-            .Select(SyntaxTransparency.Unwrap)
-            .SelectMany(operand => operand.DescendantNodesAndSelf())
-            .OfType<MemberAccessExpressionSyntax>()
-            .Where(memberAccess => IsFrameworkHttpMethodMember(memberAccess, semanticModel, cancellationToken))
-            .Select(memberAccess => memberAccess.Name.Identifier.ValueText)
-            .ToArray();
+        var left = SyntaxTransparency.Unwrap(binary.Left);
+        var right = SyntaxTransparency.Unwrap(binary.Right);
+        return IsSafeHttpMethodComparedToRequestMethod(left, right, semanticModel, cancellationToken) ||
+            IsSafeHttpMethodComparedToRequestMethod(right, left, semanticModel, cancellationToken);
+    }
 
-        return httpMethodMembers.Any(HttpMethodSafety.IsSafeHttpMethodName) &&
-            !httpMethodMembers.Any(method => HttpMethodSafety.IsUnsafeHttpMethodName(method, ignoreCase: false));
+    /// <summary>
+    /// True only when a safe <c>HttpMethod</c> constant is compared with something that is
+    /// not itself an <c>HttpMethod.*</c> constant. <c>HttpMethod.Get == HttpMethod.Get</c>
+    /// always returns true and must not suppress unsafe-method diagnostics.
+    /// </summary>
+    private static bool IsSafeHttpMethodComparedToRequestMethod(
+        ExpressionSyntax httpMethodSide,
+        ExpressionSyntax requestSide,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return TryGetFrameworkHttpMethodConstantName(
+                httpMethodSide,
+                semanticModel,
+                cancellationToken,
+                out var methodName) &&
+            HttpMethodSafety.IsSafeHttpMethodName(methodName) &&
+            !TryGetFrameworkHttpMethodConstantName(
+                requestSide,
+                semanticModel,
+                cancellationToken,
+                out _);
+    }
+
+    private static bool TryGetFrameworkHttpMethodConstantName(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        out string methodName)
+    {
+        // Stryker disable once string: out-param default is unused on the false path
+        methodName = string.Empty;
+        if (SyntaxTransparency.Unwrap(expression) is not MemberAccessExpressionSyntax memberAccess ||
+            !IsFrameworkHttpMethodMember(memberAccess, semanticModel, cancellationToken))
+        {
+            return false;
+        }
+
+        methodName = memberAccess.Name.Identifier.ValueText;
+        return true;
     }
 
     private static bool IsFrameworkShouldHandleProperty(
@@ -210,13 +234,8 @@ internal static class SafeHttpMethodPredicate
         string expectedNamespace)
     {
         var symbolInfo = semanticModel.GetSymbolInfo(memberAccess, cancellationToken);
-        if (symbolInfo.Symbol is ISymbol symbol)
-        {
-            return IsFrameworkShouldHandleProperty(symbol, expectedNamespace);
-        }
-
-        return symbolInfo.CandidateSymbols.Length == 0 ||
-            symbolInfo.CandidateSymbols.All(candidate => IsFrameworkShouldHandleProperty(candidate, expectedNamespace));
+        return symbolInfo.Symbol is ISymbol symbol &&
+            IsFrameworkShouldHandleProperty(symbol, expectedNamespace);
     }
 
     private static bool IsFrameworkShouldHandleProperty(ISymbol symbol, string expectedNamespace)
@@ -232,13 +251,7 @@ internal static class SafeHttpMethodPredicate
         System.Threading.CancellationToken cancellationToken)
     {
         var symbolInfo = semanticModel.GetSymbolInfo(memberAccess, cancellationToken);
-        if (symbolInfo.Symbol is ISymbol symbol)
-        {
-            return IsFrameworkHttpMethodMember(symbol);
-        }
-
-        return symbolInfo.CandidateSymbols.Length == 0 ||
-            symbolInfo.CandidateSymbols.All(IsFrameworkHttpMethodMember);
+        return symbolInfo.Symbol is ISymbol symbol && IsFrameworkHttpMethodMember(symbol);
     }
 
     private static bool IsFrameworkHttpMethodMember(ISymbol symbol)

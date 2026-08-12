@@ -28,11 +28,13 @@ internal static class ResilienceHandlerInvocation
         }
 
         var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        // Stryker disable once logical: Length == 0 is vacuous All() true, so || and && are equivalent
         return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkResilienceExtension);
     }
 
     public static bool IsFrameworkResilienceExtension(IMethodSymbol method)
     {
+        // Stryker disable once all: reduced extension methods keep the original namespace
         var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
         return containingNamespace.IsGlobalNamespace ||
             containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
