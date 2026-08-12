@@ -27,6 +27,21 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         public string? ResolvedTypeName { get; }
     }
 
+    private sealed class UnsafeCallIndex
+    {
+        public UnsafeCallIndex(
+            IReadOnlyList<ClassDeclarationSyntax> typedClientClassesWithUnsafeCalls,
+            IReadOnlyCollection<string> namedClientsWithUnsafeCalls)
+        {
+            TypedClientClassesWithUnsafeCalls = typedClientClassesWithUnsafeCalls;
+            NamedClientsWithUnsafeCalls = namedClientsWithUnsafeCalls;
+        }
+
+        public IReadOnlyList<ClassDeclarationSyntax> TypedClientClassesWithUnsafeCalls { get; }
+
+        public IReadOnlyCollection<string> NamedClientsWithUnsafeCalls { get; }
+    }
+
     private static readonly string[] UnsafeHttpMethodPrefixes =
     {
         "Connect",
@@ -68,15 +83,68 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         var roots = context.Compilation.SyntaxTrees
             .Select(tree => tree.GetRoot(context.CancellationToken))
             .ToArray();
+        var unsafeCallIndex = BuildUnsafeCallIndex(roots, context.CancellationToken);
 
         context.RegisterSyntaxNodeAction(
-            nodeContext => AnalyzeInvocation(nodeContext, roots),
+            nodeContext => AnalyzeInvocation(nodeContext, unsafeCallIndex),
             SyntaxKind.InvocationExpression);
+    }
+
+    private static UnsafeCallIndex BuildUnsafeCallIndex(
+        SyntaxNode[] roots,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var typedClientClassesWithUnsafeCalls = new List<ClassDeclarationSyntax>();
+        foreach (var root in roots)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var type in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+            {
+                if (type.DescendantNodes()
+                    .OfType<InvocationExpressionSyntax>()
+                    .Any(invocation => IsUnsafeHttpClientCall(invocation, roots)))
+                {
+                    typedClientClassesWithUnsafeCalls.Add(type);
+                }
+            }
+        }
+
+        var namedClientsWithUnsafeCalls = new HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var root in roots)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            {
+                if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+                    memberAccess.Name.Identifier.ValueText != "CreateClient" ||
+                    !SyntacticReceiverLooksLikeHttpClientFactory(memberAccess.Expression) ||
+                    invocation.ArgumentList.Arguments.Count == 0)
+                {
+                    continue;
+                }
+
+                var clientName = TryGetStringConstant(
+                    invocation.ArgumentList.Arguments[0].Expression,
+                    roots);
+                if (clientName is null)
+                {
+                    continue;
+                }
+
+                if (IsDirectUnsafeCall(invocation, roots) ||
+                    AssignedClientSendsUnsafeHttpMethod(invocation, roots))
+                {
+                    namedClientsWithUnsafeCalls.Add(clientName);
+                }
+            }
+        }
+
+        return new UnsafeCallIndex(typedClientClassesWithUnsafeCalls, namedClientsWithUnsafeCalls);
     }
 
     private static void AnalyzeInvocation(
         SyntaxNodeAnalysisContext context,
-        IEnumerable<SyntaxNode> roots)
+        UnsafeCallIndex unsafeCallIndex)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
         if (!IsAddStandardResilienceHandlerInvocation(
@@ -97,7 +165,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             context.SemanticModel,
             context.CancellationToken);
 
-        if (typedClient is not null && TypedClientSendsUnsafeHttpMethod(roots, typedClient))
+        if (typedClient is not null && TypedClientSendsUnsafeHttpMethod(unsafeCallIndex, typedClient))
         {
             ReportDiagnostic(context, invocation);
             return;
@@ -106,7 +174,7 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         var namedClient = FindNamedClientInChain(invocation, context.SemanticModel, context.CancellationToken);
         namedClient ??= FindNamedClientForBuilderLocal(invocation, context.SemanticModel, context.CancellationToken);
         if (namedClient is not null &&
-            NamedClientSendsUnsafeHttpMethod(roots, namedClient))
+            NamedClientSendsUnsafeHttpMethod(unsafeCallIndex, namedClient))
         {
             ReportDiagnostic(context, invocation);
         }
@@ -628,13 +696,12 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
         };
     }
 
-    private static bool TypedClientSendsUnsafeHttpMethod(IEnumerable<SyntaxNode> roots, TypedClientRegistration typedClient)
+    private static bool TypedClientSendsUnsafeHttpMethod(
+        UnsafeCallIndex unsafeCallIndex,
+        TypedClientRegistration typedClient)
     {
-        return roots
-            .SelectMany(root => root.DescendantNodes().OfType<ClassDeclarationSyntax>())
-            .Where(type => DeclaredTypeMatchesRegistration(type, typedClient))
-            .SelectMany(type => type.DescendantNodes().OfType<InvocationExpressionSyntax>())
-            .Any(invocation => IsUnsafeHttpClientCall(invocation, roots));
+        return unsafeCallIndex.TypedClientClassesWithUnsafeCalls
+            .Any(type => DeclaredTypeMatchesRegistration(type, typedClient));
     }
 
     private static bool DeclaredTypeMatchesRegistration(
@@ -682,21 +749,10 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
     }
 
     private static bool NamedClientSendsUnsafeHttpMethod(
-        IEnumerable<SyntaxNode> roots,
+        UnsafeCallIndex unsafeCallIndex,
         string clientName)
     {
-        foreach (var invocation in roots
-            .SelectMany(root => root.DescendantNodes().OfType<InvocationExpressionSyntax>())
-            .Where(invocation => IsCreateClientInvocation(invocation, roots, clientName)))
-        {
-            if (IsDirectUnsafeCall(invocation, roots) ||
-                AssignedClientSendsUnsafeHttpMethod(invocation, roots))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return unsafeCallIndex.NamedClientsWithUnsafeCalls.Contains(clientName);
     }
 
     private static bool IsUnsafeHttpCall(InvocationExpressionSyntax invocation, IEnumerable<SyntaxNode> roots)
