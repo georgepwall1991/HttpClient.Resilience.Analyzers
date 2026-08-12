@@ -49,7 +49,7 @@ Product-flow diagrams from the real showcase sample (not stock screenshots):
 
 ![HttpClient.Resilience.Analyzers product loop from source code to IDE and CI profiles](https://raw.githubusercontent.com/georgepwall1991/HttpClient.Resilience.Analyzers/main/assets/flow-product-loop.svg)
 
-## 30-second path
+## Quick start
 
 1. Add the package reference with `PrivateAssets="all"`.
 2. Run `dotnet build` — no service registration or runtime setup required.
