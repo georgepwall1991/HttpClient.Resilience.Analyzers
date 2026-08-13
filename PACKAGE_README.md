@@ -19,11 +19,11 @@ Catch outbound HTTP reliability bugs at **build time**—socket exhaustion, miss
 - Per-request `new HttpClient()` and long-lived clients without `PooledConnectionLifetime`
 - Cached `IHttpClientFactory.CreateClient()` results and typed clients injected into singletons
 - Duplicate typed-client registrations and shared implicit client names
-- Stacked `AddStandardResilienceHandler` pipelines, unsafe-method retries, and unsafe-method hedging
+- Stacked `AddStandardResilienceHandler` pipelines, unsafe-method retries, unsafe-method hedging, and custom `AddResilienceHandler` pipelines that retry unsafe methods
 - Undisposed responses/streams, sync-over-async, missing `CancellationToken`
 - Unbounded HTTP fan-out and fragile named-client string literals
 
-The package currently ships **20** documented diagnostics (`HCR001`–`HCR085`), with automatic code fixes for common lifetime, retry, hedging, disposal, cancellation, and registration problems.
+The package currently ships **21** documented diagnostics (`HCR001`–`HCR085`), with automatic code fixes for common lifetime, retry, hedging, disposal, cancellation, and registration problems.
 
 ## Install
 
@@ -34,7 +34,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 For a library or shared project, keep the analyzer private to the project:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.161" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.162" PrivateAssets="all" />
 ```
 
 Build normally with `dotnet build`. Diagnostics appear in supported IDEs, command-line builds, and CI without application configuration.
@@ -62,7 +62,7 @@ Product-flow diagrams from the real showcase sample (not stock screenshots):
 |---|---|
 | `HttpClient` lifetime | Per-request client creation, stale long-lived connections, cached factory clients |
 | Dependency injection | Typed clients held by singletons, duplicate registrations, scoped state in handlers |
-| Resilience and Polly | Duplicate handlers, unsafe HTTP method retries, concurrent hedging of unsafe methods, per-request pipeline construction |
+| Resilience and Polly | Duplicate handlers, unsafe HTTP method retries, concurrent hedging of unsafe methods, custom pipelines retrying unsafe methods, per-request pipeline construction |
 | Response ownership | Undisposed `ResponseHeadersRead` responses and HTTP content streams |
 | Request correctness | Unchecked failure responses, shared default-header mutation, dropped cancellation tokens |
 | Async and concurrency | Sync-over-async and obvious unbounded HTTP fan-out |

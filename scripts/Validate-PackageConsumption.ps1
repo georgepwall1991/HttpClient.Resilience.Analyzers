@@ -55,6 +55,7 @@ dotnet_diagnostic.HCR020.severity = warning
 dotnet_diagnostic.HCR040.severity = warning
 dotnet_diagnostic.HCR041.severity = warning
 dotnet_diagnostic.HCR042.severity = warning
+dotnet_diagnostic.HCR043.severity = warning
 dotnet_diagnostic.HCR060.severity = warning
 dotnet_diagnostic.HCR061.severity = warning
 dotnet_diagnostic.HCR062.severity = warning
@@ -70,6 +71,7 @@ dotnet_diagnostic.HCR085.severity = warning
 
     @"
 using System.Net.Http;
+using Polly;
 
 public sealed class BadPaymentsService
 {
@@ -177,6 +179,19 @@ public static class BadUnsafeHedgingRegistration
         return services
             .AddHttpClient<BadUnsafePaymentsClient>()
             .AddStandardHedgingHandler();
+    }
+}
+
+public static class BadUnsafeCustomRetryRegistration
+{
+    public static IHttpClientBuilder Configure(IServiceCollection services)
+    {
+        return services
+            .AddHttpClient<BadUnsafePaymentsClient>()
+            .AddResilienceHandler("payments", builder =>
+            {
+                builder.AddRetry(new HttpRetryStrategyOptions());
+            });
     }
 }
 
@@ -359,6 +374,14 @@ public static class HttpClientBuilderExtensions
         return builder;
     }
 
+    public static IHttpClientBuilder AddResilienceHandler(
+        this IHttpClientBuilder builder,
+        string name,
+        System.Action<Polly.ResiliencePipelineBuilder> configure)
+    {
+        return builder;
+    }
+
     public static IServiceCollection AddSingleton<TService>(this IServiceCollection services)
     {
         return services;
@@ -390,6 +413,20 @@ namespace Polly
             return new ResiliencePipeline();
         }
     }
+
+    public static class RetryResiliencePipelineBuilderExtensions
+    {
+        public static ResiliencePipelineBuilder AddRetry(
+            this ResiliencePipelineBuilder builder,
+            HttpRetryStrategyOptions options)
+        {
+            return builder;
+        }
+    }
+}
+
+public sealed class HttpRetryStrategyOptions
+{
 }
 "@ | Set-Content -LiteralPath $programPath
 
@@ -418,6 +455,7 @@ namespace Polly
         'HCR040',
         'HCR041',
         'HCR042',
+        'HCR043',
         'HCR060',
         'HCR061',
         'HCR062',

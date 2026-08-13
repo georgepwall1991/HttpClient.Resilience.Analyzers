@@ -1,8 +1,9 @@
-// HCR040, HCR041, HCR082 shapes. Nested typed clients and constant-backed client
+// HCR040, HCR041, HCR042, HCR043, HCR082 shapes. Nested typed clients and constant-backed client
 // names are included because the HCR041 unsafe-call index resolves both.
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Polly;
 
 public static class CorpusResilienceRegistrations
 {
@@ -58,6 +59,16 @@ public static class CorpusResilienceRegistrations
         return services
             .AddHttpClient<CorpusUnsafePaymentsClient>()
             .AddStandardHedgingHandler();
+    }
+
+    public static IHttpClientBuilder ConfigureUnsafeCustomRetryTypedClient(IServiceCollection services)
+    {
+        return services
+            .AddHttpClient<CorpusUnsafePaymentsClient>()
+            .AddResilienceHandler("payments", builder =>
+            {
+                builder.AddRetry(new HttpRetryStrategyOptions());
+            });
     }
 }
 

@@ -60,6 +60,12 @@ public static class DiagnosticDescriptors
         "Standard hedging replays unsafe HTTP methods concurrently. Do not hedge POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.",
         DiagnosticCategories.Resilience);
 
+    public static readonly DiagnosticDescriptor HCR043 = Create(
+        DiagnosticIds.HCR043,
+        "Unsafe HTTP methods should not be retried by custom resilience pipelines",
+        "Custom resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.",
+        DiagnosticCategories.Resilience);
+
     public static readonly DiagnosticDescriptor HCR060 = Create(
         DiagnosticIds.HCR060,
         "Dispose HttpResponseMessage when using ResponseHeadersRead",

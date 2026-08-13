@@ -48,6 +48,14 @@ public static class ServiceCollectionExtensions
         return builder;
     }
 
+    public static IHttpClientBuilder AddResilienceHandler(
+        this IHttpClientBuilder builder,
+        string name,
+        System.Action<Polly.ResiliencePipelineBuilder> configure)
+    {
+        return builder;
+    }
+
     public static IHttpClientBuilder AddResilienceHandler(this IHttpClientBuilder builder, string name)
     {
         return builder;
@@ -89,4 +97,18 @@ namespace Polly
             return new ResiliencePipeline();
         }
     }
+
+    public static class RetryResiliencePipelineBuilderExtensions
+    {
+        public static ResiliencePipelineBuilder AddRetry(
+            this ResiliencePipelineBuilder builder,
+            HttpRetryStrategyOptions options)
+        {
+            return builder;
+        }
+    }
+}
+
+public sealed class HttpRetryStrategyOptions
+{
 }

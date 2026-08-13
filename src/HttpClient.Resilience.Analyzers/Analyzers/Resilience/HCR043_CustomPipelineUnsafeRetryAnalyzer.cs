@@ -9,10 +9,10 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace HttpClient.Resilience.Analyzers.Analyzers.Resilience;
 
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
+public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzer : DiagnosticAnalyzer
 {
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(DiagnosticDescriptors.HCR041);
+        ImmutableArray.Create(DiagnosticDescriptors.HCR043);
 
     private int _unsafeCallIndexBuilds;
 
@@ -47,11 +47,16 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
                 invocation,
                 context.SemanticModel,
                 context.CancellationToken,
-                "AddStandardResilienceHandler") ||
-            HasUnsafeMethodRetryGuard(
-                invocation,
-                context.SemanticModel,
-                context.CancellationToken))
+                "AddResilienceHandler"))
+        {
+            return;
+        }
+
+        var addRetries = ResilienceRetryInvocation.FindBuilderBoundAddRetries(
+            invocation,
+            context.SemanticModel,
+            context.CancellationToken);
+        if (addRetries.IsDefaultOrEmpty)
         {
             return;
         }
@@ -60,54 +65,51 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzer : DiagnosticAnalyzer
             invocation,
             context.SemanticModel,
             context.CancellationToken);
-        if (typedClient is not null &&
-            unsafeCallIndex
-                .GetOrBuild(
-                    context.CancellationToken,
-                    () => System.Threading.Interlocked.Increment(ref _unsafeCallIndexBuilds))
-                .TypedClientSendsUnsafeHttpMethod(typedClient))
-        {
-            ReportDiagnostic(context, invocation);
-            return;
-        }
-
         var namedClient = HttpClientRegistrationChain.TryGetNamedClient(
             invocation,
             context.SemanticModel,
             context.CancellationToken);
-        if (namedClient is not null &&
-            unsafeCallIndex
-                .GetOrBuild(
-                    context.CancellationToken,
-                    () => System.Threading.Interlocked.Increment(ref _unsafeCallIndexBuilds))
-                .NamedClientSendsUnsafeHttpMethod(namedClient))
+        if (typedClient is null && namedClient is null)
         {
-            ReportDiagnostic(context, invocation);
+            return;
+        }
+
+        var snapshot = unsafeCallIndex.GetOrBuild(
+            context.CancellationToken,
+            () => System.Threading.Interlocked.Increment(ref _unsafeCallIndexBuilds));
+
+        var sendsUnsafe =
+            (typedClient is not null && snapshot.TypedClientSendsUnsafeHttpMethod(typedClient)) ||
+            (namedClient is not null && snapshot.NamedClientSendsUnsafeHttpMethod(namedClient));
+        if (!sendsUnsafe)
+        {
+            return;
+        }
+
+        foreach (var addRetry in addRetries)
+        {
+            if (RetryUnsafeMethodGuard.HasVisibleGuard(
+                    addRetry,
+                    context.SemanticModel,
+                    context.CancellationToken))
+            {
+                continue;
+            }
+
+            ReportDiagnostic(context, addRetry);
         }
     }
 
-    private static void ReportDiagnostic(SyntaxNodeAnalysisContext context, InvocationExpressionSyntax invocation)
+    private static void ReportDiagnostic(SyntaxNodeAnalysisContext context, InvocationExpressionSyntax addRetry)
     {
-        var memberAccess = (MemberAccessExpressionSyntax)invocation.Expression;
-        context.ReportDiagnostic(Diagnostic.Create(
-            DiagnosticDescriptors.HCR041,
-            memberAccess.Name.GetLocation()));
-    }
+        if (addRetry.Expression is not MemberAccessExpressionSyntax memberAccess)
+        {
+            return;
+        }
 
-    private static bool HasUnsafeMethodRetryGuard(
-        InvocationExpressionSyntax invocation,
-        SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
-    {
-        return RetryUnsafeMethodGuard.ContainsDisableForUnsafeHttpMethods(
-                invocation,
-                semanticModel,
-                cancellationToken) ||
-            SafeHttpMethodPredicate.ContainsSafeOnlyShouldHandle(
-                invocation,
-                semanticModel,
-                cancellationToken,
-                expectedNamespace: "Polly.Retry",
-                requiredOwnerName: null);
+        var location = memberAccess.Name is GenericNameSyntax genericName
+            ? genericName.Identifier.GetLocation()
+            : memberAccess.Name.GetLocation();
+        context.ReportDiagnostic(Diagnostic.Create(DiagnosticDescriptors.HCR043, location));
     }
 }

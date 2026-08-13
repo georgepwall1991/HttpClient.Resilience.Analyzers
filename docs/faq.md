@@ -9,7 +9,7 @@ description: Does HttpClient.Resilience.Analyzers replace Polly or Microsoft.Ext
 
 No. It statically checks how your code uses `HttpClient`, `IHttpClientFactory`, Polly, and the .NET resilience libraries. It does not add or replace a runtime resilience pipeline.
 
-Use `AddStandardResilienceHandler` / Polly for retries, timeouts, and hedging at runtime. Use this analyzer to catch unsafe retries, stacked handlers, and lifetime bugs those libraries cannot see at compile time.
+Use `AddStandardResilienceHandler` / `AddResilienceHandler` / Polly for retries, timeouts, and hedging at runtime. Use this analyzer to catch unsafe retries (including custom pipelines), stacked handlers, and lifetime bugs those libraries cannot see at compile time.
 
 ## Does the analyzer change my application at runtime?
 

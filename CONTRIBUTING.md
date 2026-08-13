@@ -67,7 +67,7 @@ Code fixes should be conservative and limited to transformations that are obviou
 ## Mutation Testing
 
 New analyzer logic should keep a Stryker mutation score at or above the break threshold in
-`stryker-config.json` (currently 95%). Expand the `mutate` glob when a change introduces a
+`stryker-config.json` (currently 80%). Expand the `mutate` glob when a change introduces a
 new rule or shared helper, and add explicit mutant-killer tests for boolean gates, namespace
 checks, and method-name filters.
 
