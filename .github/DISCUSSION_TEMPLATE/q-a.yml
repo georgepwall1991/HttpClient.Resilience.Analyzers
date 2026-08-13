@@ -16,6 +16,6 @@ body:
     id: version
     attributes:
       label: Package version
-      placeholder: 0.1.162
+      placeholder: 0.1.163
     validations:
       required: true

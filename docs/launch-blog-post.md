@@ -18,7 +18,8 @@ Most .NET services use `HttpClient`, but many production issues come from patter
 - Duplicate typed-client service registrations.
 - `DelegatingHandler` constructors that capture request-scoped data.
 - Duplicate standard or same-name custom resilience handlers.
-- Unsafe HTTP methods retried by standard resilience handlers without explicit guardrails, including typed-client and named-client cases across the compilation.
+- Unsafe HTTP methods retried by standard or custom resilience pipelines without explicit guardrails, including typed-client and named-client cases across the compilation.
+- Unsafe HTTP methods hedged concurrently by `AddStandardHedgingHandler` without a safe-method-only predicate.
 - `ResponseHeadersRead` responses whose ownership is not disposed or transferred.
 - Response content reads before visible success handling.
 - Shared `DefaultRequestHeaders` mutations for per-request data.
@@ -46,7 +47,7 @@ public sealed class PaymentsClient(HttpClient httpClient)
 }
 ```
 
-`HCR041` flags this because the standard resilience handler can retry unsafe HTTP methods. The safe default is to disable retries for unsafe methods unless the endpoint is explicitly idempotent.
+`HCR041` flags this because the standard resilience handler can retry unsafe HTTP methods. `HCR043` flags the same incident when a custom `AddResilienceHandler` pipeline calls `AddRetry`. The safe default is to disable retries for unsafe methods unless the endpoint is explicitly idempotent.
 
 ```csharp
 services.AddHttpClient<PaymentsClient>()
