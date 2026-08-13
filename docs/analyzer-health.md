@@ -35,7 +35,7 @@ Scores use a 1–5 scale. `Analyzer` measures semantic depth and diagnostic plac
 | HCR020 | Handlers | Warning | 4 | 4 | 1 | 5 | 4 | 5 | P2 | Scoped dependency ownership is reported but intentionally has no automatic rewrite. |
 | HCR040 | Resilience | Warning | 4 | 4 | 4 | 5 | 4 | 4 | P2 | Chained and reassigned builder shapes need continued fix-safety coverage. |
 | HCR041 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P2 | Retry-policy fixes need more preservation tests for custom predicates and configuration. |
-| HCR042 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P1 | New: standard hedging of unsafe methods; keep predicate and lookalike coverage aligned with HCR041. |
+| HCR042 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P1 | Standard hedging of unsafe methods; keep predicate and lookalike coverage aligned with HCR041. |
 | HCR043 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P1 | Custom `AddResilienceHandler` + `AddRetry` of unsafe methods; keep lookalike and predicate coverage aligned with HCR041. |
 | HCR060 | Response lifetime | Warning | 4 | 4 | 4 | 5 | 4 | 5 | P1 | Disposal fix is limited to simple declarations and adjacent assignments. |
 | HCR061 | Response lifetime | Warning | 4 | 4 | 3 | 5 | 4 | 5 | P1 | Success-check insertion is safe for known shapes but still partial for complex ownership/control flow. |

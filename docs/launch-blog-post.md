@@ -47,13 +47,25 @@ public sealed class PaymentsClient(HttpClient httpClient)
 }
 ```
 
-`HCR041` flags this because the standard resilience handler can retry unsafe HTTP methods. `HCR043` flags the same incident when a custom `AddResilienceHandler` pipeline calls `AddRetry`. The safe default is to disable retries for unsafe methods unless the endpoint is explicitly idempotent.
+`HCR041` flags this because the standard resilience handler can retry unsafe HTTP methods. Disable retries for unsafe methods unless the endpoint is explicitly idempotent:
 
 ```csharp
 services.AddHttpClient<PaymentsClient>()
     .AddStandardResilienceHandler(options =>
     {
         options.Retry.DisableForUnsafeHttpMethods();
+    });
+```
+
+`HCR043` flags the same incident when a custom pipeline calls `AddRetry`:
+
+```csharp
+services.AddHttpClient<PaymentsClient>()
+    .AddResilienceHandler("payments", builder =>
+    {
+        var retryOptions = new HttpRetryStrategyOptions();
+        retryOptions.DisableForUnsafeHttpMethods();
+        builder.AddRetry(retryOptions);
     });
 ```
 
