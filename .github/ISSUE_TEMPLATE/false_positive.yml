@@ -51,6 +51,6 @@ body:
     id: version
     attributes:
       label: Package version or commit
-      placeholder: 0.1.161 or commit SHA
+      placeholder: 0.1.162 or commit SHA
     validations:
       required: true

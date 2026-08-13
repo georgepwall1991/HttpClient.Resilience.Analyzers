@@ -522,6 +522,28 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenRetryPredicateOnlyAllowsSafeMethodsInOptionsLocalInitializer()
+    {
+        var source = CustomPipelineSources.TypedClient(
+            pipelineConfigure: """
+                builder =>
+                        {
+                            var retryOptions = new HttpRetryStrategyOptions
+                            {
+                                ShouldHandle = args =>
+                                    args.Outcome.Result?.RequestMessage?.Method == HttpMethod.Get
+                            };
+                            builder.AddRetry(retryOptions);
+                        }
+                """);
+
+        var diagnostics = await AnalyzerVerifier<HCR043_CustomPipelineUnsafeRetryAnalyzer>
+            .GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenRetryPredicateOnlyAllowsSafeMethodsInObjectInitializer()
     {
         var source = CustomPipelineSources.TypedClient(
@@ -561,6 +583,24 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
             .GetDiagnosticsAsync(source);
 
         AssertHcr043OnAddRetry(Assert.Single(diagnostics), source);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenMaxRetryAttemptsIsLiteralZeroOnOptionsLocalInitializer()
+    {
+        var source = CustomPipelineSources.TypedClient(
+            pipelineConfigure: """
+                builder =>
+                        {
+                            var retryOptions = new HttpRetryStrategyOptions { MaxRetryAttempts = 0 };
+                            builder.AddRetry(retryOptions);
+                        }
+                """);
+
+        var diagnostics = await AnalyzerVerifier<HCR043_CustomPipelineUnsafeRetryAnalyzer>
+            .GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
     }
 
     [Fact]

@@ -94,6 +94,19 @@ internal static class RetryUnsafeMethodGuard
             return false;
         }
 
+        if (optionsLocal.DeclaringSyntaxReferences.Length > 0)
+        {
+            foreach (var syntaxReference in optionsLocal.DeclaringSyntaxReferences)
+            {
+                if (syntaxReference.GetSyntax(cancellationToken) is VariableDeclaratorSyntax declarator &&
+                    declarator.Initializer?.Value is { } initializer &&
+                    HasSafeShouldHandleAssignmentInTree(initializer, semanticModel, cancellationToken))
+                {
+                    return true;
+                }
+            }
+        }
+
         return searchRoot
             .DescendantNodes()
             .OfType<AssignmentExpressionSyntax>()
@@ -106,6 +119,22 @@ internal static class RetryUnsafeMethodGuard
                     cancellationToken,
                     expectedNamespace: "Polly.Retry",
                     requiredOwnerName: null));
+    }
+
+    private static bool HasSafeShouldHandleAssignmentInTree(
+        SyntaxNode searchRoot,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return searchRoot
+            .DescendantNodesAndSelf()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => SafeHttpMethodPredicate.IsSafeOnlyShouldHandleAssignment(
+                assignment,
+                semanticModel,
+                cancellationToken,
+                expectedNamespace: "Polly.Retry",
+                requiredOwnerName: null));
     }
 
     private static bool ContainsLiteralZeroMaxRetryAttempts(
