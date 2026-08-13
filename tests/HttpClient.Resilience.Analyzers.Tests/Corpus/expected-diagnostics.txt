@@ -7,12 +7,13 @@
 02-TypedClients.cs(13,18): warning HCR005: Do not separately register a typed client already registered by AddHttpClient<T>()
 02-TypedClients.cs(15,18): warning HCR085: Typed clients 'CorpusStripeClient' and 'CorpusAdyenClient' share the implicit HttpClient name for 'ICorpusSharedClient'; specify distinct names or link them to an explicit named client
 02-TypedClients.cs(56,33): warning HCR083: Configure BaseAddress for typed clients that use relative URLs
-03-Resilience.cs(16,14): warning HCR040: Do not stack duplicate resilience handlers
-03-Resilience.cs(23,14): warning HCR041: Standard resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
-03-Resilience.cs(31,14): warning HCR041: Standard resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
-03-Resilience.cs(46,14): warning HCR041: Standard resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
-03-Resilience.cs(60,14): warning HCR042: Standard hedging replays unsafe HTTP methods concurrently. Do not hedge POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
-03-Resilience.cs(112,62): warning HCR082: Avoid per-request creation of resilience pipelines
+03-Resilience.cs(17,14): warning HCR040: Do not stack duplicate resilience handlers
+03-Resilience.cs(24,14): warning HCR041: Standard resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
+03-Resilience.cs(32,14): warning HCR041: Standard resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
+03-Resilience.cs(47,14): warning HCR041: Standard resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
+03-Resilience.cs(61,14): warning HCR042: Standard hedging replays unsafe HTTP methods concurrently. Do not hedge POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
+03-Resilience.cs(70,25): warning HCR043: Custom resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
+03-Resilience.cs(123,62): warning HCR082: Avoid per-request creation of resilience pipelines
 04-ResponseLifetime.cs(11,13): warning HCR060: Dispose HttpResponseMessage when using ResponseHeadersRead
 04-ResponseLifetime.cs(11,13): warning HCR061: Check HTTP response success before reading content
 04-ResponseLifetime.cs(24,13): warning HCR061: Check HTTP response success before reading content

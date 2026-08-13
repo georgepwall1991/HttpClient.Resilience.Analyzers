@@ -1,4 +1,5 @@
 using System.Net.Http;
+using Polly;
 
 public sealed class BadPaymentsService
 {
@@ -115,6 +116,19 @@ public static class BadUnsafeHedgingRegistration
         return services
             .AddHttpClient<BadUnsafePaymentsClient>()
             .AddStandardHedgingHandler();
+    }
+}
+
+public static class BadUnsafeCustomRetryRegistration
+{
+    public static IHttpClientBuilder Configure(IServiceCollection services)
+    {
+        return services
+            .AddHttpClient<BadUnsafePaymentsClient>()
+            .AddResilienceHandler("payments", builder =>
+            {
+                builder.AddRetry(new HttpRetryStrategyOptions());
+            });
     }
 }
 
@@ -288,6 +302,14 @@ public static class HttpClientBuilderExtensions
         return builder;
     }
 
+    public static IHttpClientBuilder AddResilienceHandler(
+        this IHttpClientBuilder builder,
+        string name,
+        System.Action<Polly.ResiliencePipelineBuilder> configure)
+    {
+        return builder;
+    }
+
     public static IServiceCollection AddSingleton<TService>(this IServiceCollection services)
     {
         return services;
@@ -319,4 +341,18 @@ namespace Polly
             return new ResiliencePipeline();
         }
     }
+
+    public static class RetryResiliencePipelineBuilderExtensions
+    {
+        public static ResiliencePipelineBuilder AddRetry(
+            this ResiliencePipelineBuilder builder,
+            HttpRetryStrategyOptions options)
+        {
+            return builder;
+        }
+    }
+}
+
+public sealed class HttpRetryStrategyOptions
+{
 }

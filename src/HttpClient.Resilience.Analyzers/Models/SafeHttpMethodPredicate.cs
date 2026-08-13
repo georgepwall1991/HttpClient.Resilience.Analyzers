@@ -25,23 +25,19 @@ internal static class SafeHttpMethodPredicate
                 requiredOwnerName));
     }
 
-    private static bool IsSafeOnlyShouldHandleAssignment(
+    internal static bool IsSafeOnlyShouldHandleAssignment(
         AssignmentExpressionSyntax assignment,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken,
         string expectedNamespace,
         string? requiredOwnerName)
     {
-        if (assignment.Left is not MemberAccessExpressionSyntax
-            {
-                Name.Identifier.ValueText: "ShouldHandle"
-            } shouldHandleMember ||
-            !IsFrameworkShouldHandleProperty(
-                shouldHandleMember,
+        if (!IsShouldHandleAssignmentTarget(
+                assignment.Left,
                 semanticModel,
                 cancellationToken,
-                expectedNamespace) ||
-            !OwnerMatches(shouldHandleMember, semanticModel, cancellationToken, expectedNamespace, requiredOwnerName))
+                expectedNamespace,
+                requiredOwnerName))
         {
             return false;
         }
@@ -50,6 +46,52 @@ internal static class SafeHttpMethodPredicate
 
         return predicateExpression is not null &&
             IsSafeOnlyPredicateExpression(predicateExpression, semanticModel, cancellationToken);
+    }
+
+    private static bool IsShouldHandleAssignmentTarget(
+        ExpressionSyntax left,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        string expectedNamespace,
+        string? requiredOwnerName)
+    {
+        left = SyntaxTransparency.Unwrap(left);
+
+        if (left is IdentifierNameSyntax { Identifier.ValueText: "ShouldHandle" } identifier)
+        {
+            return requiredOwnerName is null &&
+                IsFrameworkShouldHandleProperty(
+                    identifier,
+                    semanticModel,
+                    cancellationToken,
+                    expectedNamespace);
+        }
+
+        if (left is not MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "ShouldHandle"
+            } memberAccess)
+        {
+            return false;
+        }
+
+        return IsFrameworkShouldHandleProperty(
+                memberAccess,
+                semanticModel,
+                cancellationToken,
+                expectedNamespace) &&
+            OwnerMatches(memberAccess, semanticModel, cancellationToken, expectedNamespace, requiredOwnerName);
+    }
+
+    private static bool IsFrameworkShouldHandleProperty(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        string expectedNamespace)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(expression, cancellationToken);
+        return symbolInfo.Symbol is ISymbol symbol &&
+            IsFrameworkShouldHandleProperty(symbol, expectedNamespace);
     }
 
     private static bool OwnerMatches(
@@ -225,17 +267,6 @@ internal static class SafeHttpMethodPredicate
 
         methodName = memberAccess.Name.Identifier.ValueText;
         return true;
-    }
-
-    private static bool IsFrameworkShouldHandleProperty(
-        MemberAccessExpressionSyntax memberAccess,
-        SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken,
-        string expectedNamespace)
-    {
-        var symbolInfo = semanticModel.GetSymbolInfo(memberAccess, cancellationToken);
-        return symbolInfo.Symbol is ISymbol symbol &&
-            IsFrameworkShouldHandleProperty(symbol, expectedNamespace);
     }
 
     private static bool IsFrameworkShouldHandleProperty(ISymbol symbol, string expectedNamespace)

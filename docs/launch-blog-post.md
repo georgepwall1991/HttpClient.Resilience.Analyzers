@@ -62,4 +62,4 @@ The package is intentionally not a style analyzer. Warnings should feel like pro
 
 ## Status
 
-The package ships 20 documented diagnostics (`HCR001`–`HCR085`) as a stable `0.1.x` NuGet analyzer, with tests, documentation, sample cases, `.editorconfig` profiles, and code fixes for the highest-confidence lifetime, retry, hedging, disposal, and registration problems.
+The package ships 21 documented diagnostics (`HCR001`–`HCR085`) as a stable `0.1.x` NuGet analyzer, with tests, documentation, sample cases, `.editorconfig` profiles, and code fixes for the highest-confidence lifetime, retry, hedging, disposal, and registration problems.

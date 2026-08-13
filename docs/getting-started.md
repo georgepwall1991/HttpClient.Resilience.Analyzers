@@ -62,7 +62,7 @@ public sealed class PaymentsClient(HttpClient httpClient)
 }
 ```
 
-`HCR041` reports the retry risk. If unsafe methods are not deliberately idempotent, disable their retries:
+`HCR041` reports the retry risk. `HCR043` reports the same class of incident for custom `AddResilienceHandler` pipelines that call `AddRetry`. If unsafe methods are not deliberately idempotent, disable their retries:
 
 ```csharp
 services.AddHttpClient<PaymentsClient>()

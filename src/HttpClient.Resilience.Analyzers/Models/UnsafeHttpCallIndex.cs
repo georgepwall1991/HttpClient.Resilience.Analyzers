@@ -9,7 +9,7 @@ namespace HttpClient.Resilience.Analyzers.Models;
 
 /// <summary>
 /// Compilation-wide index of typed and named clients that visibly send unsafe HTTP methods.
-/// Built on first use and shared by HCR041 and HCR042 so a solution build never pays for
+/// Built on first use and shared by HCR041, HCR042, and HCR043 so a solution build never pays for
 /// the scan twice, and compilations with no matching handler never pay for it at all.
 /// </summary>
 internal sealed class UnsafeHttpCallIndex

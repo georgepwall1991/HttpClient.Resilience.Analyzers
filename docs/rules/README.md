@@ -49,6 +49,7 @@ Each rule page includes:
 | [`HCR040`](HCR040.md) | Do not stack duplicate resilience handlers | Warning | Yes |
 | [`HCR041`](HCR041.md) | Unsafe HTTP methods should not be retried unless explicitly configured | Warning | Yes |
 | [`HCR042`](HCR042.md) | Unsafe HTTP methods should not be hedged | Warning | Yes |
+| [`HCR043`](HCR043.md) | Unsafe HTTP methods should not be retried by custom resilience pipelines | Warning | Yes |
 | [`HCR082`](HCR082.md) | Avoid per-request creation of resilience pipelines | Warning | Guide |
 
 ### Response Lifetime and Request Correctness
@@ -74,7 +75,7 @@ For brownfield services, start with the rules most likely to prevent production 
 
 | Priority | Rules | Why |
 |---|---|---|
-| 1 | `HCR041`, `HCR042`, `HCR060`, `HCR061`, `HCR062`, `HCR063`, `HCR064`, `HCR081`, `HCR085` | These catch unsafe retries, concurrent hedging of unsafe methods, response ownership mistakes, shared header mutation, sync-over-async calls, missing cancellation, and silent typed-client configuration collisions. |
+| 1 | `HCR041`, `HCR042`, `HCR043`, `HCR060`, `HCR061`, `HCR062`, `HCR063`, `HCR064`, `HCR081`, `HCR085` | These catch unsafe retries, concurrent hedging of unsafe methods, custom pipelines that retry unsafe methods, response ownership mistakes, shared header mutation, sync-over-async calls, missing cancellation, and silent typed-client configuration collisions. |
 | 2 | `HCR001`, `HCR002`, `HCR003`, `HCR004`, `HCR005`, `HCR020` | These catch lifetime and dependency-injection problems that are costly to debug after deployment. |
 | 3 | `HCR040`, `HCR080`, `HCR082`, `HCR083`, `HCR084` | These improve resilience configuration, fan-out control, URI safety, and named-client maintainability. |
 

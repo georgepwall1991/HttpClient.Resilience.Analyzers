@@ -36,6 +36,7 @@ $expectedDiagnosticIds = @(
     'HCR040',
     'HCR041',
     'HCR042',
+    'HCR043',
     'HCR060',
     'HCR061',
     'HCR062',
@@ -224,6 +225,7 @@ Assert-Contains 'PACKAGE_README.md' $escapedDocsSiteUrl 'PACKAGE_README.md must 
 Assert-Contains '.github\ISSUE_TEMPLATE\config.yml' $escapedDocsSiteUrl 'Issue template documentation hub must point at the GitHub Pages docs site.'
 Assert-Contains '.github\workflows\docs.yml' 'mkdocs build --strict' 'Docs workflow must build the site with --strict.'
 Assert-Contains '.github\ISSUE_TEMPLATE\false_positive.yml' '(?m)^\s+-\s+HCR042\s*$' 'False-positive template must include HCR042.'
+Assert-Contains '.github\ISSUE_TEMPLATE\false_positive.yml' '(?m)^\s+-\s+HCR043\s*$' 'False-positive template must include HCR043.'
 Assert-Contains '.github\ISSUE_TEMPLATE\false_positive.yml' '(?m)^\s+-\s+HCR085\s*$' 'False-positive template must include HCR085.'
 Assert-Contains 'SECURITY.md' '(?m)^## Supported Versions\r?$' 'SECURITY.md must document supported versions.'
 Assert-Contains 'SECURITY.md' '`0\.1\.x`' 'SECURITY.md must list the stable 0.1.x line as supported.'

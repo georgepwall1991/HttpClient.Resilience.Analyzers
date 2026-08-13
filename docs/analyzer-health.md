@@ -36,6 +36,7 @@ Scores use a 1–5 scale. `Analyzer` measures semantic depth and diagnostic plac
 | HCR040 | Resilience | Warning | 4 | 4 | 4 | 5 | 4 | 4 | P2 | Chained and reassigned builder shapes need continued fix-safety coverage. |
 | HCR041 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P2 | Retry-policy fixes need more preservation tests for custom predicates and configuration. |
 | HCR042 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P1 | New: standard hedging of unsafe methods; keep predicate and lookalike coverage aligned with HCR041. |
+| HCR043 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P1 | Custom `AddResilienceHandler` + `AddRetry` of unsafe methods; keep guards and lookalike coverage aligned with HCR041. |
 | HCR060 | Response lifetime | Warning | 4 | 4 | 4 | 5 | 4 | 5 | P1 | Disposal fix is limited to simple declarations and adjacent assignments. |
 | HCR061 | Response lifetime | Warning | 4 | 4 | 3 | 5 | 4 | 5 | P1 | Success-check insertion is safe for known shapes but still partial for complex ownership/control flow. |
 | HCR062 | Response lifetime | Warning | 4 | 5 | 1 | 4 | 4 | 4 | P2 | Shared-header ownership is high-confidence; guidance should better show request-message migration. |
@@ -98,7 +99,8 @@ Compilation-wide work is bounded by three deterministic invariants, each asserte
   run for arbitrary member invocations.
 - HCR041 builds its unsafe-call index only when a compilation actually registers a standard
   resilience handler, and never more than once. HCR042 shares that index for
-  `AddStandardHedgingHandler` so a compilation with both handlers still pays for one scan.
+  `AddStandardHedgingHandler`, and HCR043 shares it for `AddResilienceHandler` pipelines
+  that visibly call `AddRetry`, so a compilation with any combination still pays for one scan.
 
 Behavior is pinned independently by `AnalyzerBehaviorSnapshotTests`, which compares every
 analyzer's output over a fixed corpus against `tests/HttpClient.Resilience.Analyzers.Tests/Corpus/expected-diagnostics.txt`.

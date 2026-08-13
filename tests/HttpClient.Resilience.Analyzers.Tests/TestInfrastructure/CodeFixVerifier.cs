@@ -93,7 +93,14 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
             .GetAnalyzerDiagnosticsAsync()
             .ConfigureAwait(false);
 
-        var diagnostic = diagnostics.Single();
+        if (diagnostics.Length == 0)
+        {
+            throw new InvalidOperationException("Analyzer did not report a diagnostic to fix.");
+        }
+
+        var diagnostic = diagnostics
+            .OrderBy(candidate => candidate.Location.SourceSpan.Start)
+            .First();
         var actions = new List<CodeAction>();
         var context = new CodeFixContext(
             document,
@@ -104,5 +111,37 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
         await new TCodeFix().RegisterCodeFixesAsync(context).ConfigureAwait(false);
 
         return await action(document, diagnostic, actions).ConfigureAwait(false);
+    }
+
+    public static async Task<string> ApplyFirstCodeFixAllowingRemainingAsync(string source)
+    {
+        return await WithCodeFixContextAsync(source, ApplyFirstCodeFixAllowingRemainingAsync).ConfigureAwait(false);
+    }
+
+    private static async Task<string> ApplyFirstCodeFixAllowingRemainingAsync(
+        Document document,
+        Diagnostic diagnostic,
+        IReadOnlyList<CodeAction> actions)
+    {
+        var action = actions.Single();
+        var operations = await action.GetOperationsAsync(CancellationToken.None).ConfigureAwait(false);
+        var applyChanges = operations.OfType<ApplyChangesOperation>().Single();
+        var changedDocument = applyChanges.ChangedSolution.GetDocument(document.Id);
+
+        if (changedDocument is null)
+        {
+            throw new InvalidOperationException("Code fix did not produce a changed document.");
+        }
+
+        var changedCompilation = await changedDocument.Project.GetCompilationAsync().ConfigureAwait(false);
+        if (changedCompilation is null)
+        {
+            throw new InvalidOperationException("Code fix output compilation could not be created.");
+        }
+
+        TestCompilationFactory.EnsureNoCompilerErrors(changedCompilation);
+
+        var fixedText = await changedDocument.GetTextAsync().ConfigureAwait(false);
+        return fixedText.ToString();
     }
 }

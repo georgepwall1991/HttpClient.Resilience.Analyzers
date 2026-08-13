@@ -2,7 +2,7 @@
 
 > Compile-time Roslyn analyzers and code fixes for .NET HttpClient, IHttpClientFactory, AddHttpClient typed and named clients, Polly, and Microsoft.Extensions.Http.Resilience. Analyzer-only: no application runtime dependency.
 
-The package catches outbound HTTP reliability bugs at build time, including socket exhaustion, missing PooledConnectionLifetime, typed-client lifetime leaks, unsafe POST retries, concurrent hedging of unsafe methods, undisposed responses, and dropped cancellation tokens.
+The package catches outbound HTTP reliability bugs at build time, including socket exhaustion, missing PooledConnectionLifetime, typed-client lifetime leaks, unsafe POST retries, custom pipelines retrying unsafe methods, concurrent hedging of unsafe methods, undisposed responses, and dropped cancellation tokens.
 
 ## Docs
 
@@ -25,6 +25,7 @@ The package catches outbound HTTP reliability bugs at build time, including sock
 - [HCR040](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR040/): Duplicate resilience handlers
 - [HCR041](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR041/): AddStandardResilienceHandler retrying unsafe HTTP methods
 - [HCR042](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR042/): AddStandardHedgingHandler replaying unsafe HTTP methods
+- [HCR043](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR043/): AddResilienceHandler retrying unsafe HTTP methods
 - [HCR060](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR060/): Dispose ResponseHeadersRead responses
 - [HCR061](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR061/): Check HTTP success before reading content
 - [HCR062](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR062/): Per-request DefaultRequestHeaders mutation

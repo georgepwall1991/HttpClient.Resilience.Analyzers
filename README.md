@@ -38,7 +38,7 @@ Those failures often appear only under traffic—after deploy.
 - **Lifetime:** per-request clients, long-lived clients without `PooledConnectionLifetime`, cached factory clients
 - **DI / typed clients:** singleton injection, duplicate registrations, implicit shared names, relative URLs without `BaseAddress`
 - **Handlers:** `DelegatingHandler` capturing scoped request data
-- **Resilience / Polly:** stacked handlers, unsafe-method retries, unsafe-method hedging, per-request pipeline construction
+- **Resilience / Polly:** stacked handlers, unsafe-method retries, unsafe-method hedging, custom pipelines retrying unsafe methods, per-request pipeline construction
 - **Response ownership:** undisposed `ResponseHeadersRead` responses and content streams
 - **Correctness:** unchecked failure responses, shared `DefaultRequestHeaders` mutation, missing `CancellationToken`
 - **Concurrency:** sync-over-async and obvious unbounded `Task.WhenAll` HTTP fan-out
@@ -103,7 +103,7 @@ public sealed class PaymentsClient(HttpClient httpClient)
 }
 ```
 
-`HCR041` reports the retry risk. `HCR042` reports the same class of incident for `AddStandardHedgingHandler()`, which can replay the request concurrently instead of after a failure. If unsafe methods are not deliberately idempotent, disable their retries:
+`HCR041` reports the retry risk. `HCR042` reports the same class of incident for `AddStandardHedgingHandler()`, which can replay the request concurrently instead of after a failure. `HCR043` reports it when a custom `AddResilienceHandler` pipeline calls `AddRetry`. If unsafe methods are not deliberately idempotent, disable their retries:
 
 ```csharp
 services.AddHttpClient<PaymentsClient>()
@@ -121,7 +121,7 @@ Several rules include automatic code fixes; every diagnostic links to a rule pag
 |---|---|
 | Client lifetime | Per-request `HttpClient` creation, stale long-lived connections, cached factory clients |
 | Dependency injection | Typed clients held by singletons, duplicate registrations, scoped state captured by handlers |
-| Resilience and Polly | Duplicate handlers, unsafe-method retries, concurrent hedging of unsafe methods |
+| Resilience and Polly | Duplicate handlers, unsafe-method retries, concurrent hedging of unsafe methods, custom pipelines retrying unsafe methods |
 | Response ownership | Undisposed `ResponseHeadersRead` responses and HTTP content streams |
 | Request correctness | Unchecked failure responses, shared default-header mutation, missing cancellation |
 | Async and concurrency | Sync-over-async and obvious unbounded HTTP fan-out |
@@ -151,6 +151,7 @@ The rules intentionally focus on concrete production risks. Heuristic checks use
 | [`HCR040`](docs/rules/HCR040.md) | Resilience | Duplicate resilience handlers in one client pipeline | Warning | Yes |
 | [`HCR041`](docs/rules/HCR041.md) | Resilience | Unsafe HTTP methods retried without explicit configuration | Warning | Yes |
 | [`HCR042`](docs/rules/HCR042.md) | Resilience | Unsafe HTTP methods hedged without explicit configuration | Warning | Yes |
+| [`HCR043`](docs/rules/HCR043.md) | Resilience | Custom pipelines retrying unsafe HTTP methods | Warning | Yes |
 | [`HCR060`](docs/rules/HCR060.md) | Response lifetime | Undisposed `ResponseHeadersRead` responses | Warning | Yes |
 | [`HCR061`](docs/rules/HCR061.md) | Response lifetime | Response content read before checking success | Warning | Partial |
 | [`HCR062`](docs/rules/HCR062.md) | Response lifetime | Per-request values written to `DefaultRequestHeaders` | Warning | Guide |
@@ -173,6 +174,7 @@ Set any rule's severity in your repository's `.editorconfig`:
 [*.cs]
 dotnet_diagnostic.HCR041.severity = error
 dotnet_diagnostic.HCR042.severity = error
+dotnet_diagnostic.HCR043.severity = error
 dotnet_diagnostic.HCR080.severity = suggestion
 ```
 

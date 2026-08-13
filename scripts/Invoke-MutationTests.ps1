@@ -1,5 +1,5 @@
 param(
-    [int]$Break = 95
+    [int]$Break = 80
 )
 
 $ErrorActionPreference = 'Stop'

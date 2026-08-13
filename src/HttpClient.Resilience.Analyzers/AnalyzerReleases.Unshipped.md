@@ -13,6 +13,7 @@ HCR020 | HttpClient.Handlers | Warning | DelegatingHandler should not capture sc
 HCR040 | HttpClient.Resilience | Warning | Do not stack duplicate resilience handlers
 HCR041 | HttpClient.Resilience | Warning | Unsafe HTTP methods should not be retried unless explicitly configured
 HCR042 | HttpClient.Resilience | Warning | Unsafe HTTP methods should not be hedged
+HCR043 | HttpClient.Resilience | Warning | Unsafe HTTP methods should not be retried by custom resilience pipelines
 HCR060 | HttpClient.ResponseLifetime | Warning | Dispose HttpResponseMessage when using ResponseHeadersRead
 HCR061 | HttpClient.ResponseLifetime | Warning | Check HTTP response success before reading content
 HCR062 | HttpClient.ResponseLifetime | Warning | Prefer per-request headers over mutating DefaultRequestHeaders

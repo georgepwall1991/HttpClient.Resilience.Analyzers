@@ -23,7 +23,7 @@ Most .NET services use `HttpClient`, but many production incidents come from pat
 - Per-request `new HttpClient()` that exhausts sockets under load
 - Long-lived clients without `PooledConnectionLifetime` that hold stale DNS
 - Typed clients captured by singletons or registered twice
-- `AddStandardResilienceHandler` retrying non-idempotent `POST`, or `AddStandardHedgingHandler` replaying it concurrently
+- `AddStandardResilienceHandler` retrying non-idempotent `POST`, `AddStandardHedgingHandler` replaying it concurrently, or a custom `AddResilienceHandler` pipeline that retries it
 - Undisposed streaming responses, sync-over-async, and dropped cancellation tokens
 
 Those failures often appear only under traffic.
@@ -34,7 +34,7 @@ Those failures often appear only under traffic.
 |---|---|
 | `HttpClient` lifetime | Per-request client creation, stale long-lived connections, cached factory clients |
 | Dependency injection | Typed clients held by singletons, duplicate registrations, scoped state in handlers |
-| Resilience and Polly | Duplicate handlers, unsafe-method retries, concurrent hedging of unsafe methods |
+| Resilience and Polly | Duplicate handlers, unsafe-method retries, concurrent hedging of unsafe methods, custom pipelines retrying unsafe methods |
 | Response ownership | Undisposed `ResponseHeadersRead` responses and HTTP content streams |
 | Request correctness | Unchecked failure responses, shared default-header mutation, missing `CancellationToken` |
 | Async and concurrency | Sync-over-async and obvious unbounded HTTP fan-out |
@@ -62,7 +62,7 @@ public sealed class PaymentsClient(HttpClient httpClient)
 }
 ```
 
-[HCR041](rules/HCR041.md) reports the retry risk. [HCR042](rules/HCR042.md) reports the same class of incident for `AddStandardHedgingHandler()`. Disable retries for unsafe methods unless the endpoint is deliberately idempotent:
+[HCR041](rules/HCR041.md) reports the retry risk. [HCR042](rules/HCR042.md) reports the same class of incident for `AddStandardHedgingHandler()`. [HCR043](rules/HCR043.md) reports it when a custom `AddResilienceHandler` pipeline calls `AddRetry`. Disable retries for unsafe methods unless the endpoint is deliberately idempotent:
 
 ```csharp
 services.AddHttpClient<PaymentsClient>()
