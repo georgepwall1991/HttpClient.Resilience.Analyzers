@@ -951,6 +951,29 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
         Assert.Contains("retryOptions2.DisableForUnsafeHttpMethods();", afterSecond, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task CodeFix_FixAllInDocumentFixesTwoAddRetryCalls()
+    {
+        var source = CustomPipelineSources.TypedClient(
+            pipelineConfigure: """
+                builder =>
+                        {
+                            builder.AddRetry(new HttpRetryStrategyOptions());
+                            builder.AddRetry(new HttpRetryStrategyOptions { MaxRetryAttempts = 3 });
+                        }
+                """);
+
+        var fixedSource = await CodeFixVerifier<HCR043_CustomPipelineUnsafeRetryAnalyzer, HCR043_DisableUnsafeMethodRetriesCodeFixProvider>
+            .ApplyFixAllInDocumentAsync(source);
+
+        Assert.Empty(await AnalyzerVerifier<HCR043_CustomPipelineUnsafeRetryAnalyzer>.GetDiagnosticsAsync(fixedSource));
+        Assert.Contains("retryOptions.DisableForUnsafeHttpMethods();", fixedSource, StringComparison.Ordinal);
+        Assert.Contains("retryOptions2.DisableForUnsafeHttpMethods();", fixedSource, StringComparison.Ordinal);
+        Assert.Contains("builder.AddRetry(retryOptions);", fixedSource, StringComparison.Ordinal);
+        Assert.Contains("builder.AddRetry(retryOptions2);", fixedSource, StringComparison.Ordinal);
+        Assert.Contains("new HttpRetryStrategyOptions { MaxRetryAttempts = 3 }", fixedSource, StringComparison.Ordinal);
+    }
+
     private static void AssertHcr043OnAddRetry(Diagnostic diagnostic, string source)
     {
         Assert.Equal(DiagnosticIds.HCR043, diagnostic.Id);

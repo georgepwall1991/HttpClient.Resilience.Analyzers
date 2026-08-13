@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Composition;
@@ -11,6 +12,7 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Editing;
 using Microsoft.CodeAnalysis.Formatting;
 
 namespace HttpClient.Resilience.Analyzers.CodeFixes;
@@ -95,29 +97,22 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         {
             var rewrittenExpression = expressionBody.ReplaceNode(objectCreation, identifier);
             var block = SyntaxFactory.Block(declaration, disableCall, SyntaxFactory.ExpressionStatement(rewrittenExpression));
-            return document.WithSyntaxRoot(root.ReplaceNode(lambda, lambda.WithBody(block)));
+            return document.WithSyntaxRoot(
+                root.ReplaceNode(
+                    lambda,
+                    lambda.WithBody(block).WithAdditionalAnnotations(Formatter.Annotation)));
         }
 
         var statement = invocation.FirstAncestorOrSelf<StatementSyntax>();
-        if (statement?.Parent is not BlockSyntax blockSyntax)
+        if (statement?.Parent is not BlockSyntax)
         {
             return document;
         }
 
-        var rewrittenStatement = statement.ReplaceNode(objectCreation, identifier);
-        var statements = blockSyntax.Statements.ToList();
-        var index = statements.IndexOf(statement);
-        if (index < 0)
-        {
-            return document;
-        }
-
-        statements[index] = rewrittenStatement;
-        statements.Insert(index, disableCall);
-        statements.Insert(index, declaration);
-
-        return document.WithSyntaxRoot(
-            root.ReplaceNode(blockSyntax, blockSyntax.WithStatements(SyntaxFactory.List(statements))));
+        var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
+        editor.InsertBefore(statement, new SyntaxNode[] { declaration, disableCall });
+        editor.ReplaceNode(objectCreation, identifier);
+        return editor.GetChangedDocument();
     }
 
     private static bool TryGetHttpRetryStrategyOptionsCreation(
@@ -156,26 +151,104 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         return true;
     }
 
-    private static string ChooseRetryOptionsName(SyntaxNode scope)
+    private static string ChooseRetryOptionsName(InvocationExpressionSyntax invocation)
     {
-        var used = new HashSet<string>(
-            scope.AncestorsAndSelf()
-                .SelectMany(node => node.DescendantNodes().OfType<VariableDeclaratorSyntax>())
-                .Select(declarator => declarator.Identifier.ValueText));
-
-        const string baseName = "retryOptions";
-        if (!used.Contains(baseName))
+        var scope = GetNameScope(invocation);
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var declarator in scope.DescendantNodesAndSelf().OfType<VariableDeclaratorSyntax>())
         {
-            return baseName;
+            used.Add(declarator.Identifier.ValueText);
         }
 
-        for (var suffix = 2; ; suffix++)
+        foreach (var parameter in scope.DescendantNodesAndSelf().OfType<ParameterSyntax>())
         {
-            var candidate = baseName + suffix;
-            if (!used.Contains(candidate))
+            used.Add(parameter.Identifier.ValueText);
+        }
+
+        return PickRetryOptionsName(used, CountEarlierFixableAddRetryCreations(invocation, scope));
+    }
+
+    private static SyntaxNode GetNameScope(SyntaxNode node)
+    {
+        return (SyntaxNode?)node.FirstAncestorOrSelf<LocalFunctionStatementSyntax>()
+            ?? node.FirstAncestorOrSelf<MethodDeclarationSyntax>()
+            ?? (SyntaxNode?)node.FirstAncestorOrSelf<AnonymousFunctionExpressionSyntax>()
+            ?? node.SyntaxTree.GetRoot();
+    }
+
+    private static int CountEarlierFixableAddRetryCreations(
+        InvocationExpressionSyntax invocation,
+        SyntaxNode scope)
+    {
+        var count = 0;
+        foreach (var candidate in scope.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        {
+            if (candidate.SpanStart >= invocation.SpanStart)
+            {
+                continue;
+            }
+
+            if (IsFixableAddRetryObjectCreation(candidate))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static bool IsFixableAddRetryObjectCreation(InvocationExpressionSyntax invocation)
+    {
+        if (invocation.ArgumentList.Arguments.Count == 0 ||
+            invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+            memberAccess.Name.Identifier.ValueText != "AddRetry")
+        {
+            return false;
+        }
+
+        var argument = SyntaxTransparency.Unwrap(invocation.ArgumentList.Arguments[0].Expression);
+        return argument is ObjectCreationExpressionSyntax creation &&
+            GetCreatedTypeName(creation) == "HttpRetryStrategyOptions";
+    }
+
+    private static string? GetCreatedTypeName(ObjectCreationExpressionSyntax creation)
+    {
+        return creation.Type switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText,
+            AliasQualifiedNameSyntax aliased => aliased.Name.Identifier.ValueText,
+            _ => null
+        };
+    }
+
+    private static string PickRetryOptionsName(HashSet<string> used, int occurrenceIndex)
+    {
+        var remaining = occurrenceIndex;
+        foreach (var candidate in CandidateRetryOptionsNames())
+        {
+            if (used.Contains(candidate))
+            {
+                continue;
+            }
+
+            if (remaining == 0)
             {
                 return candidate;
             }
+
+            remaining--;
+        }
+
+        return "retryOptions";
+    }
+
+    private static IEnumerable<string> CandidateRetryOptionsNames()
+    {
+        yield return "retryOptions";
+        for (var suffix = 2; ; suffix++)
+        {
+            yield return "retryOptions" + suffix;
         }
     }
 

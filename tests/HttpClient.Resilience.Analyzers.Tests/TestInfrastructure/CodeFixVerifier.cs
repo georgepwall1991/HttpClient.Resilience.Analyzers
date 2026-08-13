@@ -144,4 +144,130 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
         var fixedText = await changedDocument.GetTextAsync().ConfigureAwait(false);
         return fixedText.ToString();
     }
+
+    public static async Task<string> ApplyFixAllInDocumentAsync(string source)
+    {
+        using var workspace = new AdhocWorkspace();
+
+        var project = workspace
+            .CurrentSolution
+            .AddProject("CodeFixTests", "CodeFixTests", LanguageNames.CSharp)
+            .WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
+            .WithParseOptions(CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview))
+            .AddMetadataReferences(TestCompilationFactory.References);
+
+        var document = project.AddDocument("Test.cs", SourceText.From(source, Encoding.UTF8));
+        var compilation = await document.Project.GetCompilationAsync().ConfigureAwait(false);
+        if (compilation is null)
+        {
+            throw new InvalidOperationException("Compilation could not be created.");
+        }
+
+        TestCompilationFactory.EnsureNoCompilerErrors(compilation);
+
+        var diagnostics = await compilation
+            .WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new TAnalyzer()))
+            .GetAnalyzerDiagnosticsAsync()
+            .ConfigureAwait(false);
+
+        if (diagnostics.Length == 0)
+        {
+            throw new InvalidOperationException("Analyzer did not report a diagnostic to fix.");
+        }
+
+        var provider = new TCodeFix();
+        var fixAllProvider = provider.GetFixAllProvider();
+        if (fixAllProvider is null)
+        {
+            throw new InvalidOperationException("Code fix does not support Fix All.");
+        }
+
+        var firstDiagnostic = diagnostics
+            .OrderBy(candidate => candidate.Location.SourceSpan.Start)
+            .First();
+        var actions = new List<CodeAction>();
+        var context = new CodeFixContext(
+            document,
+            firstDiagnostic,
+            (action, _) => actions.Add(action),
+            CancellationToken.None);
+        await provider.RegisterCodeFixesAsync(context).ConfigureAwait(false);
+        var equivalenceKey = actions.Single().EquivalenceKey;
+
+        var fixAllContext = new FixAllContext(
+            document,
+            provider,
+            FixAllScope.Document,
+            equivalenceKey,
+            provider.FixableDiagnosticIds,
+            new DocumentDiagnosticProvider(diagnostics),
+            CancellationToken.None);
+
+        var fixAllAction = await fixAllProvider.GetFixAsync(fixAllContext).ConfigureAwait(false);
+        if (fixAllAction is null)
+        {
+            throw new InvalidOperationException("Fix All did not produce a code action.");
+        }
+
+        var operations = await fixAllAction.GetOperationsAsync(CancellationToken.None).ConfigureAwait(false);
+        var applyChanges = operations.OfType<ApplyChangesOperation>().Single();
+        var changedDocument = applyChanges.ChangedSolution.GetDocument(document.Id);
+        if (changedDocument is null)
+        {
+            throw new InvalidOperationException("Fix All did not produce a changed document.");
+        }
+
+        var changedCompilation = await changedDocument.Project.GetCompilationAsync().ConfigureAwait(false);
+        if (changedCompilation is null)
+        {
+            throw new InvalidOperationException("Fix All output compilation could not be created.");
+        }
+
+        TestCompilationFactory.EnsureNoCompilerErrors(changedCompilation);
+
+        var remainingDiagnostics = await changedCompilation
+            .WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new TAnalyzer()))
+            .GetAnalyzerDiagnosticsAsync()
+            .ConfigureAwait(false);
+
+        if (remainingDiagnostics.Any(remaining => provider.FixableDiagnosticIds.Contains(remaining.Id)))
+        {
+            throw new InvalidOperationException(
+                $"Fix All output still reports diagnostic {string.Join(", ", remainingDiagnostics.Select(remaining => remaining.Id))}.");
+        }
+
+        var fixedText = await changedDocument.GetTextAsync().ConfigureAwait(false);
+        return fixedText.ToString();
+    }
+
+    private sealed class DocumentDiagnosticProvider : FixAllContext.DiagnosticProvider
+    {
+        private readonly ImmutableArray<Diagnostic> _diagnostics;
+
+        public DocumentDiagnosticProvider(ImmutableArray<Diagnostic> diagnostics)
+        {
+            _diagnostics = diagnostics;
+        }
+
+        public override Task<IEnumerable<Diagnostic>> GetDocumentDiagnosticsAsync(
+            Document document,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IEnumerable<Diagnostic>>(_diagnostics);
+        }
+
+        public override Task<IEnumerable<Diagnostic>> GetAllDiagnosticsAsync(
+            Project project,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IEnumerable<Diagnostic>>(_diagnostics);
+        }
+
+        public override Task<IEnumerable<Diagnostic>> GetProjectDiagnosticsAsync(
+            Project project,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IEnumerable<Diagnostic>>(Array.Empty<Diagnostic>());
+        }
+    }
 }
