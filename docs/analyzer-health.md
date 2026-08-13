@@ -5,15 +5,15 @@ description: Evidence-backed scorecard, throughput guardrails, and improvement b
 
 # Analyzer Health
 
-Reviewed: 2026-08-03
+Reviewed: 2026-08-13
 Repository: `HttpClient.Resilience.Analyzers`
-Baseline: `main` at `v0.1.142`
+Baseline: `main` at `v0.1.162`
 
 This document is the repository-specific health audit for the shipped HCR analyzers. It replaces the stale AutoMapper-oriented audit that was previously available only through the generic analyzer-health skill. It is planning and review context, not a substitute for reading the current analyzer, code fix, test, sample, and release code.
 
 ## Evidence and quality bar
 
-The baseline was inspected from the 19 analyzer implementations, 10 code-fix providers, rule documentation, the showcase sample, the 31 test source files, `scripts/Validate-Repository.ps1`, `scripts/Validate-SampleDiagnostics.ps1`, the package-consumption validator, the release workflow, and the current `main` history. Every planned change must preserve the following contract:
+The baseline was inspected from the 21 analyzer implementations, 12 code-fix providers, rule documentation, the showcase sample, the 29 test source files, `scripts/Validate-Repository.ps1`, `scripts/Validate-SampleDiagnostics.ps1`, the package-consumption validator, the release workflow, and the current `main` history. Every planned change must preserve the following contract:
 
 - A diagnostic is emitted only when Roslyn symbols and visible syntax provide enough evidence to name the production risk.
 - Lookalike APIs, unresolved custom wrappers, reassigned values, tests, and intentional configuration stay quiet unless the rule explicitly documents otherwise.
@@ -35,8 +35,8 @@ Scores use a 1–5 scale. `Analyzer` measures semantic depth and diagnostic plac
 | HCR020 | Handlers | Warning | 4 | 4 | 1 | 5 | 4 | 5 | P2 | Scoped dependency ownership is reported but intentionally has no automatic rewrite. |
 | HCR040 | Resilience | Warning | 4 | 4 | 4 | 5 | 4 | 4 | P2 | Chained and reassigned builder shapes need continued fix-safety coverage. |
 | HCR041 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P2 | Retry-policy fixes need more preservation tests for custom predicates and configuration. |
-| HCR042 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P1 | New: standard hedging of unsafe methods; keep predicate and lookalike coverage aligned with HCR041. |
-| HCR043 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P1 | Custom `AddResilienceHandler` + `AddRetry` of unsafe methods; keep guards and lookalike coverage aligned with HCR041. |
+| HCR042 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P1 | Standard hedging of unsafe methods; keep predicate and lookalike coverage aligned with HCR041. |
+| HCR043 | Resilience | Warning | 4 | 4 | 4 | 5 | 5 | 5 | P1 | Custom `AddResilienceHandler` + `AddRetry` of unsafe methods; keep lookalike and predicate coverage aligned with HCR041. |
 | HCR060 | Response lifetime | Warning | 4 | 4 | 4 | 5 | 4 | 5 | P1 | Disposal fix is limited to simple declarations and adjacent assignments. |
 | HCR061 | Response lifetime | Warning | 4 | 4 | 3 | 5 | 4 | 5 | P1 | Success-check insertion is safe for known shapes but still partial for complex ownership/control flow. |
 | HCR062 | Response lifetime | Warning | 4 | 5 | 1 | 4 | 4 | 4 | P2 | Shared-header ownership is high-confidence; guidance should better show request-message migration. |

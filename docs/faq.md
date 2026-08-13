@@ -17,7 +17,7 @@ No. The analyzer assembly runs at compile time and the package contains no appli
 
 ## How is this different from CA2000 or other IDisposable analyzers?
 
-`CA2000` and similar rules talk about disposing objects. They do not understand `IHttpClientFactory`, typed-client DI lifetimes, `PooledConnectionLifetime`, `AddStandardResilienceHandler` retrying `POST`, or `ResponseHeadersRead` ownership. This package is a production-safety analyzer for outbound HTTP, not a general disposal or style analyzer.
+`CA2000` and similar rules talk about disposing objects. They do not understand `IHttpClientFactory`, typed-client DI lifetimes, `PooledConnectionLifetime`, `AddStandardResilienceHandler` or custom `AddResilienceHandler` pipelines retrying `POST`, or `ResponseHeadersRead` ownership. This package is a production-safety analyzer for outbound HTTP, not a general disposal or style analyzer.
 
 ## Can I enable, disable, or promote one rule?
 

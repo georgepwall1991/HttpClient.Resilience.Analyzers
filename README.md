@@ -28,7 +28,7 @@ Most .NET services use `HttpClient`, but many production issues come from patter
 - Per-request `new HttpClient()` that exhausts sockets under load
 - Static clients without `PooledConnectionLifetime` that hold stale DNS
 - Typed clients captured by singletons or registered twice
-- `AddStandardResilienceHandler` retrying non-idempotent POST, or `AddStandardHedgingHandler` replaying it concurrently
+- `AddStandardResilienceHandler` retrying non-idempotent POST, `AddStandardHedgingHandler` replaying it concurrently, or a custom `AddResilienceHandler` pipeline calling `AddRetry`
 - Undisposed streaming responses and sync-over-async on outbound calls
 
 Those failures often appear only under traffic—after deploy.
@@ -52,7 +52,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 Or add an explicit package reference:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.162" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.163" PrivateAssets="all" />
 ```
 
 `PrivateAssets="all"` prevents the analyzer from flowing to projects that consume your project.
@@ -62,7 +62,7 @@ For a whole solution, add the package once in `Directory.Build.props`:
 ```xml
 <Project>
   <ItemGroup>
-    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.162">
+    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.163">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
