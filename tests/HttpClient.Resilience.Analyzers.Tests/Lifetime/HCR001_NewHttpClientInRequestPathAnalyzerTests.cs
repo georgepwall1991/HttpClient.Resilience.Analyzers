@@ -655,4 +655,318 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
         Assert.Contains("return httpClientFactory.CreateClient();", fixedSource);
         Assert.DoesNotContain("new HttpClient()", fixedSource);
     }
+
+    [Fact]
+    public async Task CodeFix_UsesFactoryFieldWhenNoParameterExists()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private readonly IHttpClientFactory httpClientFactory;
+
+                public PaymentsService(IHttpClientFactory httpClientFactory)
+                {
+                    this.httpClientFactory = httpClientFactory;
+                }
+
+                public HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("return httpClientFactory.CreateClient();", fixedSource);
+        Assert.DoesNotContain("new HttpClient()", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_PrefersFactoryNamedMembers()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private readonly IHttpClientFactory dependencies;
+                private readonly IHttpClientFactory paymentsClientFactory;
+
+                public HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("return paymentsClientFactory.CreateClient();", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenNoFactoryParameterOrMemberExists()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_UsesFactoryPropertyWhenNoParameterOrFieldExists()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private IHttpClientFactory ClientFactory { get; init; }
+
+                public HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("return ClientFactory.CreateClient();", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenOnlyStaticContextMemberExists()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private static readonly IHttpClientFactory httpClientFactory = null!;
+
+                public static HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenOnlyNullableFactoryMemberExists()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            #nullable enable
+
+            public sealed class PaymentsService
+            {
+                private readonly IHttpClientFactory? httpClientFactory;
+
+                public HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenStaticMethodCouldCapturePrimaryConstructorParameter()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService(IHttpClientFactory httpClientFactory)
+            {
+                public static HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_SkipsFactoryFieldShadowedByLocal()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private readonly IHttpClientFactory httpClientFactory = null!;
+
+                public HttpClient Create()
+                {
+                    IHttpClientFactory httpClientFactory = null!;
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenOnlyWriteOnlyFactoryPropertyExists()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private IHttpClientFactory ClientFactory { set { } }
+
+                public HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_UsesOwnParameterOfStaticMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private readonly IHttpClientFactory unrelated = null!;
+
+                public static HttpClient Create(IHttpClientFactory httpClientFactory)
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("return httpClientFactory.CreateClient();", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenStaticLambdaWouldCaptureOuterFactory()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory httpClientFactory)
+                {
+                    Func<HttpClient> create = static () => new HttpClient();
+                    return create();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
 }
