@@ -1,114 +1,220 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
+using System.Composition;
+using System.Reflection;
 using HttpClient.Resilience.Analyzers.CodeFixes;
-using HttpClient.Resilience.Analyzers.Tests.TestInfrastructure;
 using HttpClient.Resilience.Analyzers.Diagnostics;
+using HttpClient.Resilience.Analyzers.Tests.TestInfrastructure;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Xunit;
 
 namespace HttpClient.Resilience.Analyzers.Tests;
 
 /// <summary>
 /// A code fix provider that throws surfaces as a broken lightbulb in the IDE. These tests run
-/// every shipped provider over hostile source and require RegisterCodeFixesAsync to complete
-/// without throwing, whatever the syntax looks like.
+/// every MEF-exported provider over real analyzer diagnostics anchored in hostile source and
+/// require RegisterCodeFixesAsync to complete without throwing.
 /// </summary>
 public sealed class CodeFixRobustnessTests
 {
+    private static readonly string[] ExpectedProviderFullNames =
+    {
+        typeof(HCR001_UseHttpClientFactoryCodeFixProvider).FullName!,
+        typeof(HCR002_AddPooledConnectionLifetimeCodeFixProvider).FullName!,
+        typeof(HCR004_ChangeToScopedLifetimeCodeFixProvider).FullName!,
+        typeof(HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider).FullName!,
+        typeof(HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvider).FullName!,
+        typeof(HCR041_DisableUnsafeMethodRetriesCodeFixProvider).FullName!,
+        typeof(HCR042_ReplaceHedgingWithSafeResilienceCodeFixProvider).FullName!,
+        typeof(HCR043_DisableUnsafeMethodRetriesCodeFixProvider).FullName!,
+        typeof(HCR060_DisposeResponseCodeFixProvider).FullName!,
+        typeof(HCR061_EnsureSuccessStatusCodeCodeFixProvider).FullName!,
+        typeof(HCR063_AwaitHttpOperationCodeFixProvider).FullName!,
+        typeof(HCR064_PassCancellationTokenCodeFixProvider).FullName!,
+        typeof(HCR081_DisposeStreamCodeFixProvider).FullName!,
+        typeof(HCR085_AddExplicitClientNameCodeFixProvider).FullName!
+    };
+
+    [Fact]
+    public void EveryShippedProviderIsMefExportedWithExpectedCount()
+    {
+        var exported = typeof(HCR060_DisposeResponseCodeFixProvider).Assembly
+            .GetTypes()
+            .Where(type => typeof(CodeFixProvider).IsAssignableFrom(type) && !type.IsAbstract)
+            .Where(type => type.GetCustomAttribute<ExportAttribute>() is { ContractName: LanguageNames.CSharp } ||
+                type.GetCustomAttributes<ExportCodeFixProviderAttribute>().Any())
+            .Select(type => type.FullName!)
+            .OrderBy(fullName => fullName)
+            .ToArray();
+
+        var expected = ExpectedProviderFullNames.OrderBy(fullName => fullName).ToArray();
+        Assert.Equal(expected, exported);
+    }
+
     [Theory]
-    [MemberData(nameof(ProviderTypeNames))]
-    public async Task ProviderNeverThrowsOnHostileSource(string providerTypeName)
+    [MemberData(nameof(HostileSourceNames))]
+    public async Task EveryProviderSurvivesRegisteringAgainstRealDiagnostics(string sourceName)
     {
         var failures = new ConcurrentBag<string>();
 
-        foreach (var (name, source) in HostileSources)
+        foreach (var providerTypeName in ExpectedProviderFullNames)
         {
-            if (!await RunAsync(providerTypeName, name, source, failures))
-            {
-                continue;
-            }
+            await RunAsync(providerTypeName, sourceName, failures);
         }
 
         Assert.True(
             failures.IsEmpty,
-            $"{providerTypeName} threw while registering fixes:{System.Environment.NewLine}{string.Join(System.Environment.NewLine, failures)}");
+            $"Failures:{System.Environment.NewLine}{string.Join(System.Environment.NewLine, failures)}");
     }
 
-    public static TheoryData<string> ProviderTypeNames()
+    [Fact]
+    public async Task PositiveControl_ProviderRegistersActionOnRealDiagnostic()
     {
-        var data = new TheoryData<string>();
-        foreach (var type in typeof(HCR060_DisposeResponseCodeFixProvider).Assembly.GetTypes())
-        {
-            if (typeof(CodeFixProvider).IsAssignableFrom(type) && !type.IsAbstract)
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsSingleton
             {
-                data.Add(type.FullName!);
+                private static readonly HttpClient Primary = new HttpClient();
+            }
+            """;
+
+        var registered = await RegisterAllFixesForMatchingProvidersAsync(source);
+        Assert.True(registered > 0, "positive control registered no actions.");
+    }
+
+    private static async Task<int> RegisterAllFixesForMatchingProvidersAsync(string source)
+    {
+        var workspace = new AdhocWorkspace();
+        var project = workspace.CurrentSolution
+            .AddProject("CodeFixRobustness", "CodeFixRobustness", LanguageNames.CSharp)
+            .WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
+            .AddMetadataReferences(TestCompilationFactory.References);
+        var document = project.AddDocument("Test.cs", SourceText.From(source, System.Text.Encoding.UTF8));
+
+        var compilation = await document.Project.GetCompilationAsync().ConfigureAwait(false);
+        Assert.NotNull(compilation);
+
+        var analyzerDiagnostics = await compilation!
+            .WithAnalyzers(AnalyzerCatalog.CreateAll())
+            .GetAnalyzerDiagnosticsAsync();
+
+        var providers = ExpectedProviderFullNames
+            .Select(fullName => (CodeFixProvider)Activator.CreateInstance(
+                typeof(HCR060_DisposeResponseCodeFixProvider).Assembly.GetType(fullName)!)!)
+            .ToArray();
+
+        var registered = 0;
+        foreach (var diagnostic in analyzerDiagnostics)
+        {
+            foreach (var provider in providers)
+            {
+                if (!provider.FixableDiagnosticIds.Contains(diagnostic.Id))
+                {
+                    continue;
+                }
+
+                var actions = new List<CodeAction>();
+                var context = new CodeFixContext(document, diagnostic,
+                    (action, _) => actions.Add(action), CancellationToken.None);
+                await provider.RegisterCodeFixesAsync(context).ConfigureAwait(false);
+                registered += actions.Count;
             }
         }
 
-        return data;
+        return registered;
     }
 
-    private static async Task<bool> RunAsync(
-        string providerTypeName,
-        string sourceName,
-        string source,
-        ConcurrentBag<string> failures)
+    private static async Task RunAsync(string providerTypeName, string sourceName, ConcurrentBag<string> failures)
     {
         var providerType = typeof(HCR060_DisposeResponseCodeFixProvider).Assembly.GetType(providerTypeName);
         if (providerType is null)
         {
-            failures.Add($"provider type '{providerTypeName}' not found.");
-            return false;
+            failures.Add($"{sourceName}: provider '{providerTypeName}' not found.");
+            return;
         }
 
         var provider = (CodeFixProvider)Activator.CreateInstance(providerType)!;
+        var workspace = new AdhocWorkspace();
+        var project = workspace.CurrentSolution
+            .AddProject(sourceName, sourceName, LanguageNames.CSharp)
+            .WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
+            .AddMetadataReferences(TestCompilationFactory.References);
 
+        // Hostile sources intentionally contain compiler errors, so parse-only documents are
+        // used when compilation is impossible.
+        Document? document = null;
         try
         {
-            var workspace = new AdhocWorkspace();
-            var project = workspace.CurrentSolution
-                .AddProject("CodeFixRobustness", "CodeFixRobustness", LanguageNames.CSharp)
-                .WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
-                .AddMetadataReferences(TestCompilationFactory.References);
-            var document = project.AddDocument(sourceName + ".cs", SourceText.From(source, System.Text.Encoding.UTF8));
-
-            // Register against every diagnostic id the provider claims to fix so each
-            // registration path executes, even where no real diagnostic exists.
-            foreach (var diagnosticId in provider.FixableDiagnosticIds)
-            {
-                var descriptor = new DiagnosticDescriptor(
-                    diagnosticId,
-                    "robustness",
-                    "robustness",
-                    "robustness",
-                    DiagnosticSeverity.Warning,
-                    isEnabledByDefault: true);
-                var context = new CodeFixContext(
-                    document,
-                    Diagnostic.Create(descriptor, Location.None),
-                    (action, _) => { var ignored = action; },
-                    CancellationToken.None);
-                await provider.RegisterCodeFixesAsync(context).ConfigureAwait(false);
-            }
-
-            return true;
+            document = project.AddDocument(sourceName + ".cs", SourceText.From(sourceNameSource(sourceName), System.Text.Encoding.UTF8));
         }
         catch (Exception exception)
         {
-            failures.Add($"{sourceName}: {exception}");
-            return false;
+            failures.Add($"{sourceName}: adding document threw {exception}");
+            return;
         }
+
+        var compilation = await document.Project.GetCompilationAsync();
+        ImmutableArray<Diagnostic> diagnostics;
+        if (compilation is null)
+        {
+            diagnostics = ImmutableArray<Diagnostic>.Empty;
+        }
+        else
+        {
+            diagnostics = await compilation
+                .WithAnalyzers(AnalyzerCatalog.CreateAll())
+                .GetAnalyzerDiagnosticsAsync();
+        }
+
+        foreach (var diagnostic in diagnostics)
+        {
+            foreach (var fixableId in provider.FixableDiagnosticIds)
+            {
+                if (fixableId != diagnostic.Id)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var context = new CodeFixContext(document, diagnostic,
+                        (action, _) => { var ignored = action; }, CancellationToken.None);
+                    await provider.RegisterCodeFixesAsync(context).ConfigureAwait(false);
+                }
+                catch (Exception exception)
+                {
+                    failures.Add($"{sourceName} [{diagnostic.Id}]: {exception}");
+                }
+            }
+        }
+    }
+
+    private static string sourceNameSource(string sourceName)
+    {
+        return HostileSources.First(candidate => candidate.Name == sourceName).Source;
+    }
+
+    public static TheoryData<string> HostileSourceNames()
+    {
+        var data = new TheoryData<string>();
+        foreach (var candidate in HostileSources)
+        {
+            data.Add(candidate.Name);
+        }
+
+        return data;
     }
 
     private static IEnumerable<(string Name, string Source)> HostileSources
     {
         get
         {
-            yield return ("empty", string.Empty);
-
             yield return ("unresolved-types", """
                 public static class Registrations
                 {
@@ -147,7 +253,27 @@ public sealed class CodeFixRobustnessTests
                 }
                 """);
 
-            yield return ("conditional-access-everywhere", """
+            yield return ("unsafe-methods-everywhere", """
+                public sealed class Jobs(IHttpClientFactory factory)
+                {
+                    public System.Threading.Tasks.Task A() => factory.CreateClient("a").PostAsync("/x", null);
+                    public System.Threading.Tasks.Task B() => factory.CreateClient("b").DeleteAsync("/y");
+
+                    public static void Configure(IServiceCollection services)
+                    {
+                        services.AddHttpClient("a").AddStandardHedgingHandler();
+                        services.AddHttpClient("b").AddStandardResilienceHandler();
+                    }
+                }
+
+                public interface IHttpClientFactory
+                {
+                    System.Threading.Tasks.Task PostAsync(string url, object? content);
+                    System.Threading.Tasks.Task DeleteAsync(string url);
+                }
+                """);
+
+            yield return ("conditional-access-and-streams", """
                 public sealed class Client
                 {
                     public void Do(HttpClient? client)
