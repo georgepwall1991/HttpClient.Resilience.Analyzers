@@ -1230,4 +1230,22 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
 
         Assert.Empty(titles);
     }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenInitializerContainsInternalComment()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static readonly HttpClient Client = new HttpClient(/* default handler */);
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
 }

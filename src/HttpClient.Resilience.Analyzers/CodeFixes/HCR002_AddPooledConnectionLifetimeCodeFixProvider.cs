@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Composition;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HttpClient.Resilience.Analyzers.Diagnostics;
@@ -71,9 +72,16 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
 
     private static bool CanSafelyConfigureInitializer(ExpressionSyntax expression)
     {
+        // Replacing the whole expression would drop any comment inside it, so withhold the
+        // fix when the initializer carries significant internal trivia.
         return expression is BaseObjectCreationExpressionSyntax creation &&
             creation.ArgumentList?.Arguments.Count == 0 &&
-            creation.Initializer is null;
+            creation.Initializer is null &&
+            !creation.DescendantTrivia().Any(trivia => trivia.Kind() is
+                SyntaxKind.SingleLineCommentTrivia or
+                SyntaxKind.MultiLineCommentTrivia or
+                SyntaxKind.SingleLineDocumentationCommentTrivia or
+                SyntaxKind.MultiLineDocumentationCommentTrivia);
     }
 
     private static async Task<Document> ReplaceInitializerValueAsync(
