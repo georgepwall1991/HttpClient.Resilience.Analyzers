@@ -147,14 +147,14 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
             }
 
             if (ancestor switch
-                {
-                    MethodDeclarationSyntax method => HasStaticModifier(method.Modifiers),
-                    LocalFunctionStatementSyntax localFunction => HasStaticModifier(localFunction.Modifiers),
-                    SimpleLambdaExpressionSyntax simpleLambda => HasStaticModifier(simpleLambda.Modifiers),
-                    ParenthesizedLambdaExpressionSyntax parenthesizedLambda => HasStaticModifier(parenthesizedLambda.Modifiers),
-                    AnonymousMethodExpressionSyntax anonymousMethod => HasStaticModifier(anonymousMethod.Modifiers),
-                    _ => false
-                })
+            {
+                MethodDeclarationSyntax method => HasStaticModifier(method.Modifiers),
+                LocalFunctionStatementSyntax localFunction => HasStaticModifier(localFunction.Modifiers),
+                SimpleLambdaExpressionSyntax simpleLambda => HasStaticModifier(simpleLambda.Modifiers),
+                ParenthesizedLambdaExpressionSyntax parenthesizedLambda => HasStaticModifier(parenthesizedLambda.Modifiers),
+                AnonymousMethodExpressionSyntax anonymousMethod => HasStaticModifier(anonymousMethod.Modifiers),
+                _ => false
+            })
             {
                 return true;
             }
