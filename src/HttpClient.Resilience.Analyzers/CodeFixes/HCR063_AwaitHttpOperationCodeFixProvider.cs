@@ -42,7 +42,7 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
                 continue;
             }
 
-            // Match the surrounding convention: methods that already use ConfigureAwait(false)
+            // Match the surrounding convention: members that already use ConfigureAwait(false)
             // get an awaited call that preserves it.
             context.RegisterCodeFix(
                 CodeAction.Create(
@@ -122,10 +122,18 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
             .OfType<MemberDeclarationSyntax>()
             .FirstOrDefault()?
             .DescendantNodes()
-            .Any(node => node is MemberAccessExpressionSyntax
+            .Any(node => node is InvocationExpressionSyntax
             {
-                Name.Identifier.ValueText: "ConfigureAwait"
-            } && node.SpanStart < blockingExpression.SpanStart) == true;
+                ArgumentList.Arguments.Count: 1,
+                Expression: MemberAccessExpressionSyntax
+                {
+                    Name.Identifier.ValueText: "ConfigureAwait"
+                }
+            } configureAwaitInvocation &&
+                configureAwaitInvocation.ArgumentList.Arguments[0].Expression is LiteralExpressionSyntax
+                {
+                    RawKind: (int)SyntaxKind.FalseLiteralExpression
+                }) == true;
     }
 
     private static bool EndsWithConfigureAwait(ExpressionSyntax expression)
@@ -153,6 +161,14 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
             return document;
         }
 
+        // Collect interior comments from the original operation before any rewriting.
+        var comments = operation
+            .DescendantTokens()
+            .SelectMany(token => token.LeadingTrivia.Concat(token.TrailingTrivia))
+            .Where(trivia => trivia.IsKind(SyntaxKind.SingleLineCommentTrivia) ||
+                trivia.IsKind(SyntaxKind.MultiLineCommentTrivia))
+            .ToArray();
+
         if (appendConfigureAwait && !EndsWithConfigureAwait(operation))
         {
             operation = SyntaxFactory.InvocationExpression(
@@ -175,12 +191,6 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
         replacement = replacement
             .WithTriviaFrom(blockingExpression)
             .WithAdditionalAnnotations(Formatter.Annotation);
-        var comments = operation
-            .DescendantTokens()
-            .SelectMany(token => token.LeadingTrivia.Concat(token.TrailingTrivia))
-            .Where(trivia => trivia.IsKind(SyntaxKind.SingleLineCommentTrivia) ||
-                trivia.IsKind(SyntaxKind.MultiLineCommentTrivia))
-            .ToArray();
         if (comments.Length > 0)
         {
             replacement = replacement.WithLeadingTrivia(
