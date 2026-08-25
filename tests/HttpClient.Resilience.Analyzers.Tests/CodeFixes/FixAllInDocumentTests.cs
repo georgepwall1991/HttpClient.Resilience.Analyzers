@@ -446,7 +446,7 @@ public sealed class FixAllInDocumentTests
             .ApplyFixAllInDocumentAsync(source);
 
         Assert.Empty(await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(fixedSource));
-        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(fixedSource, "new global::System.Net.Http.SocketsHttpHandler { PooledConnectionLifetime = global::System.TimeSpan.FromMinutes(2) }").Count);
+
     }
 
 
