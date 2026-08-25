@@ -1190,4 +1190,44 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
 
         Assert.Empty(titles);
     }
+
+    [Fact]
+    public async Task CodeFix_ConfiguresPooledConnectionLifetimeOnStaticPropertyInitializer()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                public static HttpClient Client { get; } = new HttpClient();
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.NotEmpty(diagnostics);
+
+        var fixedSource = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("new global::System.Net.Http.SocketsHttpHandler", fixedSource);
+        Assert.Contains("PooledConnectionLifetime", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenPropertyInitializerAlreadyPassesHandler()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                public static HttpClient Client { get; } = new(new SocketsHttpHandler());
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
 }
