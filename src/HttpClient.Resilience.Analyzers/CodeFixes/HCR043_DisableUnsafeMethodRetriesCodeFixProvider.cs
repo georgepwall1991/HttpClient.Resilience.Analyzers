@@ -47,14 +47,34 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         {
             var node = root.FindNode(diagnostic.Location.SourceSpan);
             var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
+            if (invocation is null || semanticModel is null)
+            {
+                continue;
+            }
 
-            if (invocation is null ||
-                semanticModel is null ||
-                !TryGetHttpRetryStrategyOptionsCreation(
+            // The statement-based insertion requires a block; expression-bodied lambdas are
+            // handled by converting the whole lambda body.
+            var supportsStatementInsertion =
+                invocation.FirstAncestorOrSelf<StatementSyntax>()?.Parent is BlockSyntax ||
+                invocation.FirstAncestorOrSelf<LambdaExpressionSyntax>()?.Body is ExpressionSyntax;
+            if (!supportsStatementInsertion)
+            {
+                continue;
+            }
+
+            var hasInlineCreation = TryGetHttpRetryStrategyOptionsCreation(
+                invocation,
+                semanticModel,
+                context.CancellationToken,
+                out _);
+            var hasOptionsVariable = !hasInlineCreation &&
+                TryGetHttpRetryStrategyOptionsVariable(
                     invocation,
                     semanticModel,
                     context.CancellationToken,
-                    out _))
+                    out _);
+
+            if (!hasInlineCreation && !hasOptionsVariable)
             {
                 continue;
             }
@@ -79,31 +99,47 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         // Stryker disable once boolean: analyzer code fixes do not run on a captured SynchronizationContext
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
         var semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
-        if (root is null ||
-            semanticModel is null ||
-            !TryGetHttpRetryStrategyOptionsCreation(
-                invocation,
-                semanticModel,
-                cancellationToken,
-                out var objectCreation))
+        if (root is null || semanticModel is null)
         {
             return document;
         }
 
-        var optionsName = ChooseRetryOptionsName(invocation);
-        var declaration = CreateOptionsDeclaration(optionsName, objectCreation);
+        var hasInlineCreation = TryGetHttpRetryStrategyOptionsCreation(
+            invocation,
+            semanticModel,
+            cancellationToken,
+            out var objectCreation);
+        IdentifierNameSyntax? optionsIdentifier = null;
+        var hasOptionsVariable = !hasInlineCreation &&
+            TryGetHttpRetryStrategyOptionsVariable(
+                invocation,
+                semanticModel,
+                cancellationToken,
+                out optionsIdentifier);
+
+        if (!hasInlineCreation && !hasOptionsVariable)
+        {
+            return document;
+        }
+
+        var optionsName = hasInlineCreation
+            ? ChooseRetryOptionsName(invocation)
+            : optionsIdentifier!.Identifier.ValueText;
+        var declaration = hasInlineCreation ? CreateOptionsDeclaration(optionsName, objectCreation) : null;
         var disableCall = CreateDisableCall(optionsName);
         var identifier = SyntaxFactory.IdentifierName(optionsName);
 
         var lambda = invocation.FirstAncestorOrSelf<LambdaExpressionSyntax>();
-        if (lambda?.Body is ExpressionSyntax expressionBody)
+        if (hasInlineCreation && lambda?.Body is ExpressionSyntax expressionBody)
         {
             var rewrittenExpression = expressionBody.ReplaceNode(objectCreation, identifier);
-            var block = SyntaxFactory.Block(declaration, disableCall, SyntaxFactory.ExpressionStatement(rewrittenExpression));
-            return document.WithSyntaxRoot(
+            var block = SyntaxFactory.Block(declaration!, disableCall, SyntaxFactory.ExpressionStatement(rewrittenExpression));
+            var rewrittenRoot = EnsureResilienceImport(
                 root.ReplaceNode(
                     lambda,
-                    lambda.WithBody(block).WithAdditionalAnnotations(Formatter.Annotation)));
+                    lambda.WithBody(block).WithAdditionalAnnotations(Formatter.Annotation)),
+                semanticModel.Compilation);
+            return document.WithSyntaxRoot(rewrittenRoot);
         }
 
         var statement = invocation.FirstAncestorOrSelf<StatementSyntax>();
@@ -113,11 +149,61 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         }
 
         var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
-        editor.InsertBefore(statement, new SyntaxNode[] { declaration, disableCall });
-        editor.ReplaceNode(objectCreation, identifier);
-        return editor.GetChangedDocument();
+        if (hasInlineCreation)
+        {
+            editor.InsertBefore(statement, new SyntaxNode[] { declaration!, disableCall });
+            editor.ReplaceNode(objectCreation, identifier);
+        }
+        else
+        {
+            editor.InsertBefore(statement, disableCall);
+        }
+
+        var changedDocument = editor.GetChangedDocument();
+        var changedRoot = await changedDocument.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        if (changedRoot is null)
+        {
+            return changedDocument;
+        }
+
+        return document.WithSyntaxRoot(
+            EnsureResilienceImport(changedRoot, semanticModel.Compilation));
     }
 
+    private const string ResilienceNamespace = "Microsoft.Extensions.Http.Resilience";
+
+    private static SyntaxNode EnsureResilienceImport(SyntaxNode root, Compilation compilation)
+    {
+        // The generated DisableForUnsafeHttpMethods() call is an extension method from the
+        // resilience namespace; make sure that namespace is imported when it exists in the
+        // compilation (test stubs define a global-namespace stand-in instead).
+        if (compilation.GetTypeByMetadataName(
+                "Microsoft.Extensions.Http.Resilience.HttpRetryStrategyOptionsExtensions") is null ||
+            root is not CompilationUnitSyntax compilationUnit)
+        {
+            return root;
+        }
+
+        var alreadyImported = compilationUnit.Usings.Any(usingDirective =>
+            string.Equals(
+                usingDirective.Name?.ToFullString().Trim(),
+                ResilienceNamespace,
+                System.StringComparison.Ordinal) ||
+            string.Equals(
+                usingDirective.Name?.ToFullString().Trim(),
+                "global::" + ResilienceNamespace,
+                System.StringComparison.Ordinal));
+        if (alreadyImported)
+        {
+            return root;
+        }
+
+        return compilationUnit.WithUsings(
+            compilationUnit.Usings.Insert(
+                0,
+                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName(ResilienceNamespace))
+                    .WithAdditionalAnnotations(Formatter.Annotation)));
+    }
     private static bool TryGetHttpRetryStrategyOptionsCreation(
         InvocationExpressionSyntax invocation,
         SemanticModel semanticModel,
@@ -138,21 +224,91 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         }
 
         var type = semanticModel.GetTypeInfo(creation, cancellationToken).Type;
+        if (!IsHttpRetryStrategyOptionsType(type))
+        {
+            return false;
+        }
+        objectCreation = creation;
+        return true;
+    }
+
+    private static bool TryGetHttpRetryStrategyOptionsVariable(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        CancellationToken cancellationToken,
+        out IdentifierNameSyntax? optionsIdentifier)
+    {
+        optionsIdentifier = null;
+        if (!ResilienceRetryInvocation.IsFrameworkAddRetry(invocation, semanticModel, cancellationToken) ||
+            invocation.ArgumentList.Arguments.Count != 1)
+        {
+            return false;
+        }
+
+        var argument = SyntaxTransparency.Unwrap(invocation.ArgumentList.Arguments[0].Expression);
+        if (argument is not IdentifierNameSyntax identifier)
+        {
+            return false;
+        }
+
+        if (semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is not ILocalSymbol local ||
+            !IsHttpRetryStrategyOptionsType(local.Type))
+        {
+            return false;
+        }
+
+        // The inserted guard call must live in the same block, after the declaration that
+        // makes the options variable visible; otherwise the fix would not compile or would
+        // not affect the flagged pipeline.
+        var statement = invocation.FirstAncestorOrSelf<StatementSyntax>();
+        if (statement?.Parent is not BlockSyntax block)
+        {
+            return false;
+        }
+
+        if (!block.ChildNodes().OfType<LocalDeclarationStatementSyntax>()
+                .Any(candidate =>
+                    candidate.SpanStart < invocation.SpanStart &&
+                    semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is ILocalSymbol declared &&
+                    DeclaresLocal(candidate, declared)))
+        {
+            return false;
+        }
+        // Any earlier method call on the same options variable may already be a guard we do
+        // not recognize; adding ours blindly could double-guard or mask a custom strategy.
+        if (block.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                .Any(guardInvocation => guardInvocation.SpanStart < invocation.SpanStart &&
+                    guardInvocation.Expression is MemberAccessExpressionSyntax
+                    {
+                        Expression: IdentifierNameSyntax receiver
+                    } &&
+                    receiver.Identifier.ValueText == identifier.Identifier.ValueText))
+        {
+            return false;
+        }
+
+        optionsIdentifier = identifier;
+        return true;
+    }
+
+    private static bool DeclaresLocal(LocalDeclarationStatementSyntax declaration, ILocalSymbol local)
+    {
+        return declaration.Declaration.Variables
+            .Any(variable => string.Equals(variable.Identifier.ValueText, local.Name, System.StringComparison.Ordinal));
+    }
+
+    private static bool IsHttpRetryStrategyOptionsType(ITypeSymbol? type)
+    {
         if (type is null || type.Name != "HttpRetryStrategyOptions")
         {
             return false;
         }
 
         var containingNamespace = type.ContainingNamespace;
-        if (!containingNamespace.IsGlobalNamespace &&
-            containingNamespace.ToDisplayString() != "Microsoft.Extensions.Http.Resilience")
-        {
-            return false;
-        }
-
-        objectCreation = creation;
-        return true;
+        return containingNamespace.IsGlobalNamespace ||
+            containingNamespace.ToDisplayString() == "Microsoft.Extensions.Http.Resilience";
     }
+
 
     private static string ChooseRetryOptionsName(InvocationExpressionSyntax invocation)
     {
