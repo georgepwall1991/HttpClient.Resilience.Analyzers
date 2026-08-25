@@ -41,8 +41,11 @@ public sealed class FixAllInDocumentTests
             }
             """;
 
+        var diagnosticsBefore = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Equal(2, diagnosticsBefore.Length);
+
         var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
-            .ApplyFixAllInDocumentAsync(source);
+                    .ApplyFixAllInDocumentAsync(source);
 
         Assert.DoesNotContain("new HttpClient()", fixedSource);
         Assert.Contains("HttpClientFactory.CreateClient();", fixedSource, System.StringComparison.Ordinal);
@@ -68,8 +71,11 @@ public sealed class FixAllInDocumentTests
             }
             """;
 
+        var diagnosticsBefore = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Equal(2, diagnosticsBefore.Length);
+
         var fixedSource = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
-            .ApplyFixAllInDocumentAsync(source);
+                    .ApplyFixAllInDocumentAsync(source);
 
         Assert.Empty(await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(fixedSource));
         Assert.Contains("using var first =", fixedSource, System.StringComparison.Ordinal);
@@ -88,17 +94,24 @@ public sealed class FixAllInDocumentTests
             {
                 public async Task<string> UseAsync(HttpClient client, CancellationToken cancellationToken)
                 {
-                    var first = await client.GetStringAsync("https://example.com/primary", cancellationToken);
+                    var first = await client.GetStringAsync("https://example.com/primary");
                     var second = await client.GetStringAsync("https://example.com/secondary");
                     return first + second;
                 }
             }
             """;
 
+        var diagnosticsBefore = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Equal(2, diagnosticsBefore.Length);
+
         var fixedSource = await CodeFixVerifier<HCR064_CancellationAwareHttpAnalyzer, HCR064_PassCancellationTokenCodeFixProvider>
-            .ApplyFixAllInDocumentAsync(source);
+                    .ApplyFixAllInDocumentAsync(source);
 
         Assert.Empty(await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(fixedSource));
+        Assert.Contains(
+            "client.GetStringAsync(\"https://example.com/primary\", cancellationToken: cancellationToken)",
+            fixedSource,
+            System.StringComparison.Ordinal);
         Assert.Contains(
             "client.GetStringAsync(\"https://example.com/secondary\", cancellationToken: cancellationToken)",
             fixedSource,
@@ -123,8 +136,11 @@ public sealed class FixAllInDocumentTests
             }
             """;
 
+        var diagnosticsBefore = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Equal(2, diagnosticsBefore.Length);
+
         var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
-            .ApplyFixAllInDocumentAsync(source);
+                    .ApplyFixAllInDocumentAsync(source);
 
         Assert.DoesNotContain(".Result", fixedSource);
         Assert.Contains("await client.GetAsync(\"https://example.com/primary\")", fixedSource, System.StringComparison.Ordinal);
