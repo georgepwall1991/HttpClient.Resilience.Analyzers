@@ -45,8 +45,12 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
                 continue;
             }
 
-            var factoryName = FindFactoryParameterName(creation) ??
-                FindFactoryMemberName(creation, semanticModel, context.CancellationToken);
+            // Static methods and static lambdas cannot reference instance members or captured
+            // parameters, so neither fallback is valid there.
+            var factoryName = !RequiresStaticContext(creation)
+                ? FindFactoryParameterName(creation) ??
+                    FindFactoryMemberName(creation, semanticModel, context.CancellationToken)
+                : null;
             if (factoryName is null)
             {
                 continue;
@@ -142,10 +146,15 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
                 return false;
             }
 
-            if (ancestor is MethodDeclarationSyntax { Modifiers: var methodModifiers } &&
-                    methodModifiers.Any(SyntaxKind.StaticKeyword) ||
-                ancestor is LocalFunctionStatementSyntax { Modifiers: var localModifiers } &&
-                    localModifiers.Any(SyntaxKind.StaticKeyword))
+            if (ancestor switch
+                {
+                    MethodDeclarationSyntax method => HasStaticModifier(method.Modifiers),
+                    LocalFunctionStatementSyntax localFunction => HasStaticModifier(localFunction.Modifiers),
+                    SimpleLambdaExpressionSyntax simpleLambda => HasStaticModifier(simpleLambda.Modifiers),
+                    ParenthesizedLambdaExpressionSyntax parenthesizedLambda => HasStaticModifier(parenthesizedLambda.Modifiers),
+                    AnonymousMethodExpressionSyntax anonymousMethod => HasStaticModifier(anonymousMethod.Modifiers),
+                    _ => false
+                })
             {
                 return true;
             }
@@ -154,6 +163,10 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
         return false;
     }
 
+    private static bool HasStaticModifier(SyntaxTokenList modifiers)
+    {
+        return modifiers.Any(SyntaxKind.StaticKeyword);
+    }
     private static bool IsUsableFactoryType(ITypeSymbol? type)
     {
         return type?.NullableAnnotation != Microsoft.CodeAnalysis.NullableAnnotation.Annotated &&

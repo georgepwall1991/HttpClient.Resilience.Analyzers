@@ -830,4 +830,87 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
         Assert.Empty(titles);
     }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenStaticMethodCouldCapturePrimaryConstructorParameter()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService(IHttpClientFactory httpClientFactory)
+            {
+                public static HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_SkipsFactoryFieldShadowedByLocal()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private readonly IHttpClientFactory httpClientFactory = null!;
+
+                public HttpClient Create()
+                {
+                    IHttpClientFactory httpClientFactory = null!;
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenOnlyWriteOnlyFactoryPropertyExists()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private IHttpClientFactory ClientFactory { set { } }
+
+                public HttpClient Create()
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
 }
