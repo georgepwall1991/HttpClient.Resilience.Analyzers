@@ -30,7 +30,7 @@ Each rule page includes:
 
 | Rule | Title | Default profile | Fix support |
 |---|---|---:|---|
-| [`HCR004`](HCR004.md) | Do not inject typed `HttpClient` clients into singleton services | Warning | Guide |
+| [`HCR004`](HCR004.md) | Do not inject typed `HttpClient` clients into singleton services | Warning | Yes |
 | [`HCR005`](HCR005.md) | Do not separately register a typed client already registered by `AddHttpClient<T>()` | Warning | Yes |
 | [`HCR083`](HCR083.md) | Configure `BaseAddress` for typed clients that use relative URLs | Warning | Guide |
 | [`HCR084`](HCR084.md) | Avoid duplicated string literals for named `HttpClient` names | Warning | Guide |
