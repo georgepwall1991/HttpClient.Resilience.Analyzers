@@ -42,6 +42,17 @@ Those failures often appear only under traffic.
 
 The rules intentionally focus on concrete production risks. Heuristic checks use a lower default severity.
 
+## Automatic code fixes
+
+Fourteen rules ship lightbulb fixes, and all of them support Fix All:
+
+- Replace manual `new HttpClient()` with factory creation (HCR001) or configure `PooledConnectionLifetime` (HCR002)
+- Convert flagged singleton registrations to scoped (HCR004), remove duplicate typed-client registrations (HCR005) and stacked resilience handlers (HCR040)
+- Disable unsafe-method retries — parameterless handlers (HCR041), hedging-to-resilience conversions (HCR042), custom pipelines including existing options locals (HCR043)
+- Convert responses and HTTP content streams to `using` declarations (HCR060, HCR081)
+- Insert success checks before content reads (HCR061), await blocking `.Result`/`.Wait()` calls while preserving library `ConfigureAwait` conventions (HCR063), pass available `CancellationToken`s (HCR064)
+- Name conflicting implicit typed clients from the implementation type (HCR085)
+
 ## Who this is for
 
 ASP.NET Core and .NET teams that already use `HttpClient`, `IHttpClientFactory`, typed clients, Polly, or `Microsoft.Extensions.Http.Resilience`. This package does not replace those libraries—it flags the production-safety mistakes they cannot see at compile time.
