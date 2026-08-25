@@ -82,12 +82,15 @@ public sealed class HCR004_ChangeToScopedLifetimeCodeFixProvider : CodeFixProvid
 
         SimpleNameSyntax newName = memberAccess.Name switch
         {
-            GenericNameSyntax generic => SyntaxFactory.GenericName("AddScoped")
-                .WithTypeArgumentList(generic.TypeArgumentList),
-            _ => SyntaxFactory.IdentifierName("AddScoped")
+            GenericNameSyntax generic => generic
+                .WithIdentifier(SyntaxFactory.Identifier("AddScoped")
+                    .WithTriviaFrom(generic.Identifier)),
+            IdentifierNameSyntax identifier => (SimpleNameSyntax)SyntaxFactory.IdentifierName("AddScoped")
+                .WithTriviaFrom(identifier),
+            _ => (SimpleNameSyntax)memberAccess.Name
         };
 
-        var newMemberAccess = memberAccess.WithName(newName.WithTriviaFrom(memberAccess.Name));
+        var newMemberAccess = memberAccess.WithName(newName);
         var newInvocation = invocation
             .WithExpression(newMemberAccess)
             .WithAdditionalAnnotations(Formatter.Annotation);
