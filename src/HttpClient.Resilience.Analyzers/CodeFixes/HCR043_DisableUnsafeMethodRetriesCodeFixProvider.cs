@@ -47,6 +47,20 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         {
             var node = root.FindNode(diagnostic.Location.SourceSpan);
             var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
+            if (invocation is null || semanticModel is null)
+            {
+                continue;
+            }
+
+            // The statement-based insertion requires a block; expression-bodied lambdas are
+            // handled by converting the whole lambda body.
+            var supportsStatementInsertion =
+                invocation.FirstAncestorOrSelf<StatementSyntax>()?.Parent is BlockSyntax ||
+                invocation.FirstAncestorOrSelf<LambdaExpressionSyntax>()?.Body is ExpressionSyntax;
+            if (!supportsStatementInsertion)
+            {
+                continue;
+            }
 
             var hasInlineCreation = TryGetHttpRetryStrategyOptionsCreation(
                 invocation,
@@ -60,9 +74,7 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
                     context.CancellationToken,
                     out _);
 
-            if (invocation is null ||
-                semanticModel is null ||
-                (!hasInlineCreation && !hasOptionsVariable))
+            if (!hasInlineCreation && !hasOptionsVariable)
             {
                 continue;
             }
@@ -122,10 +134,12 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         {
             var rewrittenExpression = expressionBody.ReplaceNode(objectCreation, identifier);
             var block = SyntaxFactory.Block(declaration!, disableCall, SyntaxFactory.ExpressionStatement(rewrittenExpression));
-            return document.WithSyntaxRoot(
+            var rewrittenRoot = EnsureResilienceImport(
                 root.ReplaceNode(
                     lambda,
-                    lambda.WithBody(block).WithAdditionalAnnotations(Formatter.Annotation)));
+                    lambda.WithBody(block).WithAdditionalAnnotations(Formatter.Annotation)),
+                semanticModel.Compilation);
+            return document.WithSyntaxRoot(rewrittenRoot);
         }
 
         var statement = invocation.FirstAncestorOrSelf<StatementSyntax>();
@@ -145,10 +159,51 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
             editor.InsertBefore(statement, disableCall);
         }
 
-        return editor.GetChangedDocument();
+        var changedDocument = editor.GetChangedDocument();
+        var changedRoot = await changedDocument.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        if (changedRoot is null)
+        {
+            return changedDocument;
+        }
+
+        return document.WithSyntaxRoot(
+            EnsureResilienceImport(changedRoot, semanticModel.Compilation));
     }
 
+    private const string ResilienceNamespace = "Microsoft.Extensions.Http.Resilience";
 
+    private static SyntaxNode EnsureResilienceImport(SyntaxNode root, Compilation compilation)
+    {
+        // The generated DisableForUnsafeHttpMethods() call is an extension method from the
+        // resilience namespace; make sure that namespace is imported when it exists in the
+        // compilation (test stubs define a global-namespace stand-in instead).
+        if (compilation.GetTypeByMetadataName(
+                "Microsoft.Extensions.Http.Resilience.HttpRetryStrategyOptionsExtensions") is null ||
+            root is not CompilationUnitSyntax compilationUnit)
+        {
+            return root;
+        }
+
+        var alreadyImported = compilationUnit.Usings.Any(usingDirective =>
+            string.Equals(
+                usingDirective.Name?.ToFullString().Trim(),
+                ResilienceNamespace,
+                System.StringComparison.Ordinal) ||
+            string.Equals(
+                usingDirective.Name?.ToFullString().Trim(),
+                "global::" + ResilienceNamespace,
+                System.StringComparison.Ordinal));
+        if (alreadyImported)
+        {
+            return root;
+        }
+
+        return compilationUnit.WithUsings(
+            compilationUnit.Usings.Insert(
+                0,
+                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName(ResilienceNamespace))
+                    .WithAdditionalAnnotations(Formatter.Annotation)));
+    }
     private static bool TryGetHttpRetryStrategyOptionsCreation(
         InvocationExpressionSyntax invocation,
         SemanticModel semanticModel,

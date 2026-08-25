@@ -922,6 +922,21 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_AddsResilienceNamespaceImport_WhenMissing()
+    {
+        var source = CustomPipelineSources.TypedClient();
+
+        var fixedSource = await CodeFixVerifier<HCR043_CustomPipelineUnsafeRetryAnalyzer, HCR043_DisableUnsafeMethodRetriesCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "using Microsoft.Extensions.Http.Resilience;",
+            fixedSource,
+            StringComparison.Ordinal);
+        Assert.Contains("retryOptions.DisableForUnsafeHttpMethods();", fixedSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CodeFix_ConvertsExpressionLambdaToBlock()
     {
         var source = CustomPipelineSources.TypedClient(
