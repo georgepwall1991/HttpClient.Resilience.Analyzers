@@ -52,7 +52,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 Or add an explicit package reference:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.176" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.177" PrivateAssets="all" />
 ```
 
 `PrivateAssets="all"` prevents the analyzer from flowing to projects that consume your project.
@@ -62,7 +62,7 @@ For a whole solution, add the package once in `Directory.Build.props`:
 ```xml
 <Project>
   <ItemGroup>
-    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.176">
+    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.177">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
