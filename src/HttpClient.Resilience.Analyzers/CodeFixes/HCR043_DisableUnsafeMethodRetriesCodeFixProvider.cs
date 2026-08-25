@@ -202,8 +202,44 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
             return false;
         }
 
+        // The inserted guard call must live in the same block, after the declaration that
+        // makes the options variable visible; otherwise the fix would not compile or would
+        // not affect the flagged pipeline.
+        var statement = invocation.FirstAncestorOrSelf<StatementSyntax>();
+        if (statement?.Parent is not BlockSyntax block)
+        {
+            return false;
+        }
+
+        if (!block.ChildNodes().OfType<LocalDeclarationStatementSyntax>()
+                .Any(candidate =>
+                    candidate.SpanStart < invocation.SpanStart &&
+                    semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is ILocalSymbol declared &&
+                    DeclaresLocal(candidate, declared)))
+        {
+            return false;
+        }
+        // Any earlier method call on the same options variable may already be a guard we do
+        // not recognize; adding ours blindly could double-guard or mask a custom strategy.
+        if (block.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                .Any(guardInvocation => guardInvocation.SpanStart < invocation.SpanStart &&
+                    guardInvocation.Expression is MemberAccessExpressionSyntax
+                    {
+                        Expression: IdentifierNameSyntax receiver
+                    } &&
+                    receiver.Identifier.ValueText == identifier.Identifier.ValueText))
+        {
+            return false;
+        }
+
         optionsIdentifier = identifier;
         return true;
+    }
+
+    private static bool DeclaresLocal(LocalDeclarationStatementSyntax declaration, ILocalSymbol local)
+    {
+        return declaration.Declaration.Variables
+            .Any(variable => string.Equals(variable.Identifier.ValueText, local.Name, System.StringComparison.Ordinal));
     }
 
     private static bool IsHttpRetryStrategyOptionsType(ITypeSymbol? type)

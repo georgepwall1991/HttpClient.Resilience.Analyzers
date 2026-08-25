@@ -894,6 +894,34 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_IsNotOffered_WhenOptionsVariableAlreadyHasGuardAttempt()
+    {
+        var source = CustomPipelineSources.TypedClient(
+            pipelineConfigure: """
+                builder =>
+                        {
+                            var retryOptions = new HttpRetryStrategyOptions { MaxRetryAttempts = 3 };
+                            retryOptions.DisableForUnknownStrategy();
+                            builder.AddRetry(retryOptions);
+                        }
+                """,
+            extraTypes: """
+
+                public static class RetryOptionExtensions
+                {
+                    public static void DisableForUnknownStrategy(this HttpRetryStrategyOptions options)
+                    {
+                    }
+                }
+                """);
+
+        var titles = await CodeFixVerifier<HCR043_CustomPipelineUnsafeRetryAnalyzer, HCR043_DisableUnsafeMethodRetriesCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
     public async Task CodeFix_ConvertsExpressionLambdaToBlock()
     {
         var source = CustomPipelineSources.TypedClient(
