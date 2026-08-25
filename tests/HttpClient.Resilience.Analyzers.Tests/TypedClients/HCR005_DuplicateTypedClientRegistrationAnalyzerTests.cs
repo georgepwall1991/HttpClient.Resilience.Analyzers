@@ -923,6 +923,42 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_PreservesPrecedingCommentWhenRemovingDuplicate()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    // Keep the scoped lifetime explicit.
+                    services.AddTransient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("// Keep the scoped lifetime explicit.", fixedSource);
+        Assert.DoesNotContain("services.AddTransient<PaymentsClient>();", fixedSource);
+    }
+
+    [Fact]
     public async Task CodeFix_IsNotOffered_WhenDuplicateRegistrationHasFactoryPolicy()
     {
         const string source = """

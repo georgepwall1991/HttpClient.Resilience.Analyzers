@@ -80,6 +80,14 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
             return document;
         }
 
-        return document.WithSyntaxRoot(root.RemoveNode(statement, SyntaxRemoveOptions.KeepNoTrivia)!.WithAdditionalAnnotations(Formatter.Annotation));
+        // KeepExteriorTrivia preserves comments attached above or beside the removed
+        // registration; the formatter annotation cleans up the leftover blank lines.
+        var newRoot = root.RemoveNode(statement, SyntaxRemoveOptions.KeepExteriorTrivia);
+        if (newRoot is null)
+        {
+            return document;
+        }
+
+        return document.WithSyntaxRoot(newRoot.WithAdditionalAnnotations(Formatter.Annotation));
     }
 }
