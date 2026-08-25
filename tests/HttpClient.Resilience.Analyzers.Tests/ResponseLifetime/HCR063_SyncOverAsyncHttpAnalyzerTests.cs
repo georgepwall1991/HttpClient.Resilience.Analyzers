@@ -279,6 +279,119 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
     }
 
     [Fact]
+    public async Task CodeFix_AppendsConfigureAwaitFalseWhenMethodAlreadyUsesIt()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    Task<HttpResponseMessage> other = client.GetAsync("https://example.com");
+                    await other.ConfigureAwait(false);
+                    Task<HttpResponseMessage> responseTask;
+                    responseTask = client.GetAsync("https://example.com");
+                    return responseTask.Result;
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "return await responseTask.ConfigureAwait(false);",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CodeFix_OmitsConfigureAwaitFalseWhenMethodDoesNotUseIt()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    Task<HttpResponseMessage> responseTask;
+                    responseTask = client.GetAsync("https://example.com");
+                    return responseTask.Result;
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("return await responseTask;", fixedSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("responseTask.ConfigureAwait", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_IgnoresConfigureAwaitTrueUsage()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    Task<HttpResponseMessage> other = client.GetAsync("https://example.com");
+                    await other.ConfigureAwait(true);
+                    Task<HttpResponseMessage> responseTask;
+                    responseTask = client.GetAsync("https://example.com");
+                    return responseTask.Result;
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "return await responseTask;",
+            fixedSource,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("responseTask.ConfigureAwait", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_AppendsConfigureAwaitFalseFromLaterUsageInMember()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    Task<HttpResponseMessage> responseTask;
+                    responseTask = client.GetAsync("https://example.com");
+                    var result = responseTask.Result;
+                    await client.GetAsync("https://example.com").ConfigureAwait(false);
+                    return result;
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR063_SyncOverAsyncHttpAnalyzer, HCR063_AwaitHttpOperationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains(
+            "await responseTask.ConfigureAwait(false);",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenHttpContentAsyncResultIsRead()
     {
         const string source = """

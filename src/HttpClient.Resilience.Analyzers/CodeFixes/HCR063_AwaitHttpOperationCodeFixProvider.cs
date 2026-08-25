@@ -42,6 +42,8 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
                 continue;
             }
 
+            // Match the surrounding convention: members that already use ConfigureAwait(false)
+            // get an awaited call that preserves it.
             context.RegisterCodeFix(
                 CodeAction.Create(
                     "Await the HTTP operation",
@@ -49,6 +51,7 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
                         context.Document,
                         blockingExpression,
                         operation,
+                        appendConfigureAwait: UsesConfigureAwait(blockingExpression),
                         cancellationToken),
                     nameof(HCR063_AwaitHttpOperationCodeFixProvider)),
                 diagnostic);
@@ -113,16 +116,70 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
         };
     }
 
+    private static bool UsesConfigureAwait(ExpressionSyntax blockingExpression)
+    {
+        return blockingExpression.Ancestors()
+            .OfType<MemberDeclarationSyntax>()
+            .FirstOrDefault()?
+            .DescendantNodes()
+            .Any(node => node is InvocationExpressionSyntax
+            {
+                ArgumentList.Arguments.Count: 1,
+                Expression: MemberAccessExpressionSyntax
+                {
+                    Name.Identifier.ValueText: "ConfigureAwait"
+                }
+            } configureAwaitInvocation &&
+                configureAwaitInvocation.ArgumentList.Arguments[0].Expression is LiteralExpressionSyntax
+                {
+                    RawKind: (int)SyntaxKind.FalseLiteralExpression
+                }) == true;
+    }
+
+    private static bool EndsWithConfigureAwait(ExpressionSyntax expression)
+    {
+        return expression is InvocationExpressionSyntax
+        {
+            ArgumentList.Arguments.Count: 1,
+            Expression: MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "ConfigureAwait"
+            }
+        };
+    }
+
     private static async Task<Document> ReplaceWithAwaitAsync(
         Document document,
         ExpressionSyntax blockingExpression,
         ExpressionSyntax operation,
+        bool appendConfigureAwait,
         CancellationToken cancellationToken)
     {
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
         if (root is null)
         {
             return document;
+        }
+
+        // Collect interior comments from the original operation before any rewriting.
+        var comments = operation
+            .DescendantTokens()
+            .SelectMany(token => token.LeadingTrivia.Concat(token.TrailingTrivia))
+            .Where(trivia => trivia.IsKind(SyntaxKind.SingleLineCommentTrivia) ||
+                trivia.IsKind(SyntaxKind.MultiLineCommentTrivia))
+            .ToArray();
+
+        if (appendConfigureAwait && !EndsWithConfigureAwait(operation))
+        {
+            operation = SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    operation.WithoutTrivia(),
+                    SyntaxFactory.IdentifierName("ConfigureAwait")),
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(
+                            SyntaxKind.FalseLiteralExpression)))));
         }
 
         ExpressionSyntax replacement = SyntaxFactory.AwaitExpression(operation.WithoutTrivia());
@@ -134,12 +191,6 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
         replacement = replacement
             .WithTriviaFrom(blockingExpression)
             .WithAdditionalAnnotations(Formatter.Annotation);
-        var comments = operation
-            .DescendantTokens()
-            .SelectMany(token => token.LeadingTrivia.Concat(token.TrailingTrivia))
-            .Where(trivia => trivia.IsKind(SyntaxKind.SingleLineCommentTrivia) ||
-                trivia.IsKind(SyntaxKind.MultiLineCommentTrivia))
-            .ToArray();
         if (comments.Length > 0)
         {
             replacement = replacement.WithLeadingTrivia(
