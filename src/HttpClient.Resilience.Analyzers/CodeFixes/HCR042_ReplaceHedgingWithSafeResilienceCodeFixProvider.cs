@@ -63,7 +63,7 @@ public sealed class HCR042_ReplaceHedgingWithSafeResilienceCodeFixProvider : Cod
             SyntaxFactory.IdentifierName("AddStandardResilienceHandler")
                 .WithTriviaFrom(memberAccess.Name));
         var argument = SyntaxFactory.Argument(
-            SyntaxFactory.ParseExpression("options => options.Retry.DisableForUnsafeHttpMethods()"));
+            CodeFixExpressionFactory.CreateDisableForUnsafeHttpMethodsLambda());
         var newInvocation = invocation
             .WithExpression(newMemberAccess)
             .WithArgumentList(SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(argument)))
