@@ -65,7 +65,7 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         }
 
         var argument = SyntaxFactory.Argument(
-            SyntaxFactory.ParseExpression("options => options.Retry.DisableForUnsafeHttpMethods()"));
+            CodeFixExpressionFactory.CreateDisableForUnsafeHttpMethodsLambda());
         var newInvocation = invocation
             .WithArgumentList(SyntaxFactory.ArgumentList(SyntaxFactory.SingletonSeparatedList(argument)))
             .WithAdditionalAnnotations(Formatter.Annotation);
