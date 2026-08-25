@@ -31,22 +31,24 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
             return;
         }
 
-        var diagnostic = context.Diagnostics[0];
-        var node = root.FindNode(diagnostic.Location.SourceSpan);
-        var statement = node.FirstAncestorOrSelf<ExpressionStatementSyntax>();
-        var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
-
-        if (statement is null || invocation is null || !CanSafelyRemove(statement, invocation))
+        foreach (var diagnostic in context.Diagnostics)
         {
-            return;
-        }
+            var node = root.FindNode(diagnostic.Location.SourceSpan);
+            var statement = node.FirstAncestorOrSelf<ExpressionStatementSyntax>();
+            var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
 
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                "Remove duplicate typed-client registration",
-                cancellationToken => RemoveStatementAsync(context.Document, statement, cancellationToken),
-                nameof(HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider)),
-            diagnostic);
+            if (statement is null || invocation is null || !CanSafelyRemove(statement, invocation))
+            {
+                continue;
+            }
+
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    "Remove duplicate typed-client registration",
+                    cancellationToken => RemoveStatementAsync(context.Document, statement, cancellationToken),
+                    nameof(HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider)),
+                diagnostic);
+        }
     }
 
     private static bool CanSafelyRemove(

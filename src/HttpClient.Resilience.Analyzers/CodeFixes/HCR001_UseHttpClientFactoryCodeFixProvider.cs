@@ -33,27 +33,29 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
             return;
         }
 
-        var diagnostic = context.Diagnostics[0];
-        var node = root.FindNode(diagnostic.Location.SourceSpan);
-        var creation = node as BaseObjectCreationExpressionSyntax ??
-            node.FirstAncestorOrSelf<BaseObjectCreationExpressionSyntax>();
-        if (creation is null)
+        foreach (var diagnostic in context.Diagnostics)
         {
-            return;
-        }
+            var node = root.FindNode(diagnostic.Location.SourceSpan);
+            var creation = node as BaseObjectCreationExpressionSyntax ??
+                node.FirstAncestorOrSelf<BaseObjectCreationExpressionSyntax>();
+            if (creation is null)
+            {
+                continue;
+            }
 
-        var factoryName = FindFactoryParameterName(creation);
-        if (factoryName is null)
-        {
-            return;
-        }
+            var factoryName = FindFactoryParameterName(creation);
+            if (factoryName is null)
+            {
+                continue;
+            }
 
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                "Create client with IHttpClientFactory",
-                cancellationToken => UseFactoryAsync(context.Document, creation, factoryName, cancellationToken),
-                nameof(HCR001_UseHttpClientFactoryCodeFixProvider)),
-            diagnostic);
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    "Create client with IHttpClientFactory",
+                    cancellationToken => UseFactoryAsync(context.Document, creation, factoryName, cancellationToken),
+                    nameof(HCR001_UseHttpClientFactoryCodeFixProvider)),
+                diagnostic);
+        }
     }
 
     private static string? FindFactoryParameterName(SyntaxNode node)

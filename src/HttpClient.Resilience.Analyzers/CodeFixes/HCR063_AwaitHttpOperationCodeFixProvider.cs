@@ -33,24 +33,26 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
             return;
         }
 
-        var diagnostic = context.Diagnostics[0];
-        var node = root.FindNode(diagnostic.Location.SourceSpan);
-        var blockingExpression = GetBlockingExpression(node, out var operation);
-        if (blockingExpression is null || operation is null || !IsInsideAsyncFunction(blockingExpression))
+        foreach (var diagnostic in context.Diagnostics)
         {
-            return;
-        }
+            var node = root.FindNode(diagnostic.Location.SourceSpan);
+            var blockingExpression = GetBlockingExpression(node, out var operation);
+            if (blockingExpression is null || operation is null || !IsInsideAsyncFunction(blockingExpression))
+            {
+                continue;
+            }
 
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                "Await the HTTP operation",
-                cancellationToken => ReplaceWithAwaitAsync(
-                    context.Document,
-                    blockingExpression,
-                    operation,
-                    cancellationToken),
-                nameof(HCR063_AwaitHttpOperationCodeFixProvider)),
-            diagnostic);
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    "Await the HTTP operation",
+                    cancellationToken => ReplaceWithAwaitAsync(
+                        context.Document,
+                        blockingExpression,
+                        operation,
+                        cancellationToken),
+                    nameof(HCR063_AwaitHttpOperationCodeFixProvider)),
+                diagnostic);
+        }
     }
 
     private static ExpressionSyntax? GetBlockingExpression(SyntaxNode node, out ExpressionSyntax? operation)

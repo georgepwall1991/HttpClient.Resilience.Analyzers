@@ -32,45 +32,47 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
             return;
         }
 
-        var diagnostic = context.Diagnostics[0];
-        var node = root.FindNode(diagnostic.Location.SourceSpan);
-        var declaration = node.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>();
-
-        if (declaration is not null &&
-            declaration.UsingKeyword == default &&
-            declaration.Declaration.Variables.Count == 1)
+        foreach (var diagnostic in context.Diagnostics)
         {
+            var node = root.FindNode(diagnostic.Location.SourceSpan);
+            var declaration = node.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>();
+
+            if (declaration is not null &&
+                declaration.UsingKeyword == default &&
+                declaration.Declaration.Variables.Count == 1)
+            {
+                context.RegisterCodeFix(
+                    CodeAction.Create(
+                        "Dispose response with using declaration",
+                        cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
+                        nameof(HCR060_DisposeResponseCodeFixProvider) + ".AddUsingDeclaration"),
+                    diagnostic);
+                continue;
+            }
+
+            var assignment = node.FirstAncestorOrSelf<AssignmentExpressionSyntax>();
+            if (!TryGetAdjacentDeclaration(
+                    assignment,
+                    out var block,
+                    out var adjacentDeclaration,
+                    out var assignmentStatement))
+            {
+                continue;
+            }
+
             context.RegisterCodeFix(
                 CodeAction.Create(
                     "Dispose response with using declaration",
-                    cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
-                    nameof(HCR060_DisposeResponseCodeFixProvider)),
+                    cancellationToken => MergeDeclarationAndAssignmentAsync(
+                        context.Document,
+                        block,
+                        adjacentDeclaration,
+                        assignment!,
+                        assignmentStatement,
+                        cancellationToken),
+                    nameof(HCR060_DisposeResponseCodeFixProvider) + ".MergeDeclarationAndAssignment"),
                 diagnostic);
-            return;
         }
-
-        var assignment = node.FirstAncestorOrSelf<AssignmentExpressionSyntax>();
-        if (!TryGetAdjacentDeclaration(
-                assignment,
-                out var block,
-                out var adjacentDeclaration,
-                out var assignmentStatement))
-        {
-            return;
-        }
-
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                "Dispose response with using declaration",
-                cancellationToken => MergeDeclarationAndAssignmentAsync(
-                    context.Document,
-                    block,
-                    adjacentDeclaration,
-                    assignment!,
-                    assignmentStatement,
-                    cancellationToken),
-                nameof(HCR060_DisposeResponseCodeFixProvider)),
-            diagnostic);
     }
 
     private static bool TryGetAdjacentDeclaration(

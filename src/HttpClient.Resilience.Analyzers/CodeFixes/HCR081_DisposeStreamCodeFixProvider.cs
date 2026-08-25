@@ -32,46 +32,48 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
             return;
         }
 
-        var diagnostic = context.Diagnostics[0];
-        var node = root.FindNode(diagnostic.Location.SourceSpan);
-        var declaration = node.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>();
-
-        if (declaration is not null &&
-            declaration.UsingKeyword == default &&
-            declaration.AwaitKeyword == default &&
-            declaration.Declaration.Variables.Count == 1)
+        foreach (var diagnostic in context.Diagnostics)
         {
+            var node = root.FindNode(diagnostic.Location.SourceSpan);
+            var declaration = node.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>();
+
+            if (declaration is not null &&
+                declaration.UsingKeyword == default &&
+                declaration.AwaitKeyword == default &&
+                declaration.Declaration.Variables.Count == 1)
+            {
+                context.RegisterCodeFix(
+                    CodeAction.Create(
+                        "Dispose stream with using declaration",
+                        cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
+                        nameof(HCR081_DisposeStreamCodeFixProvider) + ".AddUsingDeclaration"),
+                    diagnostic);
+                continue;
+            }
+
+            var assignment = node.FirstAncestorOrSelf<AssignmentExpressionSyntax>();
+            if (!TryGetAdjacentDeclaration(
+                    assignment,
+                    out var block,
+                    out var adjacentDeclaration,
+                    out var assignmentStatement))
+            {
+                continue;
+            }
+
             context.RegisterCodeFix(
                 CodeAction.Create(
                     "Dispose stream with using declaration",
-                    cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
-                    nameof(HCR081_DisposeStreamCodeFixProvider)),
+                    cancellationToken => MergeDeclarationAndAssignmentAsync(
+                        context.Document,
+                        block,
+                        adjacentDeclaration,
+                        assignment!,
+                        assignmentStatement,
+                        cancellationToken),
+                    nameof(HCR081_DisposeStreamCodeFixProvider) + ".MergeDeclarationAndAssignment"),
                 diagnostic);
-            return;
         }
-
-        var assignment = node.FirstAncestorOrSelf<AssignmentExpressionSyntax>();
-        if (!TryGetAdjacentDeclaration(
-                assignment,
-                out var block,
-                out var adjacentDeclaration,
-                out var assignmentStatement))
-        {
-            return;
-        }
-
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                "Dispose stream with using declaration",
-                cancellationToken => MergeDeclarationAndAssignmentAsync(
-                    context.Document,
-                    block,
-                    adjacentDeclaration,
-                    assignment!,
-                    assignmentStatement,
-                    cancellationToken),
-                nameof(HCR081_DisposeStreamCodeFixProvider)),
-            diagnostic);
     }
 
     private static bool TryGetAdjacentDeclaration(

@@ -40,32 +40,35 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
             return;
         }
 
-        var diagnostic = context.Diagnostics[0];
-        var node = root.FindNode(diagnostic.Location.SourceSpan);
-        var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
         var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken)
             .ConfigureAwait(false);
 
-        if (invocation is null ||
-            semanticModel is null ||
-            !TryGetHttpRetryStrategyOptionsCreation(
-                invocation,
-                semanticModel,
-                context.CancellationToken,
-                out _))
+        foreach (var diagnostic in context.Diagnostics)
         {
-            return;
-        }
+            var node = root.FindNode(diagnostic.Location.SourceSpan);
+            var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
 
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                Title,
-                cancellationToken => DisableUnsafeMethodRetriesAsync(
-                    context.Document,
+            if (invocation is null ||
+                semanticModel is null ||
+                !TryGetHttpRetryStrategyOptionsCreation(
                     invocation,
-                    cancellationToken),
-                nameof(HCR043_DisableUnsafeMethodRetriesCodeFixProvider)),
-            diagnostic);
+                    semanticModel,
+                    context.CancellationToken,
+                    out _))
+            {
+                continue;
+            }
+
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    Title,
+                    cancellationToken => DisableUnsafeMethodRetriesAsync(
+                        context.Document,
+                        invocation,
+                        cancellationToken),
+                    nameof(HCR043_DisableUnsafeMethodRetriesCodeFixProvider)),
+                diagnostic);
+        }
     }
 
     private static async Task<Document> DisableUnsafeMethodRetriesAsync(
