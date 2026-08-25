@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HttpClient.Resilience.Analyzers.Diagnostics;
+using HttpClient.Resilience.Analyzers.KnownSymbols;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
@@ -28,7 +29,9 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
     public override async Task RegisterCodeFixesAsync(CodeFixContext context)
     {
         var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
-        if (root is null)
+        var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken)
+            .ConfigureAwait(false);
+        if (root is null || semanticModel is null)
         {
             return;
         }
@@ -43,7 +46,8 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
                 continue;
             }
 
-            var factoryName = FindFactoryParameterName(creation);
+            var factoryName = FindFactoryParameterName(creation) ??
+                FindFactoryMemberName(creation, semanticModel, context.CancellationToken);
             if (factoryName is null)
             {
                 continue;
@@ -83,6 +87,32 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
         }
 
         return null;
+    }
+
+    private static string? FindFactoryMemberName(
+        SyntaxNode node,
+        SemanticModel semanticModel,
+        CancellationToken cancellationToken)
+    {
+        var containingType = node.FirstAncestorOrSelf<TypeDeclarationSyntax>();
+        if (containingType is null)
+        {
+            return null;
+        }
+
+        var typeSymbol = semanticModel.GetDeclaredSymbol(containingType, cancellationToken);
+        if (typeSymbol is null)
+        {
+            return null;
+        }
+
+        var factoryMembers = typeSymbol.GetMembers()
+            .Where(member => member is IFieldSymbol field && HttpClientSymbols.IsHttpClientFactory(field.Type) ||
+                member is IPropertySymbol property && HttpClientSymbols.IsHttpClientFactory(property.Type))
+                .OrderBy(member => member.Name.IndexOf("Factory", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 0 : 1)
+            .ToList();
+
+        return factoryMembers.Count == 0 ? null : factoryMembers[0].Name;
     }
 
     private static string? FindFactoryParameterName(SeparatedSyntaxList<ParameterSyntax> parameters)
