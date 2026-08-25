@@ -96,8 +96,9 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
 
     private static bool BodyAlreadyDisablesRetries(SyntaxNode body, string parameterName)
     {
-        // Both checks target the exact <parameter>.Retry member; lookalikes on other
-        // objects do not suppress the fix.
+        // Both checks target the exact <parameter>.Retry member. Any existing disable call
+        // suppresses the fix even when it binds to a custom extension: an injected bare call
+        // would bind to the same custom method and never satisfy HCR041.
         return body.DescendantNodesAndSelf()
             .OfType<InvocationExpressionSyntax>()
             .Any(invocation => IsParameterRetryMember(invocation.Expression, parameterName, "DisableForUnsafeHttpMethods")) ||

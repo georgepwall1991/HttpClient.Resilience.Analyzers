@@ -450,4 +450,38 @@ public sealed class FixAllInDocumentTests
     }
 
 
+
+    [Fact]
+    public async Task HCR081_FixAllConvertsEveryStreamDeclarationToUsing()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response, Stream destination, CancellationToken cancellationToken)
+                {
+                    var first = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    await first.CopyToAsync(destination, cancellationToken);
+                    var second = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    await second.CopyToAsync(destination, cancellationToken);
+                }
+            }
+            """;
+
+        var diagnosticsBefore = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Equal(2, diagnosticsBefore.Length);
+
+        var fixedSource = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .ApplyFixAllInDocumentAsync(source);
+
+        Assert.Empty(await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(fixedSource));
+        Assert.Contains("using var first =", fixedSource, System.StringComparison.Ordinal);
+        Assert.Contains("using var second =", fixedSource, System.StringComparison.Ordinal);
+    }
+
+
 }
