@@ -1,3 +1,4 @@
+using System.Linq;
 using HttpClient.Resilience.Analyzers.Analyzers.TypedClients;
 using HttpClient.Resilience.Analyzers.CodeFixes;
 using HttpClient.Resilience.Analyzers.Diagnostics;
@@ -104,6 +105,118 @@ public sealed class HCR085_AddExplicitClientNameCodeFixProviderTests
         Assert.Contains("\"adyen-payments-client\"", fixedSource, System.StringComparison.Ordinal);
 
         // Naming the flagged registration resolves the shared-implicit-name conflict.
+        Assert.Empty(await AnalyzerVerifier<HCR085_MultipleTypedClientsShareImplicitNameAnalyzer>
+            .GetDiagnosticsAsync(fixedSource));
+    }
+
+
+    private const string ConfiguredFramework = """
+        using System;
+        using System.Net.Http;
+
+        public interface IServiceCollection
+        {
+        }
+
+        public interface IHttpClientBuilder
+        {
+        }
+
+        public static class ServiceCollectionExtensions
+        {
+            public static IHttpClientBuilder AddHttpClient<TService, TImplementation>(
+                this IServiceCollection services,
+                Action<HttpClient> configureClient)
+                where TImplementation : TService =>
+                default!;
+
+            public static IHttpClientBuilder AddHttpClient<TService, TImplementation>(
+                this IServiceCollection services,
+                string name,
+                Action<HttpClient> configureClient)
+                where TImplementation : TService =>
+                default!;
+        }
+        """;
+
+    [Fact]
+    public async Task CodeFix_InsertsNameBeforeConfigureDelegate()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<IPaymentsClient, StripePaymentsClient>(
+                        client => client.BaseAddress = new("https://stripe.example"));
+                    services.AddHttpClient<IPaymentsClient, AdyenPaymentsClient>(
+                        client => client.BaseAddress = new("https://adyen.example"));
+                }
+            }
+
+            public interface IPaymentsClient
+            {
+            }
+
+            public sealed class StripePaymentsClient : IPaymentsClient
+            {
+            }
+
+            public sealed class AdyenPaymentsClient : IPaymentsClient
+            {
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR085_MultipleTypedClientsShareImplicitNameAnalyzer, HCR085_AddExplicitClientNameCodeFixProvider>
+            .ApplyFirstCodeFixAsync(ConfiguredFramework + source);
+
+        Assert.Contains(
+            "\"adyen-payments-client\", client => client.BaseAddress",
+            fixedSource,
+            System.StringComparison.Ordinal);
+        Assert.Empty(await AnalyzerVerifier<HCR085_MultipleTypedClientsShareImplicitNameAnalyzer>
+            .GetDiagnosticsAsync(fixedSource));
+    }
+
+    [Fact]
+    public async Task CodeFix_DistinguishesSameLeafNamesAcrossNamespaces()
+    {
+        const string source = """
+            public interface IPaymentsClient
+            {
+            }
+
+            namespace Payments
+            {
+                public sealed class StripePaymentsClient : global::IPaymentsClient
+                {
+                }
+            }
+
+            namespace Audit
+            {
+                public sealed class StripePaymentsClient : global::IPaymentsClient
+                {
+                }
+            }
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<IPaymentsClient, Payments.StripePaymentsClient>();
+                    services.AddHttpClient<IPaymentsClient, Audit.StripePaymentsClient>();
+                }
+            }
+            """;
+
+        var diagnosticsBefore = await AnalyzerVerifier<HCR085_MultipleTypedClientsShareImplicitNameAnalyzer>
+            .GetDiagnosticsAsync(source, Framework);
+        Assert.Single(diagnosticsBefore);
+
+        var fixedSource = await CodeFixVerifier<HCR085_MultipleTypedClientsShareImplicitNameAnalyzer, HCR085_AddExplicitClientNameCodeFixProvider>
+            .ApplyFirstCodeFixAsync(Framework + source);
+
         Assert.Empty(await AnalyzerVerifier<HCR085_MultipleTypedClientsShareImplicitNameAnalyzer>
             .GetDiagnosticsAsync(fixedSource));
     }

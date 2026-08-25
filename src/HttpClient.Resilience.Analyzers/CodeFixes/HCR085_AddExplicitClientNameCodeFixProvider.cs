@@ -54,11 +54,7 @@ public sealed class HCR085_AddExplicitClientNameCodeFixProvider : CodeFixProvide
             {
                 continue;
             }
-            var implementationTypeName = GetTypeName(genericName.TypeArgumentList.Arguments[1]);
-            if (implementationTypeName.Length == 0)
-            {
-                continue;
-            }
+            var implementationType = genericName.TypeArgumentList.Arguments[1];
 
             context.RegisterCodeFix(
                 CodeAction.Create(
@@ -66,7 +62,7 @@ public sealed class HCR085_AddExplicitClientNameCodeFixProvider : CodeFixProvide
                     cancellationToken => AddExplicitNameAsync(
                         context.Document,
                         invocation,
-                        implementationTypeName,
+                        implementationType,
                         cancellationToken),
                     nameof(HCR085_AddExplicitClientNameCodeFixProvider)),
                 diagnostic);
@@ -76,52 +72,72 @@ public sealed class HCR085_AddExplicitClientNameCodeFixProvider : CodeFixProvide
     private static async Task<Document> AddExplicitNameAsync(
         Document document,
         InvocationExpressionSyntax invocation,
-        string implementationTypeName,
+        TypeSyntax implementationType,
         CancellationToken cancellationToken)
     {
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-
-        if (root is null)
+        var semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+        if (root is null || semanticModel is null)
         {
             return document;
         }
 
+        var type = semanticModel.GetTypeInfo(implementationType, cancellationToken).Type;
+        if (type is null || type is IErrorTypeSymbol)
+        {
+            return document;
+        }
+
+        // The fully qualified name keeps names distinct even when two implementations share
+        // a leaf name (OuterA.Client vs OuterB.Client) or differ only by namespace.
+        var fullName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         var nameLiteral = SyntaxFactory.LiteralExpression(
             SyntaxKind.StringLiteralExpression,
-            SyntaxFactory.Literal(ToKebabCase(implementationTypeName)));
+            SyntaxFactory.Literal(ToKebabCase(fullName)));
         var nameArgument = SyntaxFactory.Argument(nameLiteral)
             .WithAdditionalAnnotations(Formatter.Annotation);
 
+        // Framework overloads expect the name first: (string) or (string, Action<HttpClient>).
         return document.WithSyntaxRoot(root.ReplaceNode(
             invocation,
-            invocation.WithArgumentList(invocation.ArgumentList.AddArguments(nameArgument))));
-    }
-
-    private static string GetTypeName(TypeSyntax type)
-    {
-        return type switch
-        {
-            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
-            QualifiedNameSyntax qualified => GetTypeName(qualified.Right),
-            _ => string.Empty
-        };
+            invocation.WithArgumentList(invocation.ArgumentList.WithArguments(
+                invocation.ArgumentList.Arguments.Insert(0, nameArgument)))));
     }
 
     internal static string ToKebabCase(string typeName)
     {
+        if (typeName.StartsWith("global::", System.StringComparison.Ordinal))
+        {
+            typeName = typeName.Substring("global::".Length);
+        }
+
         var builder = new StringBuilder(typeName.Length + 8);
+        var previousOriginal = '\0';
         for (var index = 0; index < typeName.Length; index++)
         {
             var current = typeName[index];
+            if (!char.IsLetterOrDigit(current))
+            {
+                if (builder.Length > 0 && builder[builder.Length - 1] != '-')
+                {
+                    builder.Append('-');
+                }
+
+                previousOriginal = '-';
+                continue;
+            }
+
+            var nextIsLower = index + 1 < typeName.Length && char.IsLower(typeName[index + 1]);
             if (char.IsUpper(current) &&
-                index > 0 &&
-                (!char.IsUpper(typeName[index - 1]) ||
-                    index + 1 < typeName.Length && char.IsLower(typeName[index + 1])))
+                builder.Length > 0 &&
+                builder[builder.Length - 1] != '-' &&
+                (!char.IsUpper(previousOriginal) || nextIsLower))
             {
                 builder.Append('-');
             }
 
             builder.Append(char.ToLowerInvariant(current));
+            previousOriginal = current;
         }
 
         return builder.ToString();
