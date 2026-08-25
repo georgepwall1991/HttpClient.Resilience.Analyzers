@@ -20,7 +20,7 @@ namespace HttpClient.Resilience.Analyzers.Tests.CodeFixes;
 /// </summary>
 public sealed class CorpusSelfHealingTests
 {
-    private const int MaxPasses = 5;
+    private const int MaxPasses = 40;
 
     public static TheoryData<string> CorpusFileNames()
     {
@@ -53,6 +53,7 @@ public sealed class CorpusSelfHealingTests
         var current = document;
         var initialFixable = CountFixableDiagnostics(current, providers);
         var progressed = false;
+        var converged = false;
         for (var pass = 0; pass < MaxPasses; pass++)
         {
             var compilation = await current.Project.GetCompilationAsync();
@@ -78,9 +79,11 @@ public sealed class CorpusSelfHealingTests
                         CancellationToken.None);
                     await provider.RegisterCodeFixesAsync(context);
 
-                    foreach (var action in actions)
+                    // Apply one fix per pass so every edit is computed against the current
+                    // document rather than a stale snapshot.
+                    if (actions.Count > 0)
                     {
-                        var operations = await action.GetOperationsAsync(CancellationToken.None);
+                        var operations = await actions[0].GetOperationsAsync(CancellationToken.None);
                         foreach (var operation in operations.OfType<ApplyChangesOperation>())
                         {
                             current = operation.ChangedSolution.GetDocument(current.Id) ?? current;
@@ -92,6 +95,8 @@ public sealed class CorpusSelfHealingTests
 
             if (!progress)
             {
+                // Fixed point: no provider offers any action for any remaining diagnostic.
+                converged = true;
                 break;
             }
 
@@ -101,6 +106,10 @@ public sealed class CorpusSelfHealingTests
         // The process must terminate at a stable fixed point without ever increasing the
         // number of fixable diagnostics. Corpus files intentionally reference missing stub
         // types, so compiler errors are expected and ignored here.
+
+        Assert.True(
+            converged,
+            $"{corpusFileName}: Fix All did not converge within {MaxPasses} passes.");
 
         var finalFixable = CountFixableDiagnostics(current, providers);
         Assert.True(
