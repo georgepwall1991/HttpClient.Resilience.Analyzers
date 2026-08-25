@@ -954,10 +954,15 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
         var fixedSource = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
             .ApplyFirstCodeFixAsync(source);
 
-        Assert.Contains("// Keep the scoped lifetime explicit.", fixedSource);
-        Assert.DoesNotContain("services.AddTransient<PaymentsClient>();", fixedSource);
-    }
+        var normalized = fixedSource.Replace("\r\n", "\n");
+        var expectedBlock = """
+                        services.AddHttpClient<PaymentsClient>();
+                        // Keep the scoped lifetime explicit.
+                    }
+                """.Replace("\r\n", "\n");
 
+        Assert.Contains(expectedBlock, normalized, StringComparison.Ordinal);
+    }
     [Fact]
     public async Task CodeFix_IsNotOffered_WhenDuplicateRegistrationHasFactoryPolicy()
     {
