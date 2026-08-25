@@ -162,7 +162,7 @@ The rules intentionally focus on concrete production risks. Heuristic checks use
 | [`HCR082`](docs/rules/HCR082.md) | Resilience | Per-request resilience pipeline construction | Warning | Guide |
 | [`HCR083`](docs/rules/HCR083.md) | Typed clients | Relative URLs used without a configured `BaseAddress` | Warning | Guide |
 | [`HCR084`](docs/rules/HCR084.md) | Named clients | Duplicated string literals for named-client names | Warning | Guide |
-| [`HCR085`](docs/rules/HCR085.md) | Typed clients | Different implementations sharing one implicit client name | Warning | Guide |
+| [`HCR085`](docs/rules/HCR085.md) | Typed clients | Different implementations sharing one implicit client name | Warning | Partial |
 
 See the [rules index](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/) for categories and recommended rollout order, or open an individual rule for exact detection details and limitations.
 

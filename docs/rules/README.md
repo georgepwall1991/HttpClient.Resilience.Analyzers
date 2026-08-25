@@ -34,7 +34,7 @@ Each rule page includes:
 | [`HCR005`](HCR005.md) | Do not separately register a typed client already registered by `AddHttpClient<T>()` | Warning | Yes |
 | [`HCR083`](HCR083.md) | Configure `BaseAddress` for typed clients that use relative URLs | Warning | Guide |
 | [`HCR084`](HCR084.md) | Avoid duplicated string literals for named `HttpClient` names | Warning | Guide |
-| [`HCR085`](HCR085.md) | Multiple typed clients on one interface should use explicit names | Warning | Guide |
+| [`HCR085`](HCR085.md) | Multiple typed clients on one interface should use explicit names | Warning | Partial |
 
 ### Handlers
 
