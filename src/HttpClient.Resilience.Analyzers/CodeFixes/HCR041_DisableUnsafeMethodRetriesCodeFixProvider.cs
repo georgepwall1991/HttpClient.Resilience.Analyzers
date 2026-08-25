@@ -1,8 +1,10 @@
 using System.Collections.Immutable;
 using System.Composition;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HttpClient.Resilience.Analyzers.Diagnostics;
+using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
@@ -40,8 +42,40 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
             if (invocation?.Expression is not MemberAccessExpressionSyntax
                 {
                     Name.Identifier.ValueText: "AddStandardResilienceHandler"
-                } ||
-                invocation.ArgumentList.Arguments.Count != 0)
+                })
+            {
+                continue;
+            }
+
+            if (invocation.ArgumentList.Arguments.Count == 0)
+            {
+                context.RegisterCodeFix(
+                    CodeAction.Create(
+                        "Disable retries for unsafe HTTP methods",
+                        cancellationToken => DisableUnsafeMethodRetriesAsync(context.Document, invocation, cancellationToken),
+                        nameof(HCR041_DisableUnsafeMethodRetriesCodeFixProvider)),
+                    diagnostic);
+                continue;
+            }
+
+            // A configure delegate already exists: inject the guard as its first statement
+            // instead of replacing the user's configuration.
+            var lambda = SyntaxTransparency.Unwrap(invocation.ArgumentList.Arguments[0].Expression) as LambdaExpressionSyntax;
+            var parameterName = lambda switch
+            {
+                SimpleLambdaExpressionSyntax simple => simple.Parameter.Identifier.ValueText,
+                ParenthesizedLambdaExpressionSyntax parenthesized when
+                    parenthesized.ParameterList.Parameters.Count == 1 =>
+                    parenthesized.ParameterList.Parameters[0].Identifier.ValueText,
+                _ => null
+            };
+
+            if (parameterName is null || lambda!.Body is null)
+            {
+                continue;
+            }
+
+            if (BodyAlreadyDisablesRetries(lambda.Body, parameterName))
             {
                 continue;
             }
@@ -49,10 +83,83 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
             context.RegisterCodeFix(
                 CodeAction.Create(
                     "Disable retries for unsafe HTTP methods",
-                    cancellationToken => DisableUnsafeMethodRetriesAsync(context.Document, invocation, cancellationToken),
+                    cancellationToken => InjectDisableIntoConfiguredLambdaAsync(
+                        context.Document,
+                        invocation,
+                        lambda,
+                        parameterName,
+                        cancellationToken),
                     nameof(HCR041_DisableUnsafeMethodRetriesCodeFixProvider)),
                 diagnostic);
         }
+    }
+
+    private static bool BodyAlreadyDisablesRetries(SyntaxNode body, string parameterName)
+    {
+        // Both checks target the exact <parameter>.Retry member; lookalikes on other
+        // objects do not suppress the fix.
+        return body.DescendantNodesAndSelf()
+            .OfType<InvocationExpressionSyntax>()
+            .Any(invocation => IsParameterRetryMember(invocation.Expression, parameterName, "DisableForUnsafeHttpMethods")) ||
+            body.DescendantNodes()
+                .OfType<AssignmentExpressionSyntax>()
+                .Any(assignment => IsParameterRetryMember(assignment.Left, parameterName, "ShouldHandle"));
+    }
+
+    private static bool IsParameterRetryMember(ExpressionSyntax expression, string parameterName, string memberName)
+    {
+        return expression is MemberAccessExpressionSyntax
+        {
+            Name.Identifier.ValueText: var name,
+            Expression: MemberAccessExpressionSyntax
+            {
+                Expression: IdentifierNameSyntax receiver,
+                Name.Identifier.ValueText: "Retry"
+            }
+        } && name == memberName && receiver.Identifier.ValueText == parameterName;
+    }
+
+    private static async Task<Document> InjectDisableIntoConfiguredLambdaAsync(
+        Document document,
+        InvocationExpressionSyntax invocation,
+        LambdaExpressionSyntax lambda,
+        string parameterName,
+        CancellationToken cancellationToken)
+    {
+        var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        if (root is null)
+        {
+            return document;
+        }
+
+        var disableCall = SyntaxFactory.ExpressionStatement(
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        SyntaxFactory.IdentifierName(parameterName),
+                        SyntaxFactory.IdentifierName("Retry")),
+                    SyntaxFactory.IdentifierName("DisableForUnsafeHttpMethods"))));
+
+        LambdaExpressionSyntax updatedLambda;
+        if (lambda.Body is BlockSyntax blockBody)
+        {
+            updatedLambda = lambda.WithBody(blockBody.WithStatements(
+                blockBody.Statements.Insert(0, disableCall)));
+        }
+        else
+        {
+            // Convert expression bodies to a block so the guard can precede them.
+            var expressionBody = (ExpressionSyntax)lambda.Body!;
+            updatedLambda = lambda.WithBody(SyntaxFactory.Block(
+                disableCall,
+                SyntaxFactory.ExpressionStatement(expressionBody)));
+        }
+
+        return document.WithSyntaxRoot(root.ReplaceNode(
+            lambda,
+            updatedLambda.WithAdditionalAnnotations(Formatter.Annotation)));
     }
 
     private static async Task<Document> DisableUnsafeMethodRetriesAsync(
