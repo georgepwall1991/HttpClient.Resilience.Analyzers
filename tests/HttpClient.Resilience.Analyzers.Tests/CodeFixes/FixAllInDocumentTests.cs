@@ -571,13 +571,18 @@ public sealed class FixAllInDocumentTests
             .ApplyFixAllInDocumentAsync(source);
 
         Assert.Empty(await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(fixedSource));
-        Assert.Contains("options.Retry.DisableForUnsafeHttpMethods();", fixedSource, System.StringComparison.Ordinal);
-        Assert.Contains(
-            ".AddStandardResilienceHandler(options => options.Retry.DisableForUnsafeHttpMethods())",
-            fixedSource,
-            System.StringComparison.Ordinal);
+        Assert.Equal(
+            3,
+            System.Text.RegularExpressions.Regex.Matches(fixedSource, "\\.AddStandardResilienceHandler\\(").Count);
+        Assert.Equal(
+            3,
+            System.Text.RegularExpressions.Regex.Matches(fixedSource, "options\\.Retry\\.DisableForUnsafeHttpMethods").Count);
+        Assert.Equal(
+            2,
+            System.Text.RegularExpressions.Regex.Matches(fixedSource, "options => options\\.Retry\\.DisableForUnsafeHttpMethods\\(\\)").Count);
         Assert.Contains("MaxRetryAttempts = 7;", fixedSource, System.StringComparison.Ordinal);
     }
+
 
 
 }
