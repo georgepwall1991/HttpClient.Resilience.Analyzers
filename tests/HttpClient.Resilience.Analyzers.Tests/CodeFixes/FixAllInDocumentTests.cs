@@ -337,4 +337,117 @@ public sealed class FixAllInDocumentTests
         Assert.Empty(await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(fixedSource));
         Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(fixedSource, "options => options\\.Retry\\.DisableForUnsafeHttpMethods\\(\\)").Count);
     }
+
+    [Fact]
+    public async Task HCR042_FixAllConvertsEveryHedgingRegistration()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder ConfigurePrimary(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<PaymentsClient>()
+                        .AddStandardHedgingHandler();
+                }
+
+                public static IHttpClientBuilder ConfigureSecondary(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<RefundClient>()
+                        .AddStandardHedgingHandler();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public sealed class RefundClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.DeleteAsync("/refunds/1", cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardHedgingHandler(this IHttpClientBuilder builder) => builder;
+                public static IHttpClientBuilder AddStandardResilienceHandler(
+                    this IHttpClientBuilder builder,
+                    Action<HttpStandardResilienceOptions> configure)
+                {
+                    configure(new HttpStandardResilienceOptions());
+                    return builder;
+                }
+            }
+
+            public sealed class HttpStandardResilienceOptions
+            {
+                public RetryOptions Retry { get; } = new();
+            }
+
+            public sealed class RetryOptions
+            {
+                public void DisableForUnsafeHttpMethods()
+                {
+                }
+            }
+            """;
+
+        var diagnosticsBefore = await AnalyzerVerifier<HCR042_UnsafeMethodHedgingAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Equal(2, diagnosticsBefore.Length);
+
+        var fixedSource = await CodeFixVerifier<HCR042_UnsafeMethodHedgingAnalyzer, HCR042_ReplaceHedgingWithSafeResilienceCodeFixProvider>
+            .ApplyFixAllInDocumentAsync(source);
+
+        Assert.Empty(await AnalyzerVerifier<HCR042_UnsafeMethodHedgingAnalyzer>.GetDiagnosticsAsync(fixedSource));
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(fixedSource, "AddStandardResilienceHandler\\(options => options\\.Retry\\.DisableForUnsafeHttpMethods\\(\\)\\)").Count);
+        Assert.DoesNotContain(".AddStandardHedgingHandler()", fixedSource, System.StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HCR002_FixAllConfiguresEveryManualClientCreation()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsSingleton
+            {
+                private static readonly HttpClient Primary = new HttpClient();
+                private static readonly HttpClient Secondary = new HttpClient();
+            }
+            """;
+
+        var diagnosticsBefore = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>
+            .GetDiagnosticsAsync(source);
+        Assert.Equal(2, diagnosticsBefore.Length);
+
+        var fixedSource = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
+            .ApplyFixAllInDocumentAsync(source);
+
+        Assert.Empty(await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(fixedSource));
+
+    }
+
+
 }
