@@ -484,4 +484,100 @@ public sealed class FixAllInDocumentTests
     }
 
 
+
+    [Fact]
+    public async Task HCR041_FixAllConfiguresChainedParameterlessAndConfiguredHandlersAcrossClients()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Primary(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<PaymentsClient>()
+                        .AddStandardResilienceHandler(options => options.Retry.MaxRetryAttempts = 7)
+                        .AddStandardResilienceHandler();
+                }
+
+                public static IHttpClientBuilder Secondary(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<RefundClient>()
+                        .AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public sealed class RefundClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> DeleteAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.DeleteAsync("/refunds/1", cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+                public static IHttpClientBuilder AddStandardResilienceHandler(
+                    this IHttpClientBuilder builder,
+                    Action<HttpStandardResilienceOptions> configure)
+                {
+                    configure(new HttpStandardResilienceOptions());
+                    return builder;
+                }
+            }
+
+            public sealed class HttpStandardResilienceOptions
+            {
+                public RetryOptions Retry { get; } = new();
+            }
+
+            public sealed class RetryOptions
+            {
+                public int MaxRetryAttempts { get; set; }
+
+                public void DisableForUnsafeHttpMethods()
+                {
+                }
+            }
+            """;
+
+        var diagnosticsBefore = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Equal(3, diagnosticsBefore.Length);
+
+        var fixedSource = await CodeFixVerifier<HCR041_UnsafeMethodRetryAnalyzer, HCR041_DisableUnsafeMethodRetriesCodeFixProvider>
+            .ApplyFixAllInDocumentAsync(source);
+
+        Assert.Empty(await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(fixedSource));
+        Assert.Contains("options.Retry.DisableForUnsafeHttpMethods();", fixedSource, System.StringComparison.Ordinal);
+        Assert.Contains(
+            ".AddStandardResilienceHandler(options => options.Retry.DisableForUnsafeHttpMethods())",
+            fixedSource,
+            System.StringComparison.Ordinal);
+        Assert.Contains("MaxRetryAttempts = 7;", fixedSource, System.StringComparison.Ordinal);
+    }
+
+
 }
