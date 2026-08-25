@@ -29,9 +29,7 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
     public override async Task RegisterCodeFixesAsync(CodeFixContext context)
     {
         var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
-        var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken)
-            .ConfigureAwait(false);
-        if (root is null || semanticModel is null)
+        if (root is null)
         {
             return;
         }
@@ -77,7 +75,7 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
                 continue;
             }
 
-            if (BodyAlreadyDisablesRetries(lambda.Body, parameterName, semanticModel, context.CancellationToken))
+            if (BodyAlreadyDisablesRetries(lambda.Body, parameterName))
             {
                 continue;
             }
@@ -96,49 +94,17 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         }
     }
 
-    private static bool BodyAlreadyDisablesRetries(
-        SyntaxNode body,
-        string parameterName,
-        SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
+    private static bool BodyAlreadyDisablesRetries(SyntaxNode body, string parameterName)
     {
-        // Both checks target the exact <parameter>.Retry member; lookalikes on other
-        // objects do not suppress the fix. The disable call additionally must bind to the
-        // framework extension (or a global-namespace stand-in) before suppressing.
-        if (body.DescendantNodesAndSelf()
+        // Both checks target the exact <parameter>.Retry member. Any existing disable call
+        // suppresses the fix even when it binds to a custom extension: an injected bare call
+        // would bind to the same custom method and never satisfy HCR041.
+        return body.DescendantNodesAndSelf()
             .OfType<InvocationExpressionSyntax>()
-            .Any(invocation =>
-                IsParameterRetryMember(invocation.Expression, parameterName, "DisableForUnsafeHttpMethods") &&
-                BindsToFrameworkGuard(invocation, semanticModel, cancellationToken)))
-        {
-            return true;
-        }
-
-        return body.DescendantNodes()
-            .OfType<AssignmentExpressionSyntax>()
-            .Any(assignment => IsParameterRetryMember(assignment.Left, parameterName, "ShouldHandle"));
-    }
-
-    private static bool BindsToFrameworkGuard(
-        InvocationExpressionSyntax invocation,
-        SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
-    {
-        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
-        if (symbolInfo.Symbol is IMethodSymbol method)
-        {
-            return IsFrameworkOrGlobalGuard(method);
-        }
-
-        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
-        return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkOrGlobalGuard);
-    }
-
-    private static bool IsFrameworkOrGlobalGuard(IMethodSymbol method)
-    {
-        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
-        return containingNamespace.IsGlobalNamespace ||
-            containingNamespace.ToDisplayString() == "Microsoft.Extensions.Http.Resilience";
+            .Any(invocation => IsParameterRetryMember(invocation.Expression, parameterName, "DisableForUnsafeHttpMethods")) ||
+            body.DescendantNodes()
+                .OfType<AssignmentExpressionSyntax>()
+                .Any(assignment => IsParameterRetryMember(assignment.Left, parameterName, "ShouldHandle"));
     }
 
     private static bool IsParameterRetryMember(ExpressionSyntax expression, string parameterName, string memberName)
