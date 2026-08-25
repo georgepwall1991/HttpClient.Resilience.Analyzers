@@ -45,7 +45,7 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
                     CodeAction.Create(
                         "Dispose response with using declaration",
                         cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
-                        nameof(HCR060_DisposeResponseCodeFixProvider) + ".AddUsingDeclaration"),
+                        nameof(HCR060_DisposeResponseCodeFixProvider)),
                     diagnostic);
                 continue;
             }
@@ -70,7 +70,7 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
                         assignment!,
                         assignmentStatement,
                         cancellationToken),
-                    nameof(HCR060_DisposeResponseCodeFixProvider) + ".MergeDeclarationAndAssignment"),
+                    nameof(HCR060_DisposeResponseCodeFixProvider)),
                 diagnostic);
         }
     }

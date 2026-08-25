@@ -46,7 +46,7 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
                     CodeAction.Create(
                         "Dispose stream with using declaration",
                         cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
-                        nameof(HCR081_DisposeStreamCodeFixProvider) + ".AddUsingDeclaration"),
+                        nameof(HCR081_DisposeStreamCodeFixProvider)),
                     diagnostic);
                 continue;
             }
@@ -71,7 +71,7 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
                         assignment!,
                         assignmentStatement,
                         cancellationToken),
-                    nameof(HCR081_DisposeStreamCodeFixProvider) + ".MergeDeclarationAndAssignment"),
+                    nameof(HCR081_DisposeStreamCodeFixProvider)),
                 diagnostic);
         }
     }
