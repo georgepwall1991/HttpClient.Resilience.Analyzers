@@ -70,9 +70,12 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
                 _ => null
             };
 
-            if (parameterName is null ||
-                lambda!.Body is not BlockSyntax body ||
-                BodyAlreadyDisablesRetries(body, parameterName))
+            if (parameterName is null || lambda!.Body is null)
+            {
+                continue;
+            }
+
+            if (BodyAlreadyDisablesRetries(lambda.Body, parameterName))
             {
                 continue;
             }
@@ -84,39 +87,42 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
                         context.Document,
                         invocation,
                         lambda,
-                        body,
                         parameterName,
                         cancellationToken),
-                    nameof(HCR041_DisableUnsafeMethodRetriesCodeFixProvider) + ".ConfigureDelegate"),
+                    nameof(HCR041_DisableUnsafeMethodRetriesCodeFixProvider)),
                 diagnostic);
         }
     }
 
-    private static bool BodyAlreadyDisablesRetries(BlockSyntax body, string parameterName)
+    private static bool BodyAlreadyDisablesRetries(SyntaxNode body, string parameterName)
     {
-        return body.DescendantNodes()
+        // Both checks target the exact <parameter>.Retry member; lookalikes on other
+        // objects do not suppress the fix.
+        return body.DescendantNodesAndSelf()
             .OfType<InvocationExpressionSyntax>()
-            .Any(invocation => invocation.Expression is MemberAccessExpressionSyntax
-            {
-                Name.Identifier.ValueText: "DisableForUnsafeHttpMethods",
-                Expression: MemberAccessExpressionSyntax
-                {
-                    Expression: IdentifierNameSyntax receiver
-                }
-            } && receiver.Identifier.ValueText == parameterName) ||
+            .Any(invocation => IsParameterRetryMember(invocation.Expression, parameterName, "DisableForUnsafeHttpMethods")) ||
             body.DescendantNodes()
                 .OfType<AssignmentExpressionSyntax>()
-                .Any(assignment => assignment.Left is MemberAccessExpressionSyntax
-                {
-                    Name.Identifier.ValueText: "ShouldHandle"
-                });
+                .Any(assignment => IsParameterRetryMember(assignment.Left, parameterName, "ShouldHandle"));
+    }
+
+    private static bool IsParameterRetryMember(ExpressionSyntax expression, string parameterName, string memberName)
+    {
+        return expression is MemberAccessExpressionSyntax
+        {
+            Name.Identifier.ValueText: var name,
+            Expression: MemberAccessExpressionSyntax
+            {
+                Expression: IdentifierNameSyntax receiver,
+                Name.Identifier.ValueText: "Retry"
+            }
+        } && name == memberName && receiver.Identifier.ValueText == parameterName;
     }
 
     private static async Task<Document> InjectDisableIntoConfiguredLambdaAsync(
         Document document,
         InvocationExpressionSyntax invocation,
         LambdaExpressionSyntax lambda,
-        BlockSyntax body,
         string parameterName,
         CancellationToken cancellationToken)
     {
@@ -136,10 +142,24 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
                         SyntaxFactory.IdentifierName("Retry")),
                     SyntaxFactory.IdentifierName("DisableForUnsafeHttpMethods"))));
 
-        var updatedLambda = lambda.WithBody(body.WithStatements(body.Statements.Insert(0, disableCall)))
-            .WithAdditionalAnnotations(Formatter.Annotation);
+        LambdaExpressionSyntax updatedLambda;
+        if (lambda.Body is BlockSyntax blockBody)
+        {
+            updatedLambda = lambda.WithBody(blockBody.WithStatements(
+                blockBody.Statements.Insert(0, disableCall)));
+        }
+        else
+        {
+            // Convert expression bodies to a block so the guard can precede them.
+            var expressionBody = (ExpressionSyntax)lambda.Body!;
+            updatedLambda = lambda.WithBody(SyntaxFactory.Block(
+                disableCall,
+                SyntaxFactory.ExpressionStatement(expressionBody)));
+        }
 
-        return document.WithSyntaxRoot(root.ReplaceNode(lambda, updatedLambda));
+        return document.WithSyntaxRoot(root.ReplaceNode(
+            lambda,
+            updatedLambda.WithAdditionalAnnotations(Formatter.Annotation)));
     }
 
     private static async Task<Document> DisableUnsafeMethodRetriesAsync(
