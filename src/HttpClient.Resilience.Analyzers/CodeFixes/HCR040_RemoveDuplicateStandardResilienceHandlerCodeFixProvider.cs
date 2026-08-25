@@ -33,21 +33,23 @@ public sealed class HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvid
             return;
         }
 
-        var diagnostic = context.Diagnostics[0];
-        var node = root.FindNode(diagnostic.Location.SourceSpan);
-        var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
-
-        if (invocation?.Expression is not MemberAccessExpressionSyntax memberAccess)
+        foreach (var diagnostic in context.Diagnostics)
         {
-            return;
-        }
+            var node = root.FindNode(diagnostic.Location.SourceSpan);
+            var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
 
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                "Remove duplicate resilience handler",
-                cancellationToken => RemoveDuplicateInvocationAsync(context.Document, invocation, memberAccess.Expression, cancellationToken),
-                nameof(HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvider)),
-            diagnostic);
+            if (invocation?.Expression is not MemberAccessExpressionSyntax memberAccess)
+            {
+                continue;
+            }
+
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    "Remove duplicate resilience handler",
+                    cancellationToken => RemoveDuplicateInvocationAsync(context.Document, invocation, memberAccess.Expression, cancellationToken),
+                    nameof(HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvider)),
+                diagnostic);
+        }
     }
 
     private static async Task<Document> RemoveDuplicateInvocationAsync(

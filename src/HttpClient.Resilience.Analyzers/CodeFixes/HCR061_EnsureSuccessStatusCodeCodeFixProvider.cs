@@ -45,37 +45,39 @@ public sealed class HCR061_EnsureSuccessStatusCodeCodeFixProvider : CodeFixProvi
             return;
         }
 
-        var diagnostic = context.Diagnostics[0];
-        var node = root.FindNode(diagnostic.Location.SourceSpan);
-        var variable = node
-            .FirstAncestorOrSelf<VariableDeclaratorSyntax>();
-        var declaration = variable?.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>();
-        var block = declaration?.Parent as BlockSyntax;
-
-        if (variable is not null &&
-            declaration is not null &&
-            block is not null &&
-            declaration.Declaration.Variables.Count == 1 &&
-            HasContentRead(block, declaration, variable.Identifier.ValueText))
+        foreach (var diagnostic in context.Diagnostics)
         {
-            RegisterCodeFix(context, diagnostic, block, declaration, variable.Identifier);
-            return;
-        }
+            var node = root.FindNode(diagnostic.Location.SourceSpan);
+            var variable = node
+                .FirstAncestorOrSelf<VariableDeclaratorSyntax>();
+            var declaration = variable?.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>();
+            var block = declaration?.Parent as BlockSyntax;
 
-        var responseIdentifier = node.FirstAncestorOrSelf<IdentifierNameSyntax>();
-        var assignment = responseIdentifier?.FirstAncestorOrSelf<AssignmentExpressionSyntax>();
-        var assignmentStatement = assignment?.Parent as ExpressionStatementSyntax;
-        block = assignmentStatement?.Parent as BlockSyntax;
-        if (responseIdentifier is null ||
-            assignment?.Left != responseIdentifier ||
-            assignmentStatement is null ||
-            block is null ||
-            !HasContentRead(block, assignmentStatement, responseIdentifier.Identifier.ValueText))
-        {
-            return;
-        }
+            if (variable is not null &&
+                declaration is not null &&
+                block is not null &&
+                declaration.Declaration.Variables.Count == 1 &&
+                HasContentRead(block, declaration, variable.Identifier.ValueText))
+            {
+                RegisterCodeFix(context, diagnostic, block, declaration, variable.Identifier);
+                continue;
+            }
 
-        RegisterCodeFix(context, diagnostic, block, assignmentStatement, responseIdentifier.Identifier);
+            var responseIdentifier = node.FirstAncestorOrSelf<IdentifierNameSyntax>();
+            var assignment = responseIdentifier?.FirstAncestorOrSelf<AssignmentExpressionSyntax>();
+            var assignmentStatement = assignment?.Parent as ExpressionStatementSyntax;
+            block = assignmentStatement?.Parent as BlockSyntax;
+            if (responseIdentifier is null ||
+                assignment?.Left != responseIdentifier ||
+                assignmentStatement is null ||
+                block is null ||
+                !HasContentRead(block, assignmentStatement, responseIdentifier.Identifier.ValueText))
+            {
+                continue;
+            }
+
+            RegisterCodeFix(context, diagnostic, block, assignmentStatement, responseIdentifier.Identifier);
+        }
     }
 
     private static void RegisterCodeFix(

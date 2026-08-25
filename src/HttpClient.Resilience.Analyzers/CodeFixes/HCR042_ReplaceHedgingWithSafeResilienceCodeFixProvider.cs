@@ -30,25 +30,27 @@ public sealed class HCR042_ReplaceHedgingWithSafeResilienceCodeFixProvider : Cod
     {
         // Stryker disable once boolean: analyzer code fixes do not run on a captured SynchronizationContext
         var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
-        var diagnostic = context.Diagnostics[0];
-        var node = root!.FindNode(diagnostic.Location.SourceSpan);
-        var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
-
-        if (invocation?.Expression is not MemberAccessExpressionSyntax
-            {
-                Name.Identifier.ValueText: "AddStandardHedgingHandler"
-            } memberAccess ||
-            invocation.ArgumentList.Arguments.Count != 0)
+        foreach (var diagnostic in context.Diagnostics)
         {
-            return;
-        }
+            var node = root!.FindNode(diagnostic.Location.SourceSpan);
+            var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
 
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                Title,
-                cancellationToken => ReplaceHedgingAsync(context.Document, invocation, memberAccess, cancellationToken),
-                nameof(HCR042_ReplaceHedgingWithSafeResilienceCodeFixProvider)),
-            diagnostic);
+            if (invocation?.Expression is not MemberAccessExpressionSyntax
+                {
+                    Name.Identifier.ValueText: "AddStandardHedgingHandler"
+                } memberAccess ||
+                invocation.ArgumentList.Arguments.Count != 0)
+            {
+                continue;
+            }
+
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    Title,
+                    cancellationToken => ReplaceHedgingAsync(context.Document, invocation, memberAccess, cancellationToken),
+                    nameof(HCR042_ReplaceHedgingWithSafeResilienceCodeFixProvider)),
+                diagnostic);
+        }
     }
 
     private static async Task<Document> ReplaceHedgingAsync(

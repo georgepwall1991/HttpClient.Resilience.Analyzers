@@ -32,22 +32,24 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
             return;
         }
 
-        var diagnostic = context.Diagnostics[0];
-        var node = root.FindNode(diagnostic.Location.SourceSpan);
-        var variable = node.FirstAncestorOrSelf<VariableDeclaratorSyntax>();
-
-        if (variable?.Initializer is null ||
-            !CanSafelyConfigureInitializer(variable.Initializer.Value))
+        foreach (var diagnostic in context.Diagnostics)
         {
-            return;
-        }
+            var node = root.FindNode(diagnostic.Location.SourceSpan);
+            var variable = node.FirstAncestorOrSelf<VariableDeclaratorSyntax>();
 
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                "Configure PooledConnectionLifetime",
-                cancellationToken => ConfigurePooledConnectionLifetimeAsync(context.Document, variable, cancellationToken),
-                nameof(HCR002_AddPooledConnectionLifetimeCodeFixProvider)),
-            diagnostic);
+            if (variable?.Initializer is null ||
+                !CanSafelyConfigureInitializer(variable.Initializer.Value))
+            {
+                continue;
+            }
+
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    "Configure PooledConnectionLifetime",
+                    cancellationToken => ConfigurePooledConnectionLifetimeAsync(context.Document, variable, cancellationToken),
+                    nameof(HCR002_AddPooledConnectionLifetimeCodeFixProvider)),
+                diagnostic);
+        }
     }
 
     private static bool CanSafelyConfigureInitializer(ExpressionSyntax expression)

@@ -32,25 +32,27 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
             return;
         }
 
-        var diagnostic = context.Diagnostics[0];
-        var node = root.FindNode(diagnostic.Location.SourceSpan);
-        var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
-
-        if (invocation?.Expression is not MemberAccessExpressionSyntax
-            {
-                Name.Identifier.ValueText: "AddStandardResilienceHandler"
-            } ||
-            invocation.ArgumentList.Arguments.Count != 0)
+        foreach (var diagnostic in context.Diagnostics)
         {
-            return;
-        }
+            var node = root.FindNode(diagnostic.Location.SourceSpan);
+            var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
 
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                "Disable retries for unsafe HTTP methods",
-                cancellationToken => DisableUnsafeMethodRetriesAsync(context.Document, invocation, cancellationToken),
-                nameof(HCR041_DisableUnsafeMethodRetriesCodeFixProvider)),
-            diagnostic);
+            if (invocation?.Expression is not MemberAccessExpressionSyntax
+                {
+                    Name.Identifier.ValueText: "AddStandardResilienceHandler"
+                } ||
+                invocation.ArgumentList.Arguments.Count != 0)
+            {
+                continue;
+            }
+
+            context.RegisterCodeFix(
+                CodeAction.Create(
+                    "Disable retries for unsafe HTTP methods",
+                    cancellationToken => DisableUnsafeMethodRetriesAsync(context.Document, invocation, cancellationToken),
+                    nameof(HCR041_DisableUnsafeMethodRetriesCodeFixProvider)),
+                diagnostic);
+        }
     }
 
     private static async Task<Document> DisableUnsafeMethodRetriesAsync(
