@@ -190,6 +190,8 @@ public sealed class FixAllInDocumentTests
             .ApplyFixAllInDocumentAsync(source);
 
         Assert.Empty(await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(fixedSource));
+        Assert.Contains("services.AddHttpClient<PaymentsClient>();", fixedSource, System.StringComparison.Ordinal);
+        Assert.Contains("services.AddHttpClient<AuditClient>();", fixedSource, System.StringComparison.Ordinal);
         Assert.DoesNotContain("services.AddTransient<", fixedSource, System.StringComparison.Ordinal);
     }
 
