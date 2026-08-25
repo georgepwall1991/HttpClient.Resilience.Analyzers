@@ -45,12 +45,8 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
                 continue;
             }
 
-            // Static methods and static lambdas cannot reference instance members or captured
-            // parameters, so neither fallback is valid there.
-            var factoryName = !RequiresStaticContext(creation)
-                ? FindFactoryParameterName(creation) ??
-                    FindFactoryMemberName(creation, semanticModel, context.CancellationToken)
-                : null;
+            var factoryName = FindFactoryParameterName(creation) ??
+                FindFactoryMemberName(creation, semanticModel, context.CancellationToken);
             if (factoryName is null)
             {
                 continue;
@@ -69,23 +65,74 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
     {
         foreach (var ancestor in node.AncestorsAndSelf())
         {
-            if (ancestor is LocalFunctionStatementSyntax localFunction &&
-                FindFactoryParameterName(localFunction.ParameterList.Parameters) is { } localFactoryName)
+            switch (ancestor)
             {
-                return localFactoryName;
-            }
+                case LocalFunctionStatementSyntax localFunction:
+                    if (FindFactoryParameterName(localFunction.ParameterList.Parameters) is { } localFactoryName)
+                    {
+                        return localFactoryName;
+                    }
 
-            if (ancestor is MethodDeclarationSyntax method &&
-                FindFactoryParameterName(method.ParameterList.Parameters) is { } methodFactoryName)
-            {
-                return methodFactoryName;
-            }
+                    if (HasStaticModifier(localFunction.Modifiers))
+                    {
+                        return null;
+                    }
 
-            if (ancestor is ClassDeclarationSyntax classDeclaration &&
-                classDeclaration.ParameterList is { } parameterList &&
-                FindFactoryParameterName(parameterList.Parameters) is { } classFactoryName)
-            {
-                return classFactoryName;
+                    break;
+                case SimpleLambdaExpressionSyntax simpleLambda:
+                    if (simpleLambda.Parameter.Type is not null && IsHttpClientFactoryParameter(simpleLambda.Parameter))
+                    {
+                        return simpleLambda.Parameter.Identifier.ValueText;
+                    }
+
+                    if (HasStaticModifier(simpleLambda.Modifiers))
+                    {
+                        return null;
+                    }
+
+                    break;
+                case ParenthesizedLambdaExpressionSyntax parenthesizedLambda:
+                    if (FindFactoryParameterName(parenthesizedLambda.ParameterList.Parameters) is { } lambdaFactoryName)
+                    {
+                        return lambdaFactoryName;
+                    }
+
+                    if (HasStaticModifier(parenthesizedLambda.Modifiers))
+                    {
+                        return null;
+                    }
+
+                    break;
+                case AnonymousMethodExpressionSyntax anonymousMethod:
+                    if (anonymousMethod.ParameterList is not null &&
+                        FindFactoryParameterName(anonymousMethod.ParameterList.Parameters) is { } anonymousFactoryName)
+                    {
+                        return anonymousFactoryName;
+                    }
+
+                    if (HasStaticModifier(anonymousMethod.Modifiers))
+                    {
+                        return null;
+                    }
+
+                    break;
+                case MethodDeclarationSyntax method:
+                    if (FindFactoryParameterName(method.ParameterList.Parameters) is { } methodFactoryName)
+                    {
+                        return methodFactoryName;
+                    }
+
+                    // A static method cannot reference the class primary-constructor parameters.
+                    if (HasStaticModifier(method.Modifiers))
+                    {
+                        return null;
+                    }
+
+                    break;
+                case ClassDeclarationSyntax { ParameterList: not null } classDeclaration:
+                    return FindFactoryParameterName(classDeclaration.ParameterList!.Parameters) is { } classFactoryName
+                        ? classFactoryName
+                        : null;
             }
         }
 

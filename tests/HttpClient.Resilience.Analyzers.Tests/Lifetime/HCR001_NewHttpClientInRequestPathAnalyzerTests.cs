@@ -913,4 +913,60 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
         Assert.Empty(titles);
     }
+
+    [Fact]
+    public async Task CodeFix_UsesOwnParameterOfStaticMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private readonly IHttpClientFactory unrelated = null!;
+
+                public static HttpClient Create(IHttpClientFactory httpClientFactory)
+                {
+                    return new HttpClient();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("return httpClientFactory.CreateClient();", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenStaticLambdaWouldCaptureOuterFactory()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory httpClientFactory)
+                {
+                    Func<HttpClient> create = static () => new HttpClient();
+                    return create();
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
 }
