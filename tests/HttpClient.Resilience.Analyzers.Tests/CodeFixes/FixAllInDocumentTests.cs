@@ -440,13 +440,13 @@ public sealed class FixAllInDocumentTests
 
         var diagnosticsBefore = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>
             .GetDiagnosticsAsync(source);
-        Assert.True(diagnosticsBefore.Length >= 2, $"expected at least 2 diagnostics, got {diagnosticsBefore.Length}");
+        Assert.Equal(2, diagnosticsBefore.Length);
 
         var fixedSource = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
             .ApplyFixAllInDocumentAsync(source);
 
         Assert.Empty(await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(fixedSource));
-        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(fixedSource, "PooledConnectionLifetime").Count);
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(fixedSource, "new global::System.Net.Http.SocketsHttpHandler { PooledConnectionLifetime = global::System.TimeSpan.FromMinutes(2) }").Count);
     }
 
 
