@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HttpClient.Resilience.Analyzers.Diagnostics;
-using HttpClient.Resilience.Analyzers.KnownSymbols;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
@@ -95,7 +94,7 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
         CancellationToken cancellationToken)
     {
         var containingType = node.FirstAncestorOrSelf<TypeDeclarationSyntax>();
-        if (containingType is null)
+        if (containingType is null || RequiresStaticContext(node))
         {
             return null;
         }
@@ -107,12 +106,60 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
         }
 
         var factoryMembers = typeSymbol.GetMembers()
-            .Where(member => member is IFieldSymbol field && HttpClientSymbols.IsHttpClientFactory(field.Type) ||
-                member is IPropertySymbol property && HttpClientSymbols.IsHttpClientFactory(property.Type))
-                .OrderBy(member => member.Name.IndexOf("Factory", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 0 : 1)
-            .ToList();
+            .Where(member => !member.IsImplicitlyDeclared)
+            .Select(member => member switch
+            {
+                IFieldSymbol field when IsUsableFactoryType(field.Type) => member,
+                IPropertySymbol property when property.GetMethod is not null &&
+                    IsUsableFactoryType(property.Type) => member,
+                _ => null
+            })
+            .OfType<ISymbol>()
+            .OrderBy(member => member.Name.IndexOf("Factory", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 0 : 1)
+            .ThenBy(member => member.Name, System.StringComparer.Ordinal);
 
-        return factoryMembers.Count == 0 ? null : factoryMembers[0].Name;
+        foreach (var member in factoryMembers)
+        {
+            // A local or parameter with the same name would shadow the member and redirect
+            // the fix at the wrong symbol, so only unshadowed members qualify.
+            var lookup = semanticModel.LookupSymbols(node.SpanStart)
+                .Where(symbol => symbol.Name == member.Name);
+            if (lookup.All(symbol => SymbolEqualityComparer.Default.Equals(symbol, member)))
+            {
+                return member.Name;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool RequiresStaticContext(SyntaxNode node)
+    {
+        foreach (var ancestor in node.Ancestors())
+        {
+            if (ancestor is TypeDeclarationSyntax)
+            {
+                return false;
+            }
+
+            if (ancestor is MethodDeclarationSyntax { Modifiers: var methodModifiers } &&
+                    methodModifiers.Any(SyntaxKind.StaticKeyword) ||
+                ancestor is LocalFunctionStatementSyntax { Modifiers: var localModifiers } &&
+                    localModifiers.Any(SyntaxKind.StaticKeyword))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsUsableFactoryType(ITypeSymbol? type)
+    {
+        return type?.NullableAnnotation != Microsoft.CodeAnalysis.NullableAnnotation.Annotated &&
+            type?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) is
+                "global::System.Net.Http.IHttpClientFactory" or
+                "global::IHttpClientFactory";
     }
 
     private static string? FindFactoryParameterName(SeparatedSyntaxList<ParameterSyntax> parameters)
