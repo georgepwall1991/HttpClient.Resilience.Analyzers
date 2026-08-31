@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Composition;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HttpClient.Resilience.Analyzers.Diagnostics;
@@ -41,12 +43,19 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
                 declaration.UsingKeyword == default &&
                 declaration.Declaration.Variables.Count == 1)
             {
-                context.RegisterCodeFix(
-                    CodeAction.Create(
-                        "Dispose response with using declaration",
-                        cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
-                        nameof(HCR060_DisposeResponseCodeFixProvider)),
-                    diagnostic);
+                var escapes = VariableEscapesScope(
+                    node,
+                    declaration.Declaration.Variables[0].Identifier.ValueText);
+                if (!escapes)
+                {
+                    context.RegisterCodeFix(
+                        CodeAction.Create(
+                            "Dispose response with using declaration",
+                            cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
+                            nameof(HCR060_DisposeResponseCodeFixProvider)),
+                        diagnostic);
+                }
+
                 continue;
             }
 
@@ -60,6 +69,26 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
                 continue;
             }
 
+            // For `_ = await response.Content...` the disposed response appears on the right
+            // side. Only locals declared in this block can be affected by a using declaration;
+            // parameters and outer locals are irrelevant.
+            var blockLocalNames = new HashSet<string>(
+                block.DescendantNodes()
+                    .OfType<VariableDeclaratorSyntax>()
+                    .Select(variable => variable.Identifier.ValueText),
+                System.StringComparer.Ordinal);
+            var referencedNames = assignment.Right.DescendantNodes()
+                .OfType<IdentifierNameSyntax>()
+                .Select(identifier => identifier.Identifier.ValueText)
+                .Where(name => blockLocalNames.Contains(name))
+                .Distinct()
+                .ToList();
+
+            if (referencedNames.Any(name => VariableEscapesScope(node, name)))
+            {
+                continue;
+            }
+
             context.RegisterCodeFix(
                 CodeAction.Create(
                     "Dispose response with using declaration",
@@ -67,7 +96,7 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
                         context.Document,
                         block,
                         adjacentDeclaration,
-                        assignment!,
+                        assignment,
                         assignmentStatement,
                         cancellationToken),
                     nameof(HCR060_DisposeResponseCodeFixProvider)),
@@ -112,6 +141,34 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
         declaration = previousDeclaration;
         assignmentStatement = statement;
         return true;
+    }
+
+    private static bool VariableEscapesScope(SyntaxNode node, string variableName)
+    {
+        if (variableName.Length == 0)
+        {
+            return false;
+        }
+
+        var block = node.FirstAncestorOrSelf<BlockSyntax>();
+        if (block is null)
+        {
+            return false;
+        }
+
+        // Disposing at scope end breaks callers when the response outlives the block:
+        // returned directly or stored into a member or another container.
+        return block.DescendantNodes()
+            .Any(descendant => descendant switch
+            {
+                ReturnStatementSyntax { Expression: IdentifierNameSyntax returned } =>
+                    returned.Identifier.ValueText == variableName,
+                AssignmentExpressionSyntax assignment when assignment.Left is not IdentifierNameSyntax =>
+                    assignment.Right.DescendantNodesAndSelf()
+                        .OfType<IdentifierNameSyntax>()
+                        .Any(identifier => identifier.Identifier.ValueText == variableName),
+                _ => false
+            });
     }
 
     private static async Task<Document> AddUsingDeclarationAsync(
