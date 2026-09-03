@@ -119,9 +119,11 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
         handlerCreation = null!;
 
         // A second argument is always the disposeHandler flag, which the merge preserves
-        // untouched, so only the handler in the first position needs verification.
+        // untouched, so only the handler argument needs verification. The handler is the
+        // first positional argument or the argument explicitly named "handler".
         if (clientCreation.ArgumentList?.Arguments.Count is not 1 and not 2 ||
-            UnwrapTransparentExpression(clientCreation.ArgumentList.Arguments[0].Expression) is not BaseObjectCreationExpressionSyntax candidate ||
+            !TryGetHandlerArgument(clientCreation, out var handlerExpression) ||
+            UnwrapTransparentExpression(handlerExpression) is not BaseObjectCreationExpressionSyntax candidate ||
             (candidate.ArgumentList?.Arguments.Count ?? 0) != 0)
         {
             return false;
@@ -141,6 +143,32 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
 
         handlerCreation = candidate;
         return true;
+    }
+
+    private static bool TryGetHandlerArgument(
+        BaseObjectCreationExpressionSyntax clientCreation,
+        out ExpressionSyntax handlerExpression)
+    {
+        handlerExpression = null!;
+
+        foreach (var argument in clientCreation.ArgumentList?.Arguments ?? default(SeparatedSyntaxList<ArgumentSyntax>))
+        {
+            if (argument.NameColon is null)
+            {
+                // Positional arguments precede named ones, so the first positional
+                // argument targets the handler parameter.
+                handlerExpression = argument.Expression;
+                return true;
+            }
+
+            if (argument.NameColon.Name.Identifier.ValueText == "handler")
+            {
+                handlerExpression = argument.Expression;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static ExpressionSyntax UnwrapTransparentExpression(ExpressionSyntax expression)
