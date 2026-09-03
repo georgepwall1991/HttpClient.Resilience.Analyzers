@@ -1672,6 +1672,103 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenGenericHostedFactoryResolvesTypedClient()
+    {
+        const string source = """
+            using System;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddHostedService<IHostedService>(provider => new PaymentWorker(provider.GetRequiredService<PaymentsClient>()));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentWorker(PaymentsClient paymentsClient) : IHostedService
+            {
+                public Task StartAsync(System.Threading.CancellationToken cancellationToken) => Task.CompletedTask;
+                public Task StopAsync(System.Threading.CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public interface IHostedService
+            {
+                Task StartAsync(System.Threading.CancellationToken cancellationToken);
+                Task StopAsync(System.Threading.CancellationToken cancellationToken);
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddHostedService<TService>(this IServiceCollection services, Func<System.IServiceProvider, TService> factory) => services;
+            }
+
+            public static class ServiceProviderExtensions
+            {
+                public static T GetRequiredService<T>(this System.IServiceProvider provider) => default!;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHostedFactoryReceiverIsCustomLookalike()
+    {
+        const string source = """
+            using System;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static void Configure(HostBuilder builder)
+                {
+                    builder.AddHostedService(provider => new PaymentWorker(provider.GetRequiredService<PaymentsClient>()));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentWorker(PaymentsClient paymentsClient)
+            {
+            }
+
+            public sealed class HostBuilder
+            {
+                public HostBuilder AddHostedService(Func<IServiceProvider, object> factory) => this;
+            }
+
+            public interface IServiceProvider
+            {
+            }
+
+            public static class ServiceProviderExtensions
+            {
+                public static T GetRequiredService<T>(this IServiceProvider provider) => default!;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenGenericHostedWorkerConsumesTypedClient()
     {
         const string source = """
