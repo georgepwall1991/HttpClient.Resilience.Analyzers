@@ -2231,6 +2231,59 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsDiagnostic_WhenTopLevelBuilderConfigurationIsDeferredInAnonymousMethod()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            IServiceCollection services = null!;
+            var builder = services.AddHttpClient<PaymentsClient>();
+            Action configureLater = delegate
+            {
+                builder.ConfigureHttpClient(client => client.BaseAddress = new Uri("https://api.example.com"));
+            };
+
+            public sealed class PaymentsClient
+            {
+                public Task<string> SendAsync(HttpClient client)
+                {
+                    return client.GetStringAsync("/payments");
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+
+                public static IHttpClientBuilder ConfigureHttpClient(
+                    this IHttpClientBuilder builder,
+                    Action<HttpClient> configureClient)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenBlockBuilderConfigurationIsDeferredInLocalFunction()
     {
         const string source = """
