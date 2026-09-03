@@ -126,8 +126,7 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
         }
 
         if (semanticModel.GetTypeInfo(candidate, cancellationToken).Type is not { } handlerType ||
-            handlerType is IErrorTypeSymbol ||
-            !HttpClientSymbols.IsSocketsHttpHandler(handlerType))
+            !IsFrameworkSocketsHttpHandler(handlerType, semanticModel))
         {
             return false;
         }
@@ -169,13 +168,26 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
                 identifier.Identifier.ValueText == "PooledConnectionLifetime") == true;
     }
 
+    private static bool IsFrameworkSocketsHttpHandler(ITypeSymbol handlerType, SemanticModel semanticModel)
+    {
+        // Namespace comparison alone would accept a source-defined impersonator in the
+        // System.Net.Http namespace, for which GetTypeByMetadataName can even return the
+        // impersonator itself, so require a metadata-defined framework type identity.
+        return handlerType.Locations.All(static location => location.IsInMetadata) &&
+            semanticModel.Compilation.GetTypeByMetadataName("System.Net.Http.SocketsHttpHandler") is { } frameworkType &&
+            SymbolEqualityComparer.Default.Equals(handlerType.OriginalDefinition, frameworkType);
+    }
+
     private static bool HasDisallowedTrivia(SyntaxNode node)
     {
-        return node.DescendantTrivia().Any(trivia => trivia.Kind() is
-            SyntaxKind.SingleLineCommentTrivia or
-            SyntaxKind.MultiLineCommentTrivia or
-            SyntaxKind.SingleLineDocumentationCommentTrivia or
-            SyntaxKind.MultiLineDocumentationCommentTrivia);
+        return node.DescendantTrivia().Any(trivia => trivia.IsDirective ||
+            trivia.Kind() is
+                SyntaxKind.SingleLineCommentTrivia or
+                SyntaxKind.MultiLineCommentTrivia or
+                SyntaxKind.SingleLineDocumentationCommentTrivia or
+                SyntaxKind.MultiLineDocumentationCommentTrivia or
+                SyntaxKind.DisabledTextTrivia or
+                SyntaxKind.SkippedTokensTrivia);
     }
 
     private static bool CanSafelyConfigureInitializer(ExpressionSyntax expression)
