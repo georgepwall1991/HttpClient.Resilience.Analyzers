@@ -1511,6 +1511,26 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
+    public async Task CodeFix_ConfiguresInlineHandlerWithEmptyInitializer()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static readonly HttpClient Client = new(new SocketsHttpHandler { });
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("PooledConnectionLifetime = global::System.TimeSpan.FromMinutes(2)", fixedSource);
+
+        Assert.Empty(await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(fixedSource));
+    }
+
+    [Fact]
     public async Task CodeFix_IsNotOffered_WhenInitializerContainsInternalComment()
     {
         const string source = """
