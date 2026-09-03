@@ -218,6 +218,7 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
                     Expression: IdentifierNameSyntax receiver,
                     Name.Identifier.ValueText: "ConfigureHttpClient"
                 } &&
+                    !IsNestedInDeferredBody(candidate, statement) &&
                     ReceiverMatchesLocal(receiver, localName, localSymbol, semanticModel, cancellationToken) &&
                     IsFrameworkConfigureHttpClientInvocation(candidate, semanticModel, cancellationToken) &&
                     InvocationArgumentsConfigureBaseAddress(candidate, semanticModel, cancellationToken)))
@@ -249,6 +250,20 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
             return true;
         }
 
+        if (declaration.Parent is SwitchSectionSyntax switchSection)
+        {
+            var sectionIndex = switchSection.Statements.IndexOf(declaration);
+            if (sectionIndex < 0)
+            {
+                return false;
+            }
+
+            followingStatements = switchSection.Statements
+                .Skip(sectionIndex + 1)
+                .ToArray();
+            return true;
+        }
+
         if (declaration.Parent is GlobalStatementSyntax declarationGlobal &&
             declarationGlobal.Parent is CompilationUnitSyntax compilationUnit)
         {
@@ -265,6 +280,24 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
                 .Select(globalStatement => globalStatement.Statement)
                 .ToArray();
             return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsNestedInDeferredBody(InvocationExpressionSyntax candidate, StatementSyntax scope)
+    {
+        for (var node = candidate.Parent; node is not null; node = node.Parent)
+        {
+            if (node is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)
+            {
+                return true;
+            }
+
+            if (node == scope)
+            {
+                return false;
+            }
         }
 
         return false;

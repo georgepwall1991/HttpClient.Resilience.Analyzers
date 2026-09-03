@@ -2174,5 +2174,238 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzerTests
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
+        Assert.Equal("\"/payments\"", source.Substring(
+            diagnostic.Location.SourceSpan.Start,
+            diagnostic.Location.SourceSpan.Length));
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenTopLevelBuilderConfigurationIsDeferredInLambda()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            IServiceCollection services = null!;
+            var builder = services.AddHttpClient<PaymentsClient>();
+            Action configureLater = () =>
+                builder.ConfigureHttpClient(client => client.BaseAddress = new Uri("https://api.example.com"));
+
+            public sealed class PaymentsClient
+            {
+                public Task<string> SendAsync(HttpClient client)
+                {
+                    return client.GetStringAsync("/payments");
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+
+                public static IHttpClientBuilder ConfigureHttpClient(
+                    this IHttpClientBuilder builder,
+                    Action<HttpClient> configureClient)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenBlockBuilderConfigurationIsDeferredInLocalFunction()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    var builder = services.AddHttpClient<PaymentsClient>();
+                    void ConfigureLater()
+                    {
+                        builder.ConfigureHttpClient(client => client.BaseAddress = new Uri("https://api.example.com"));
+                    }
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+                public Task<string> SendAsync(HttpClient client)
+                {
+                    return client.GetStringAsync("/payments");
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+
+                public static IHttpClientBuilder ConfigureHttpClient(
+                    this IHttpClientBuilder builder,
+                    Action<HttpClient> configureClient)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenBlockBuilderLocalIsReassignedBeforeConfiguration()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    var builder = services.AddHttpClient<PaymentsClient>();
+                    builder = services.AddHttpClient<OtherClient>();
+                    builder.ConfigureHttpClient(client => client.BaseAddress = new Uri("https://api.example.com"));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+                public Task<string> SendAsync(HttpClient client)
+                {
+                    return client.GetStringAsync("/payments");
+                }
+            }
+
+            public sealed class OtherClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+
+                public static IHttpClientBuilder ConfigureHttpClient(
+                    this IHttpClientBuilder builder,
+                    Action<HttpClient> configureClient)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR083, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenBaseAddressIsConfiguredThroughSwitchSectionBuilderLocal()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public static class Composition
+            {
+                public static void Configure(IServiceCollection services, int environment)
+                {
+                    switch (environment)
+                    {
+                        case 1:
+                            var builder = services.AddHttpClient<PaymentsClient>();
+                            builder.ConfigureHttpClient(client => client.BaseAddress = new Uri("https://api.example.com"));
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+                public Task<string> SendAsync(HttpClient client)
+                {
+                    return client.GetStringAsync("/payments");
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
+                {
+                    return default!;
+                }
+
+                public static IHttpClientBuilder ConfigureHttpClient(
+                    this IHttpClientBuilder builder,
+                    Action<HttpClient> configureClient)
+                {
+                    return builder;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
     }
 }
