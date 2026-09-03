@@ -196,17 +196,16 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
     {
         if (invocation.FirstAncestorOrSelf<VariableDeclaratorSyntax>() is not { Initializer: { } initializer } declarator ||
             !initializer.Value.Span.Contains(invocation.Span) ||
-            declarator.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>() is not { Parent: BlockSyntax block } declaration)
+            declarator.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>() is not { } declaration ||
+            !TryGetFollowingStatements(declaration, out var followingStatements))
         {
             return false;
         }
 
         var localName = declarator.Identifier.ValueText;
         var localSymbol = semanticModel.GetDeclaredSymbol(declarator, cancellationToken) as ILocalSymbol;
-        var declarationIndex = block.Statements.IndexOf(declaration);
-        for (var index = declarationIndex + 1; index < block.Statements.Count; index++)
+        foreach (var statement in followingStatements)
         {
-            var statement = block.Statements[index];
             if (StatementReassignsLocal(statement, localName, localSymbol, semanticModel, cancellationToken))
             {
                 return false;
@@ -225,6 +224,47 @@ public sealed class HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer : Di
             {
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    private static bool TryGetFollowingStatements(
+        LocalDeclarationStatementSyntax declaration,
+        out IReadOnlyList<StatementSyntax> followingStatements)
+    {
+        followingStatements = System.Array.Empty<StatementSyntax>();
+
+        if (declaration.Parent is BlockSyntax block)
+        {
+            var declarationIndex = block.Statements.IndexOf(declaration);
+            if (declarationIndex < 0)
+            {
+                return false;
+            }
+
+            followingStatements = block.Statements
+                .Skip(declarationIndex + 1)
+                .ToArray();
+            return true;
+        }
+
+        if (declaration.Parent is GlobalStatementSyntax declarationGlobal &&
+            declarationGlobal.Parent is CompilationUnitSyntax compilationUnit)
+        {
+            var members = compilationUnit.Members;
+            var declarationIndex = members.IndexOf(declarationGlobal);
+            if (declarationIndex < 0)
+            {
+                return false;
+            }
+
+            followingStatements = members
+                .Skip(declarationIndex + 1)
+                .OfType<GlobalStatementSyntax>()
+                .Select(globalStatement => globalStatement.Statement)
+                .ToArray();
+            return true;
         }
 
         return false;
