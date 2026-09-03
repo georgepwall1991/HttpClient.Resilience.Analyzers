@@ -64,34 +64,48 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
 
         foreach (var invocation in roots.SelectMany(root => root.DescendantNodes().OfType<InvocationExpressionSyntax>()))
         {
-            if (!IsHostedServiceRegistration(
+            if (TryGetHostedServiceWorkerNames(
                     invocation,
                     context.Compilation,
                     context.CancellationToken,
-                    out var hostedTypeName) ||
-                !ConstructorConsumesTypedClient(
+                    out var hostedTypeNames,
+                    out var reportLocation) &&
+                hostedTypeNames.Any(hostedTypeName => ConstructorConsumesTypedClient(
                     roots,
                     hostedTypeName,
                     typedClients,
                     context.Compilation,
-                    context.CancellationToken))
+                    context.CancellationToken)))
             {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.HCR004,
+                    reportLocation));
                 continue;
             }
 
-            context.ReportDiagnostic(Diagnostic.Create(
-                DiagnosticDescriptors.HCR004,
-                invocation.GetLocation()));
+            if (HostedServiceFactoryResolvesTypedClient(
+                    invocation,
+                    typedClients,
+                    context.Compilation,
+                    context.CancellationToken,
+                    out var factoryLocation))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.HCR004,
+                    factoryLocation));
+            }
         }
     }
 
-    private static bool IsHostedServiceRegistration(
+    private static bool TryGetHostedServiceWorkerNames(
         InvocationExpressionSyntax invocation,
         Compilation compilation,
         System.Threading.CancellationToken cancellationToken,
-        out string hostedTypeName)
+        out IReadOnlyList<string> hostedTypeNames,
+        out Location reportLocation)
     {
-        hostedTypeName = string.Empty;
+        hostedTypeNames = System.Array.Empty<string>();
+        reportLocation = invocation.GetLocation();
 
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
             memberAccess.Name is not GenericNameSyntax genericName ||
@@ -102,21 +116,74 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
         }
 
         var semanticModel = GetSemanticModel(compilation, invocation.SyntaxTree);
-        if (!IsServiceCollectionReceiver(memberAccess.Expression, semanticModel, cancellationToken))
+        if (!IsFrameworkExtensionMethod(invocation, semanticModel, cancellationToken) ||
+            !IsServiceCollectionReceiver(memberAccess.Expression, semanticModel, cancellationToken))
         {
             return false;
         }
 
-        var resolvedType = semanticModel.GetTypeInfo(
-            genericName.TypeArgumentList.Arguments[0],
-            cancellationToken).Type;
-        if (resolvedType is null || resolvedType is IErrorTypeSymbol)
+        if (semanticModel.GetTypeInfo(
+                genericName.TypeArgumentList.Arguments[0],
+                cancellationToken).Type is not { } resolvedType ||
+            resolvedType is IErrorTypeSymbol)
         {
             return false;
         }
 
-        hostedTypeName = NormalizeTypeName(resolvedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        var qualifiedName = NormalizeTypeName(resolvedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        hostedTypeNames = new[] { qualifiedName, resolvedType.Name };
+        reportLocation = genericName.GetLocation();
         return true;
+    }
+
+    private static bool HostedServiceFactoryResolvesTypedClient(
+        InvocationExpressionSyntax invocation,
+        ISet<string> typedClients,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken,
+        out Location reportLocation)
+    {
+        reportLocation = invocation.GetLocation();
+
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+            memberAccess.Name is not IdentifierNameSyntax methodName ||
+            methodName.Identifier.ValueText != "AddHostedService" ||
+            invocation.ArgumentList.Arguments.Count != 1 ||
+            invocation.ArgumentList.Arguments[0].Expression is not LambdaExpressionSyntax factory)
+        {
+            return false;
+        }
+
+        var semanticModel = GetSemanticModel(compilation, invocation.SyntaxTree);
+        if (!IsFrameworkExtensionMethod(invocation, semanticModel, cancellationToken))
+        {
+            return false;
+        }
+
+        reportLocation = methodName.GetLocation();
+        return FactoryExpressionResolvesTypedClient(factory, typedClients, compilation, cancellationToken);
+    }
+
+    private static bool IsFrameworkExtensionMethod(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
+        {
+            return IsFrameworkExtensionMethod(method);
+        }
+
+        var candidateMethods = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+        return candidateMethods.Length == 0 || candidateMethods.All(IsFrameworkExtensionMethod);
+    }
+
+    private static bool IsFrameworkExtensionMethod(IMethodSymbol method)
+    {
+        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
+        return containingNamespace.IsGlobalNamespace ||
+            containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
     }
 
     private static bool IsServiceCollectionReceiver(

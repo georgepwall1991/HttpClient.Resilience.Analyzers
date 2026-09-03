@@ -1448,6 +1448,9 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
     public async Task ReportsDiagnostic_WhenHostedServiceConsumesTypedClient()
     {
         const string source = """
+            using System.Threading;
+            using System.Threading.Tasks;
+
             public static class Registrations
             {
                 public static void Configure(IServiceCollection services)
@@ -1461,8 +1464,16 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
             {
             }
 
-            public sealed class PaymentWorker(PaymentsClient paymentsClient)
+            public sealed class PaymentWorker(PaymentsClient paymentsClient) : IHostedService
             {
+                public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+                public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public interface IHostedService
+            {
+                Task StartAsync(CancellationToken cancellationToken);
+                Task StopAsync(CancellationToken cancellationToken);
             }
 
             public interface IServiceCollection
@@ -1472,7 +1483,8 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
             public static class ServiceCollectionExtensions
             {
                 public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
-                public static IServiceCollection AddHostedService<THostedService>(this IServiceCollection services) => services;
+                public static IServiceCollection AddHostedService<THostedService>(this IServiceCollection services)
+                    where THostedService : class, IHostedService => services;
             }
             """;
 
@@ -1480,12 +1492,20 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
+        Assert.Equal(
+            "AddHostedService<PaymentWorker>",
+            source.Substring(
+                diagnostic.Location.SourceSpan.Start,
+                diagnostic.Location.SourceSpan.Length));
     }
 
     [Fact]
     public async Task DoesNotReport_WhenHostedServiceHasNoTypedClientConsumer()
     {
         const string source = """
+            using System.Threading;
+            using System.Threading.Tasks;
+
             public static class Registrations
             {
                 public static void Configure(IServiceCollection services)
@@ -1499,8 +1519,16 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
             {
             }
 
-            public sealed class PaymentWorker
+            public sealed class PaymentWorker : IHostedService
             {
+                public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+                public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public interface IHostedService
+            {
+                Task StartAsync(CancellationToken cancellationToken);
+                Task StopAsync(CancellationToken cancellationToken);
             }
 
             public interface IServiceCollection
@@ -1510,7 +1538,8 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
             public static class ServiceCollectionExtensions
             {
                 public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
-                public static IServiceCollection AddHostedService<THostedService>(this IServiceCollection services) => services;
+                public static IServiceCollection AddHostedService<THostedService>(this IServiceCollection services)
+                    where THostedService : class, IHostedService => services;
             }
             """;
 
@@ -1548,6 +1577,174 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
         var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
 
         Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHostedServiceExtensionIsCustom()
+    {
+        const string source = """
+            using Acme.Extensions;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddHostedService<PaymentWorker>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentWorker(PaymentsClient paymentsClient)
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+            }
+
+            namespace Acme.Extensions
+            {
+                public static class HostedServiceExtensions
+                {
+                    public static IServiceCollection AddHostedService<THostedService>(this IServiceCollection services) => services;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenHostedServiceFactoryResolvesTypedClient()
+    {
+        const string source = """
+            using System;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddHostedService(provider => new PaymentWorker(provider.GetRequiredService<PaymentsClient>()));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentWorker(PaymentsClient paymentsClient)
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddHostedService(this IServiceCollection services, Func<System.IServiceProvider, object> factory) => services;
+            }
+
+            public static class ServiceProviderExtensions
+            {
+                public static T GetRequiredService<T>(this System.IServiceProvider provider) => default!;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenGenericHostedWorkerConsumesTypedClient()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddHostedService<PaymentWorker<string>>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentWorker<T>(PaymentsClient paymentsClient)
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddHostedService<THostedService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenTopLevelHostedServiceConsumesTypedClient()
+    {
+        const string source = """
+            var builder = new AppBuilder();
+            builder.Services.AddHttpClient<PaymentsClient>();
+            builder.Services.AddHostedService<PaymentWorker>();
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentWorker(PaymentsClient paymentsClient)
+            {
+            }
+
+            public sealed class AppBuilder
+            {
+                public IServiceCollection Services { get; } = null!;
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddHostedService<THostedService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
     }
 
     [Fact]
