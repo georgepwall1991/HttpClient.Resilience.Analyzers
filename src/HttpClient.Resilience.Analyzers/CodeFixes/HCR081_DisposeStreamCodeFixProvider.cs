@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Composition;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HttpClient.Resilience.Analyzers.Diagnostics;
@@ -52,27 +53,48 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
             }
 
             var assignment = node.FirstAncestorOrSelf<AssignmentExpressionSyntax>();
-            if (!TryGetAdjacentDeclaration(
+            if (TryGetAdjacentDeclaration(
                     assignment,
                     out var block,
                     out var adjacentDeclaration,
                     out var assignmentStatement))
             {
+                context.RegisterCodeFix(
+                    CodeAction.Create(
+                        "Dispose stream with using declaration",
+                        cancellationToken => MergeDeclarationAndAssignmentAsync(
+                            context.Document,
+                            block,
+                            adjacentDeclaration,
+                            assignment!,
+                            assignmentStatement,
+                            cancellationToken),
+                        nameof(HCR081_DisposeStreamCodeFixProvider)),
+                    diagnostic);
                 continue;
             }
 
-            context.RegisterCodeFix(
-                CodeAction.Create(
-                    "Dispose stream with using declaration",
-                    cancellationToken => MergeDeclarationAndAssignmentAsync(
-                        context.Document,
-                        block,
-                        adjacentDeclaration,
-                        assignment!,
-                        assignmentStatement,
-                        cancellationToken),
-                    nameof(HCR081_DisposeStreamCodeFixProvider)),
-                diagnostic);
+            if (TryGetAdjacentTopLevelDeclaration(
+                    assignment,
+                    out var compilationUnit,
+                    out var declarationStatement,
+                    out var topLevelDeclaration,
+                    out var topLevelAssignmentStatement))
+            {
+                context.RegisterCodeFix(
+                    CodeAction.Create(
+                        "Dispose stream with using declaration",
+                        cancellationToken => MergeTopLevelDeclarationAndAssignmentAsync(
+                            context.Document,
+                            compilationUnit,
+                            declarationStatement,
+                            topLevelDeclaration,
+                            assignment!,
+                            topLevelAssignmentStatement,
+                            cancellationToken),
+                        nameof(HCR081_DisposeStreamCodeFixProvider)),
+                    diagnostic);
+            }
         }
     }
 
@@ -109,10 +131,72 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
             return false;
         }
 
+        if (ContainsDirectiveTrivia(previousDeclaration) ||
+            ContainsDirectiveTrivia(statement))
+        {
+            return false;
+        }
+
         block = containingBlock;
         declaration = previousDeclaration;
         assignmentStatement = statement;
         return true;
+    }
+
+    private static bool TryGetAdjacentTopLevelDeclaration(
+        AssignmentExpressionSyntax? assignment,
+        out CompilationUnitSyntax compilationUnit,
+        out GlobalStatementSyntax declarationStatement,
+        out LocalDeclarationStatementSyntax declaration,
+        out GlobalStatementSyntax assignmentStatement)
+    {
+        compilationUnit = null!;
+        declarationStatement = null!;
+        declaration = null!;
+        assignmentStatement = null!;
+
+        if (assignment?.Left is not IdentifierNameSyntax identifier ||
+            assignment.Parent is not ExpressionStatementSyntax statement ||
+            statement.Parent is not GlobalStatementSyntax assignmentGlobal ||
+            assignmentGlobal.Parent is not CompilationUnitSyntax root)
+        {
+            return false;
+        }
+
+        var members = root.Members;
+        var assignmentIndex = members.IndexOf(assignmentGlobal);
+        if (assignmentIndex <= 0 ||
+            members[assignmentIndex - 1] is not GlobalStatementSyntax previousGlobal ||
+            previousGlobal.Statement is not LocalDeclarationStatementSyntax previousDeclaration ||
+            previousDeclaration.UsingKeyword != default)
+        {
+            return false;
+        }
+
+        var variables = previousDeclaration.Declaration.Variables;
+        if (variables.Count != 1 ||
+            variables[0].Initializer is not null ||
+            variables[0].Identifier.ValueText != identifier.Identifier.ValueText)
+        {
+            return false;
+        }
+
+        if (ContainsDirectiveTrivia(previousGlobal) ||
+            ContainsDirectiveTrivia(assignmentGlobal))
+        {
+            return false;
+        }
+
+        compilationUnit = root;
+        declarationStatement = previousGlobal;
+        declaration = previousDeclaration;
+        assignmentStatement = assignmentGlobal;
+        return true;
+    }
+
+    private static bool ContainsDirectiveTrivia(SyntaxNode node)
+    {
+        return node.DescendantTrivia().Any(trivia => trivia.IsDirective);
     }
 
     private static async Task<Document> AddUsingDeclarationAsync(
@@ -160,5 +244,39 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
         var updatedBlock = block.WithStatements(statements);
 
         return document.WithSyntaxRoot(root.ReplaceNode(block, updatedBlock));
+    }
+
+    private static async Task<Document> MergeTopLevelDeclarationAndAssignmentAsync(
+        Document document,
+        CompilationUnitSyntax compilationUnit,
+        GlobalStatementSyntax declarationStatement,
+        LocalDeclarationStatementSyntax declaration,
+        AssignmentExpressionSyntax assignment,
+        GlobalStatementSyntax assignmentStatement,
+        CancellationToken cancellationToken)
+    {
+        var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        if (root is null)
+        {
+            return document;
+        }
+
+        var variable = declaration.Declaration.Variables[0]
+            .WithInitializer(SyntaxFactory.EqualsValueClause(assignment.Right.WithoutTrivia()));
+        var usingDeclaration = declaration
+            .WithDeclaration(declaration.Declaration.WithVariables(SyntaxFactory.SingletonSeparatedList(variable)))
+            .WithUsingKeyword(SyntaxFactory.Token(SyntaxKind.UsingKeyword).WithTrailingTrivia(SyntaxFactory.Space))
+            .WithTrailingTrivia(assignmentStatement.GetTrailingTrivia())
+            .WithAdditionalAnnotations(Formatter.Annotation);
+        var usingStatement = declarationStatement.WithStatement(usingDeclaration);
+        var members = compilationUnit.Members;
+        // Remove by index: Replace re-wraps the remaining elements, so a
+        // subsequent Remove by node reference would no longer match.
+        var updatedMembers = members
+            .Replace(declarationStatement, usingStatement)
+            .RemoveAt(members.IndexOf(assignmentStatement));
+        var updatedRoot = compilationUnit.WithMembers(updatedMembers);
+
+        return document.WithSyntaxRoot(updatedRoot);
     }
 }
