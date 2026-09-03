@@ -1041,4 +1041,286 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
 
         Assert.Empty(titles);
     }
+
+    [Fact]
+    public async Task CodeFix_RemovesTopLevelDuplicateRegistration()
+    {
+        const string source = """
+            IServiceCollection services = null!;
+            services.AddHttpClient<PaymentsClient>();
+            services.AddTransient<PaymentsClient>();
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Single(diagnostics);
+
+        var fixedSource = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("services.AddHttpClient<PaymentsClient>();", fixedSource);
+        Assert.DoesNotContain("services.AddTransient<PaymentsClient>();", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_PreservesCommentWhenRemovingTopLevelDuplicate()
+    {
+        const string source = """
+            IServiceCollection services = null!;
+            services.AddHttpClient<PaymentsClient>();
+            // Duplicate left over from a merge.
+            services.AddTransient<PaymentsClient>();
+            services.AddTransient<OtherClient>();
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class OtherClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("// Duplicate left over from a merge.", fixedSource);
+        Assert.Contains("services.AddTransient<OtherClient>();", fixedSource);
+        Assert.DoesNotContain("services.AddTransient<PaymentsClient>();", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_PreservesCommentWhenRemovingLastTopLevelDuplicate()
+    {
+        const string program = """
+            IServiceCollection services = null!;
+            services.AddHttpClient<PaymentsClient>();
+            // Duplicate left over from a merge.
+            services.AddTransient<PaymentsClient>();
+            """;
+
+        const string stubs = """
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(program, stubs);
+
+        Assert.Contains("// Duplicate left over from a merge.", fixedSource);
+        Assert.DoesNotContain("services.AddTransient<PaymentsClient>();", fixedSource);
+    }
+
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedWhenDirectiveGuardsTopLevelDuplicate()
+    {
+        const string source = """
+            #define DEBUG
+            IServiceCollection services = null!;
+            services.AddHttpClient<PaymentsClient>();
+            #if DEBUG
+            services.AddTransient<PaymentsClient>();
+            #endif
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedWhenDirectiveGuardsBlockDuplicate()
+    {
+        const string source = """
+            #define DEBUG
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+            #if DEBUG
+                    services.AddTransient<PaymentsClient>();
+            #endif
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_PreservesFooterOrderWhenRemovingLastTopLevelDuplicate()
+    {
+        const string program = """
+            IServiceCollection services = null!;
+            services.AddHttpClient<PaymentsClient>();
+            // Duplicate left over from a merge.
+            services.AddTransient<PaymentsClient>();
+            // Footer note kept at the end of the file.
+            """;
+
+        const string stubs = """
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(program, stubs);
+
+        Assert.DoesNotContain("services.AddTransient<PaymentsClient>();", fixedSource);
+        Assert.True(
+            fixedSource.IndexOf("// Duplicate left over from a merge.", StringComparison.Ordinal) <
+            fixedSource.IndexOf("// Footer note kept at the end of the file.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task CodeFix_FixAllRemovesTopLevelDuplicates()
+    {
+        const string source = """
+            IServiceCollection services = null!;
+            services.AddHttpClient<PaymentsClient>();
+            services.AddTransient<PaymentsClient>();
+            services.AddHttpClient<OtherClient>();
+            services.AddTransient<OtherClient>();
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class OtherClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
+            .ApplyFixAllInDocumentAsync(source);
+
+        Assert.DoesNotContain("services.AddTransient<PaymentsClient>();", fixedSource);
+        Assert.DoesNotContain("services.AddTransient<OtherClient>();", fixedSource);
+        Assert.Contains("services.AddHttpClient<PaymentsClient>();", fixedSource);
+        Assert.Contains("services.AddHttpClient<OtherClient>();", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_DoesNotIntroduceCarriageReturnsInLfFile()
+    {
+        string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddTransient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """.Replace("\r\n", "\n");
+
+        var fixedSource = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.DoesNotContain("\r", fixedSource);
+        Assert.DoesNotContain("services.AddTransient<PaymentsClient>();", fixedSource);
+    }
 }

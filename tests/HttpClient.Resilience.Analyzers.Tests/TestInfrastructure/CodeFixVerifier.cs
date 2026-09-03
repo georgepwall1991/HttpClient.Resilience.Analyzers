@@ -13,18 +13,18 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
     where TAnalyzer : DiagnosticAnalyzer, new()
     where TCodeFix : CodeFixProvider, new()
 {
-    public static async Task<IReadOnlyList<string>> GetCodeFixTitlesAsync(string source)
+    public static async Task<IReadOnlyList<string>> GetCodeFixTitlesAsync(params string[] sources)
     {
         return await WithCodeFixContextAsync(
-            source,
+            sources,
             (_, _, actions) => Task.FromResult<IReadOnlyList<string>>(
                 actions.Select(action => action.Title).ToArray()))
             .ConfigureAwait(false);
     }
 
-    public static async Task<string> ApplyFirstCodeFixAsync(string source)
+    public static async Task<string> ApplyFirstCodeFixAsync(params string[] sources)
     {
-        return await WithCodeFixContextAsync(source, ApplyFirstCodeFixAsync).ConfigureAwait(false);
+        return await WithCodeFixContextAsync(sources, ApplyFirstCodeFixAsync).ConfigureAwait(false);
     }
 
     private static async Task<string> ApplyFirstCodeFixAsync(
@@ -66,7 +66,7 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
     }
 
     private static async Task<TResult> WithCodeFixContextAsync<TResult>(
-        string source,
+        string[] sources,
         Func<Document, Diagnostic, IReadOnlyList<CodeAction>, Task<TResult>> action)
     {
         using var workspace = new AdhocWorkspace();
@@ -78,9 +78,23 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
             .WithParseOptions(CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview))
             .AddMetadataReferences(TestCompilationFactory.References);
 
-        var document = project.AddDocument("Test.cs", SourceText.From(source, Encoding.UTF8));
-        document = await WithTopLevelOutputKindAsync(document).ConfigureAwait(false);
-        var compilation = await document.Project.GetCompilationAsync().ConfigureAwait(false);
+        Document? primaryDocument = null;
+        for (var index = 0; index < sources.Length; index++)
+        {
+            var added = project.AddDocument(
+                index == 0 ? "Test.cs" : $"Test{index}.cs",
+                SourceText.From(sources[index], Encoding.UTF8));
+            added = await WithTopLevelOutputKindAsync(added).ConfigureAwait(false);
+            project = added.Project;
+            primaryDocument ??= added;
+        }
+
+        if (primaryDocument is null)
+        {
+            throw new InvalidOperationException("At least one source file is required.");
+        }
+
+        var compilation = await project.GetCompilationAsync().ConfigureAwait(false);
 
         if (compilation is null)
         {
@@ -102,6 +116,10 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
         var diagnostic = diagnostics
             .OrderBy(candidate => candidate.Location.SourceSpan.Start)
             .First();
+        var document = diagnostic.Location.SourceTree is { } tree &&
+            project.GetDocument(tree) is { } diagnosticDocument
+            ? diagnosticDocument
+            : primaryDocument;
         var actions = new List<CodeAction>();
         var context = new CodeFixContext(
             document,
@@ -114,9 +132,9 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
         return await action(document, diagnostic, actions).ConfigureAwait(false);
     }
 
-    public static async Task<string> ApplyFirstCodeFixAllowingRemainingAsync(string source)
+    public static async Task<string> ApplyFirstCodeFixAllowingRemainingAsync(params string[] sources)
     {
-        return await WithCodeFixContextAsync(source, ApplyFirstCodeFixAllowingRemainingAsync).ConfigureAwait(false);
+        return await WithCodeFixContextAsync(sources, ApplyFirstCodeFixAllowingRemainingAsync).ConfigureAwait(false);
     }
 
     private static async Task<string> ApplyFirstCodeFixAllowingRemainingAsync(
