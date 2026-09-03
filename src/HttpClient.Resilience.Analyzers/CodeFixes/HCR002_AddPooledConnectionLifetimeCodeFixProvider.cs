@@ -118,7 +118,9 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
     {
         handlerCreation = null!;
 
-        if (clientCreation.ArgumentList?.Arguments.Count != 1 ||
+        // A second argument is always the disposeHandler flag, which the merge preserves
+        // untouched, so only the handler in the first position needs verification.
+        if (clientCreation.ArgumentList?.Arguments.Count is not 1 and not 2 ||
             UnwrapTransparentExpression(clientCreation.ArgumentList.Arguments[0].Expression) is not BaseObjectCreationExpressionSyntax candidate ||
             (candidate.ArgumentList?.Arguments.Count ?? 0) != 0)
         {
