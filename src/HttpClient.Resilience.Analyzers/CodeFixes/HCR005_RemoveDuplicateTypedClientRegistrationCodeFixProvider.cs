@@ -63,6 +63,11 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
             return false;
         }
 
+        if (statement.DescendantTrivia().Any(trivia => trivia.IsDirective))
+        {
+            return false;
+        }
+
         var expression = statement.Expression;
         while (expression is ParenthesizedExpressionSyntax parenthesized)
         {
@@ -178,7 +183,8 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
             var endOfFile = compilationUnit.EndOfFileToken;
             return root.ReplaceToken(
                 endOfFile,
-                endOfFile.WithTrailingTrivia(endOfFile.TrailingTrivia.AddRange(significantTrivia)));
+                endOfFile.WithLeadingTrivia(
+                    SyntaxFactory.TriviaList(significantTrivia).AddRange(endOfFile.LeadingTrivia)));
         }
 
         return root;
