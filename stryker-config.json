@@ -5,20 +5,20 @@
       "tests/HttpClient.Resilience.Analyzers.Tests/HttpClient.Resilience.Analyzers.Tests.csproj"
     ],
     "mutate": [
+      "**/HCR002_AddPooledConnectionLifetimeCodeFixProvider.cs",
+      "**/HCR004_TypedClientInjectedIntoSingletonAnalyzer.cs",
+      "**/HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider.cs",
       "**/HCR042*.cs",
       "**/HCR043*.cs",
+      "**/HCR060_DisposeResponseCodeFixProvider.cs",
+      "**/HCR081_DisposeStreamCodeFixProvider.cs",
+      "**/HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer.cs",
       "**/HttpMethodSafety.cs",
       "**/ResilienceHandlerInvocation.cs",
       "**/ResilienceRetryInvocation.cs",
       "**/RetryUnsafeMethodGuard.cs",
       "**/SafeHttpMethodPredicate.cs",
-      "**/TopLevelUsingDeclarationMerge.cs",
-      "**/HCR060_DisposeResponseCodeFixProvider.cs",
-      "**/HCR081_DisposeStreamCodeFixProvider.cs",
-      "**/HCR002_AddPooledConnectionLifetimeCodeFixProvider.cs",
-      "**/HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider.cs",
-      "**/HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer.cs",
-      "**/HCR004_TypedClientInjectedIntoSingletonAnalyzer.cs"
+      "**/TopLevelUsingDeclarationMerge.cs"
     ],
     "thresholds": {
       "high": 80,
