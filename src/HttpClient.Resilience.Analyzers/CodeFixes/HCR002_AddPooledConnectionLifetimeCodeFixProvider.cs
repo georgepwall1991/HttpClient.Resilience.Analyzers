@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HttpClient.Resilience.Analyzers.Diagnostics;
+using HttpClient.Resilience.Analyzers.KnownSymbols;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
@@ -28,7 +29,8 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
     public override async Task RegisterCodeFixesAsync(CodeFixContext context)
     {
         var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
-        if (root is null)
+        var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+        if (root is null || semanticModel is null)
         {
             return;
         }
@@ -53,6 +55,25 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
                 continue;
             }
 
+            if (variable?.Initializer?.Value is BaseObjectCreationExpressionSyntax variableCreation &&
+                TryGetInlineUnconfiguredHandler(
+                    variableCreation,
+                    semanticModel,
+                    context.CancellationToken,
+                    out var variableHandler))
+            {
+                context.RegisterCodeFix(
+                    CodeAction.Create(
+                        "Configure PooledConnectionLifetime",
+                        cancellationToken => ConfigureInlineHandlerAsync(
+                            context.Document,
+                            variableHandler,
+                            cancellationToken),
+                        nameof(HCR002_AddPooledConnectionLifetimeCodeFixProvider)),
+                    diagnostic);
+                continue;
+            }
+
             var property = node.FirstAncestorOrSelf<PropertyDeclarationSyntax>();
             if (property?.Initializer is not null &&
                 CanSafelyConfigureInitializer(property.Initializer.Value))
@@ -66,8 +87,95 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
                             cancellationToken),
                         nameof(HCR002_AddPooledConnectionLifetimeCodeFixProvider)),
                     diagnostic);
+                continue;
+            }
+
+            if (property?.Initializer?.Value is BaseObjectCreationExpressionSyntax propertyCreation &&
+                TryGetInlineUnconfiguredHandler(
+                    propertyCreation,
+                    semanticModel,
+                    context.CancellationToken,
+                    out var propertyHandler))
+            {
+                context.RegisterCodeFix(
+                    CodeAction.Create(
+                        "Configure PooledConnectionLifetime",
+                        cancellationToken => ConfigureInlineHandlerAsync(
+                            context.Document,
+                            propertyHandler,
+                            cancellationToken),
+                        nameof(HCR002_AddPooledConnectionLifetimeCodeFixProvider)),
+                    diagnostic);
             }
         }
+    }
+
+    private static bool TryGetInlineUnconfiguredHandler(
+        BaseObjectCreationExpressionSyntax clientCreation,
+        SemanticModel semanticModel,
+        CancellationToken cancellationToken,
+        out BaseObjectCreationExpressionSyntax handlerCreation)
+    {
+        handlerCreation = null!;
+
+        if (clientCreation.ArgumentList?.Arguments.Count != 1 ||
+            UnwrapTransparentExpression(clientCreation.ArgumentList.Arguments[0].Expression) is not BaseObjectCreationExpressionSyntax candidate ||
+            (candidate.ArgumentList?.Arguments.Count ?? 0) != 0)
+        {
+            return false;
+        }
+
+        if (semanticModel.GetTypeInfo(candidate, cancellationToken).Type is not { } handlerType ||
+            handlerType is IErrorTypeSymbol ||
+            !HttpClientSymbols.IsSocketsHttpHandler(handlerType))
+        {
+            return false;
+        }
+
+        if (HasPooledConnectionLifetimeAssignment(candidate) ||
+            HasDisallowedTrivia(candidate))
+        {
+            return false;
+        }
+
+        handlerCreation = candidate;
+        return true;
+    }
+
+    private static ExpressionSyntax UnwrapTransparentExpression(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix when
+                    postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
+        }
+    }
+
+    private static bool HasPooledConnectionLifetimeAssignment(BaseObjectCreationExpressionSyntax handlerCreation)
+    {
+        return handlerCreation.Initializer?.Expressions
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment => assignment.Left is IdentifierNameSyntax identifier &&
+                identifier.Identifier.ValueText == "PooledConnectionLifetime") == true;
+    }
+
+    private static bool HasDisallowedTrivia(SyntaxNode node)
+    {
+        return node.DescendantTrivia().Any(trivia => trivia.Kind() is
+            SyntaxKind.SingleLineCommentTrivia or
+            SyntaxKind.MultiLineCommentTrivia or
+            SyntaxKind.SingleLineDocumentationCommentTrivia or
+            SyntaxKind.MultiLineDocumentationCommentTrivia);
     }
 
     private static bool CanSafelyConfigureInitializer(ExpressionSyntax expression)
@@ -77,11 +185,7 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
         return expression is BaseObjectCreationExpressionSyntax creation &&
             creation.ArgumentList?.Arguments.Count == 0 &&
             creation.Initializer is null &&
-            !creation.DescendantTrivia().Any(trivia => trivia.Kind() is
-                SyntaxKind.SingleLineCommentTrivia or
-                SyntaxKind.MultiLineCommentTrivia or
-                SyntaxKind.SingleLineDocumentationCommentTrivia or
-                SyntaxKind.MultiLineDocumentationCommentTrivia);
+            !HasDisallowedTrivia(creation);
     }
 
     private static async Task<Document> ReplaceInitializerValueAsync(
@@ -102,5 +206,32 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
 
         return document.WithSyntaxRoot(
             root.ReplaceNode(initializer, initializer.WithValue(replacement)));
+    }
+
+    private static async Task<Document> ConfigureInlineHandlerAsync(
+        Document document,
+        BaseObjectCreationExpressionSyntax handlerCreation,
+        CancellationToken cancellationToken)
+    {
+        var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        if (root is null)
+        {
+            return document;
+        }
+
+        var lifetimeAssignment = SyntaxFactory.AssignmentExpression(
+            SyntaxKind.SimpleAssignmentExpression,
+            SyntaxFactory.IdentifierName("PooledConnectionLifetime"),
+            SyntaxFactory.ParseExpression("global::System.TimeSpan.FromMinutes(2)"));
+        var initializer = handlerCreation.Initializer is { } existing
+            ? existing.WithExpressions(existing.Expressions.Add(lifetimeAssignment))
+            : SyntaxFactory.InitializerExpression(
+                SyntaxKind.ObjectInitializerExpression,
+                SyntaxFactory.SingletonSeparatedList<ExpressionSyntax>(lifetimeAssignment));
+        var configuredHandler = handlerCreation
+            .WithInitializer(initializer)
+            .WithAdditionalAnnotations(Formatter.Annotation);
+
+        return document.WithSyntaxRoot(root.ReplaceNode(handlerCreation, configuredHandler));
     }
 }

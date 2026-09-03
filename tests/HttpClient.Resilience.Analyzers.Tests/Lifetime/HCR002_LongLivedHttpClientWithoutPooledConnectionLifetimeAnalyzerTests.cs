@@ -1170,7 +1170,30 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
-    public async Task CodeFix_IsNotOffered_WhenHttpClientAlreadyUsesHandlerArgument()
+    public async Task CodeFix_IsNotOffered_WhenHttpClientUsesSharedHandlerField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static readonly SocketsHttpHandler Handler = new();
+                private static readonly HttpClient Client = new(Handler);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(source);
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR002, diagnostic.Id);
+
+        var titles = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_ConfiguresInlineHandlerWithoutInitializer()
     {
         const string source = """
             using System.Net.Http;
@@ -1185,10 +1208,53 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticIds.HCR002, diagnostic.Id);
 
-        var titles = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
-            .GetCodeFixTitlesAsync(source);
+        var fixedSource = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
 
-        Assert.Empty(titles);
+        Assert.Contains("new SocketsHttpHandler", fixedSource);
+        Assert.Contains("PooledConnectionLifetime = global::System.TimeSpan.FromMinutes(2)", fixedSource);
+
+        Assert.Empty(await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(fixedSource));
+    }
+
+    [Fact]
+    public async Task CodeFix_AppendsPooledConnectionLifetimeToInlineHandlerInitializer()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static readonly HttpClient Client = new(new SocketsHttpHandler { MaxConnectionsPerServer = 20 });
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("MaxConnectionsPerServer = 20", fixedSource);
+        Assert.Contains("PooledConnectionLifetime = global::System.TimeSpan.FromMinutes(2)", fixedSource);
+
+        Assert.Empty(await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(fixedSource));
+    }
+
+    [Fact]
+    public async Task CodeFix_FixAllConfiguresInlineHandlers()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static readonly HttpClient First = new(new SocketsHttpHandler());
+                private static readonly HttpClient Second = new(new SocketsHttpHandler { MaxConnectionsPerServer = 20 });
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
+            .ApplyFixAllInDocumentAsync(source);
+
+        Assert.Equal(2, fixedSource.Split("PooledConnectionLifetime = global::System.TimeSpan.FromMinutes(2)").Length - 1);
     }
 
     [Fact]
@@ -1214,7 +1280,26 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
     }
 
     [Fact]
-    public async Task CodeFix_IsNotOffered_WhenPropertyInitializerAlreadyPassesHandler()
+    public async Task CodeFix_IsNotOffered_WhenPropertyInitializerUsesSharedHandlerField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class GitHubClient
+            {
+                private static readonly SocketsHttpHandler Handler = new();
+                public static HttpClient Client { get; } = new(Handler);
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_ConfiguresInlineHandlerOnStaticPropertyInitializer()
     {
         const string source = """
             using System.Net.Http;
@@ -1225,10 +1310,13 @@ public sealed class HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAna
             }
             """;
 
-        var titles = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
-            .GetCodeFixTitlesAsync(source);
+        var fixedSource = await CodeFixVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer, HCR002_AddPooledConnectionLifetimeCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
 
-        Assert.Empty(titles);
+        Assert.Contains("new SocketsHttpHandler", fixedSource);
+        Assert.Contains("PooledConnectionLifetime = global::System.TimeSpan.FromMinutes(2)", fixedSource);
+
+        Assert.Empty(await AnalyzerVerifier<HCR002_LongLivedHttpClientWithoutPooledConnectionLifetimeAnalyzer>.GetDiagnosticsAsync(fixedSource));
     }
 
     [Fact]
