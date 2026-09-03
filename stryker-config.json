@@ -11,7 +11,14 @@
       "**/ResilienceHandlerInvocation.cs",
       "**/ResilienceRetryInvocation.cs",
       "**/RetryUnsafeMethodGuard.cs",
-      "**/SafeHttpMethodPredicate.cs"
+      "**/SafeHttpMethodPredicate.cs",
+      "**/TopLevelUsingDeclarationMerge.cs",
+      "**/HCR060_DisposeResponseCodeFixProvider.cs",
+      "**/HCR081_DisposeStreamCodeFixProvider.cs",
+      "**/HCR002_AddPooledConnectionLifetimeCodeFixProvider.cs",
+      "**/HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider.cs",
+      "**/HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer.cs",
+      "**/HCR004_TypedClientInjectedIntoSingletonAnalyzer.cs"
     ],
     "thresholds": {
       "high": 80,

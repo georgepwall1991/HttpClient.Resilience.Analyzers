@@ -1845,6 +1845,105 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
     }
 
     [Fact]
+    public async Task ReportsSingleDiagnostic_WhenHostedRegistrationMatchesBothGenericAndFactoryPaths()
+    {
+        const string source = """
+            using System;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddHostedService<PaymentWorker>(provider => new PaymentWorker(provider.GetRequiredService<PaymentsClient>()));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentWorker(PaymentsClient paymentsClient)
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddHostedService<TService>(this IServiceCollection services, Func<System.IServiceProvider, TService> factory) => services;
+            }
+
+            public static class ServiceProviderExtensions
+            {
+                public static T GetRequiredService<T>(this System.IServiceProvider provider) => default!;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenStaticFormHostedFactoryResolvesTypedClient()
+    {
+        const string source = """
+            using System;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    ServiceCollectionHostedServiceExtensions.AddHostedService(
+                        services,
+                        provider => new PaymentWorker(provider.GetRequiredService<PaymentsClient>()));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentWorker(PaymentsClient paymentsClient)
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+            }
+
+            public static class ServiceCollectionHostedServiceExtensions
+            {
+                public static IServiceCollection AddHostedService(
+                    IServiceCollection services,
+                    Func<System.IServiceProvider, object> factory) => services;
+            }
+
+            public static class ServiceProviderExtensions
+            {
+                public static T GetRequiredService<T>(this System.IServiceProvider provider) => default!;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task CodeFix_IsNotOfferedForHostedServiceRegistration()
     {
         const string source = """

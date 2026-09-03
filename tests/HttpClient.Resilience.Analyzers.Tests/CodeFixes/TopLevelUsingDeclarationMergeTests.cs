@@ -144,6 +144,40 @@ public sealed class TopLevelUsingDeclarationMergeTests
         Assert.False(TopLevelUsingDeclarationMerge.ContainsDirectiveTrivia(plain));
     }
 
+    [Fact]
+    public async Task TryGetAdjacentDeclaration_RejectsLeadingAssignmentWithoutPredecessor()
+    {
+        // Index zero has no preceding member, so no declaration can be adjacent.
+        var assignment = ParseAssignment("""
+            response = await client.GetAsync("https://example.com");
+            """);
+
+        Assert.False(TopLevelUsingDeclarationMerge.TryGetAdjacentDeclaration(
+            assignment,
+            out _,
+            out _,
+            out _,
+            out _));
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task TryGetAdjacentDeclaration_RejectsMultipleDeclarators()
+    {
+        var assignment = ParseAssignment("""
+            HttpResponseMessage first, second;
+            first = await client.GetAsync("https://example.com");
+            """);
+
+        Assert.False(TopLevelUsingDeclarationMerge.TryGetAdjacentDeclaration(
+            assignment,
+            out _,
+            out _,
+            out _,
+            out _));
+        await Task.CompletedTask;
+    }
+
     private static AssignmentExpressionSyntax ParseAssignment(string statements)
     {
         var root = CSharpSyntaxTree.ParseText(statements).GetRoot();

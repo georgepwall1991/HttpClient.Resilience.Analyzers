@@ -1107,9 +1107,34 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
         var fixedSource = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
             .ApplyFirstCodeFixAsync(source);
 
-        Assert.Contains("// Duplicate left over from a merge.", fixedSource);
-        Assert.Contains("services.AddTransient<OtherClient>();", fixedSource);
-        Assert.DoesNotContain("services.AddTransient<PaymentsClient>();", fixedSource);
+        const string expected = """
+            IServiceCollection services = null!;
+            services.AddHttpClient<PaymentsClient>();
+            // Duplicate left over from a merge.
+            services.AddTransient<OtherClient>();
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class OtherClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        Assert.Equal(
+            expected.Replace("\r\n", "\n"),
+            fixedSource.Replace("\r\n", "\n"));
     }
 
     [Fact]
