@@ -5,7 +5,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>HttpClient.Resilience.Analyzers</PackageId>
-    <Version>0.1.183</Version>
+    <Version>0.1.184</Version>
     <Title>HttpClient Resilience Analyzers — IHttpClientFactory, Polly, and Http.Resilience</Title>
     <Authors>George Wall</Authors>
     <Copyright>Copyright (c) George Wall and contributors 2026</Copyright>
@@ -17,7 +17,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Documentation and catalog accuracy for HCR043: health-audit inventory, README/FAQ/launch copy, and HCR041 rule title now cover custom AddResilienceHandler pipelines and unsafe HTTP methods beyond POST.</PackageReleaseNotes>
+    <PackageReleaseNotes>HCR060 code fix now merges an adjacent response declaration and assignment in top-level statements, and withholds merges guarded by preprocessor directives.</PackageReleaseNotes>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
