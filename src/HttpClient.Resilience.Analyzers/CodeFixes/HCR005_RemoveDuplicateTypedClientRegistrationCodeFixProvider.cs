@@ -92,11 +92,16 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
             significantTrivia.AddRange(annotatedStatement.GetLastToken().TrailingTrivia));
         if (!significantTrivia.Any() || !significantTrivia.Last().IsKind(SyntaxKind.EndOfLineTrivia))
         {
-            significantTrivia = significantTrivia.Add(SyntaxFactory.EndOfLine("\r\n"));
+            significantTrivia = significantTrivia.Add(SyntaxFactory.EndOfLine(DetectEndOfLineStyle(annotatedRoot)));
         }
 
         var migratedRoot = annotatedRoot;
-        if (significantTrivia.Count > 0 && annotatedStatement.Parent is BlockSyntax block)
+        if (annotatedStatement.Parent is GlobalStatementSyntax annotatedGlobal &&
+            annotatedGlobal.Parent is CompilationUnitSyntax compilationUnit)
+        {
+            migratedRoot = MigrateTopLevelTrivia(annotatedRoot, compilationUnit, annotatedGlobal, significantTrivia);
+        }
+        else if (significantTrivia.Count > 0 && annotatedStatement.Parent is BlockSyntax block)
         {
             var index = block.Statements.IndexOf(annotatedStatement);
 
@@ -119,6 +124,22 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
         }
 
         var statementToRemove = (StatementSyntax)migratedRoot.GetAnnotatedNodesAndTokens(marker).Single().AsNode()!;
+        if (statementToRemove.Parent is GlobalStatementSyntax globalToRemove &&
+            globalToRemove.Parent is CompilationUnitSyntax updatedUnit)
+        {
+            // SyntaxRemoveOptions cannot remove top-level statements, so drop the
+            // global member by index instead.
+            var members = updatedUnit.Members;
+            var removeIndex = members.IndexOf(globalToRemove);
+            if (removeIndex < 0)
+            {
+                return document;
+            }
+
+            return document.WithSyntaxRoot(
+                updatedUnit.WithMembers(members.RemoveAt(removeIndex)).WithAdditionalAnnotations(Formatter.Annotation));
+        }
+
         var newRoot = migratedRoot.RemoveNode(statementToRemove, SyntaxRemoveOptions.KeepNoTrivia);
         if (newRoot is null)
         {
@@ -126,6 +147,59 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
         }
 
         return document.WithSyntaxRoot(newRoot.WithAdditionalAnnotations(Formatter.Annotation));
+    }
+
+    private static SyntaxNode MigrateTopLevelTrivia(
+        SyntaxNode root,
+        CompilationUnitSyntax compilationUnit,
+        GlobalStatementSyntax removedGlobal,
+        SyntaxTriviaList significantTrivia)
+    {
+        var members = compilationUnit.Members;
+        var index = members.IndexOf(removedGlobal);
+        if (index < 0)
+        {
+            return root;
+        }
+
+        // Remove by index: Replace re-wraps the remaining elements, so a
+        // subsequent Remove by node reference would no longer match.
+        if (index + 1 < members.Count)
+        {
+            var following = members[index + 1];
+            return root.ReplaceNode(
+                following,
+                following.WithLeadingTrivia(
+                    SyntaxFactory.TriviaList(significantTrivia).AddRange(following.GetLeadingTrivia())));
+        }
+
+        if (ContainsComment(significantTrivia))
+        {
+            var endOfFile = compilationUnit.EndOfFileToken;
+            return root.ReplaceToken(
+                endOfFile,
+                endOfFile.WithTrailingTrivia(endOfFile.TrailingTrivia.AddRange(significantTrivia)));
+        }
+
+        return root;
+    }
+
+    private static bool ContainsComment(SyntaxTriviaList trivia)
+    {
+        return trivia.Any(IsSignificantComment);
+    }
+
+    private static string DetectEndOfLineStyle(SyntaxNode root)
+    {
+        foreach (var trivia in root.DescendantTrivia())
+        {
+            if (trivia.IsKind(SyntaxKind.EndOfLineTrivia))
+            {
+                return trivia.ToString();
+            }
+        }
+
+        return "\r\n";
     }
 
     private static SyntaxTriviaList CollectCommentBlock(SyntaxTriviaList trivia)
