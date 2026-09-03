@@ -34,7 +34,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 For a library or shared project, keep the analyzer private to the project:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.185" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.186" PrivateAssets="all" />
 ```
 
 Build normally with `dotnet build`. Diagnostics appear in supported IDEs, command-line builds, and CI without application configuration.
