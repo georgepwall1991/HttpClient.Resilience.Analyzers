@@ -1549,6 +1549,218 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
             StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ReportsDiagnostic_WhenTopLevelResponseIsAssignedAfterDeclaration()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            HttpClient client = new();
+            HttpResponseMessage response;
+            response = await client.GetAsync("https://example.com", HttpCompletionOption.ResponseHeadersRead);
+            System.Console.WriteLine(response.StatusCode);
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR060, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task CodeFix_MergesAdjacentDeclarationAndAssignmentInTopLevelStatements()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            HttpClient client = new();
+            HttpResponseMessage response;
+            response = await client.GetAsync("https://example.com", HttpCompletionOption.ResponseHeadersRead);
+            System.Console.WriteLine(response.StatusCode);
+            """;
+
+        const string expected = """
+            using System.Net.Http;
+
+            HttpClient client = new();
+
+            using HttpResponseMessage response = await client.GetAsync("https://example.com", HttpCompletionOption.ResponseHeadersRead);
+            System.Console.WriteLine(response.StatusCode);
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Equal(NormalizeLineEndings(expected), NormalizeLineEndings(fixedSource));
+    }
+
+    [Fact]
+    public async Task CodeFix_FixAllMergesTopLevelDeclarations()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            HttpClient client = new();
+            HttpResponseMessage first;
+            first = await client.GetAsync("https://example.com/first", HttpCompletionOption.ResponseHeadersRead);
+            System.Console.WriteLine(first.StatusCode);
+            HttpResponseMessage second;
+            second = await client.GetAsync("https://example.com/second", HttpCompletionOption.ResponseHeadersRead);
+            System.Console.WriteLine(second.StatusCode);
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .ApplyFixAllInDocumentAsync(source);
+
+        Assert.Contains(
+            "using HttpResponseMessage first = await client.GetAsync",
+            fixedSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "using HttpResponseMessage second = await client.GetAsync",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CodeFix_PreservesCommentsBetweenTopLevelDeclarationAndAssignment()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            HttpClient client = new();
+            HttpResponseMessage response;
+            // The response owns the streaming content and must be disposed here.
+            response = await client.GetAsync("https://example.com", HttpCompletionOption.ResponseHeadersRead);
+            System.Console.WriteLine(response.StatusCode);
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("The response owns the streaming content and must be disposed here.", fixedSource);
+        Assert.Contains("using HttpResponseMessage response = await client.GetAsync", fixedSource);
+        Assert.DoesNotContain("HttpResponseMessage response;", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedForNonAdjacentTopLevelAssignment()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            HttpClient client = new();
+            HttpResponseMessage response;
+            System.Console.WriteLine("Sending request.");
+            response = await client.GetAsync("https://example.com", HttpCompletionOption.ResponseHeadersRead);
+            System.Console.WriteLine(response.StatusCode);
+            """;
+
+        var titles = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedWhenDirectiveGuardsTopLevelAssignment()
+    {
+        const string source = """
+            #define DEBUG
+            using System.Net.Http;
+
+            HttpClient client = new();
+            HttpResponseMessage response;
+            #if DEBUG
+            response = await client.GetAsync("https://example.com", HttpCompletionOption.ResponseHeadersRead);
+            #endif
+            System.Console.WriteLine(response.StatusCode);
+            """;
+
+        var titles = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedWhenDirectiveGuardsBlockAssignment()
+    {
+        const string source = """
+            #define DEBUG
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client)
+                {
+                    HttpResponseMessage response;
+            #if DEBUG
+                    response = await client.GetAsync("https://example.com", HttpCompletionOption.ResponseHeadersRead);
+            #endif
+                    System.Console.WriteLine(response.StatusCode);
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedWhenDirectiveSitsInsideTopLevelAssignment()
+    {
+        const string source = """
+            #define DEBUG
+            using System.Net.Http;
+
+            HttpClient client = new();
+            HttpResponseMessage response;
+            response = await client.GetAsync(
+            #if DEBUG
+                "https://example.com",
+            #else
+                "https://example.org",
+            #endif
+                HttpCompletionOption.ResponseHeadersRead);
+            System.Console.WriteLine(response.StatusCode);
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR060, diagnostic.Id);
+
+        var titles = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedForConditionalTopLevelAssignment()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            HttpClient client = new();
+            HttpResponseMessage response;
+            if (client.Timeout.TotalSeconds > 0)
+            {
+                response = await client.GetAsync("https://example.com", HttpCompletionOption.ResponseHeadersRead);
+                System.Console.WriteLine(response.StatusCode);
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
     private static string NormalizeLineEndings(string value)
     {
         return value.Replace("\r\n", "\n");

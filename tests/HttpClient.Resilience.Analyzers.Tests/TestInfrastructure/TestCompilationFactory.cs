@@ -55,7 +55,12 @@ internal static class TestCompilationFactory
 
     private static bool ContainsGlobalStatements(SyntaxTree syntaxTree)
     {
-        return syntaxTree.GetRoot() is CompilationUnitSyntax compilationUnit &&
+        return ContainsGlobalStatements(syntaxTree.GetRoot());
+    }
+
+    internal static bool ContainsGlobalStatements(SyntaxNode root)
+    {
+        return root is CompilationUnitSyntax compilationUnit &&
             compilationUnit.Members.OfType<GlobalStatementSyntax>().Any();
     }
 

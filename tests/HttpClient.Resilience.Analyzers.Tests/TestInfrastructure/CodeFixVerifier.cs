@@ -79,6 +79,7 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
             .AddMetadataReferences(TestCompilationFactory.References);
 
         var document = project.AddDocument("Test.cs", SourceText.From(source, Encoding.UTF8));
+        document = await WithTopLevelOutputKindAsync(document).ConfigureAwait(false);
         var compilation = await document.Project.GetCompilationAsync().ConfigureAwait(false);
 
         if (compilation is null)
@@ -157,6 +158,7 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
             .AddMetadataReferences(TestCompilationFactory.References);
 
         var document = project.AddDocument("Test.cs", SourceText.From(source, Encoding.UTF8));
+        document = await WithTopLevelOutputKindAsync(document).ConfigureAwait(false);
         var compilation = await document.Project.GetCompilationAsync().ConfigureAwait(false);
         if (compilation is null)
         {
@@ -238,6 +240,21 @@ internal static class CodeFixVerifier<TAnalyzer, TCodeFix>
 
         var fixedText = await changedDocument.GetTextAsync().ConfigureAwait(false);
         return fixedText.ToString();
+    }
+
+    private static async Task<Document> WithTopLevelOutputKindAsync(Document document)
+    {
+        var root = await document.GetSyntaxRootAsync(CancellationToken.None).ConfigureAwait(false);
+        if (root is not null &&
+            TestCompilationFactory.ContainsGlobalStatements(root) &&
+            document.Project.CompilationOptions is CSharpCompilationOptions options)
+        {
+            var updatedProject = document.Project.WithCompilationOptions(
+                options.WithOutputKind(OutputKind.ConsoleApplication));
+            return updatedProject.GetDocument(document.Id) ?? document;
+        }
+
+        return document;
     }
 
     private sealed class DocumentDiagnosticProvider : FixAllContext.DiagnosticProvider
