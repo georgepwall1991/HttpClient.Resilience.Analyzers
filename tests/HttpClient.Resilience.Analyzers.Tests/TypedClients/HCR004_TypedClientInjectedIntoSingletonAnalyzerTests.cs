@@ -1,4 +1,5 @@
 using HttpClient.Resilience.Analyzers.Analyzers.TypedClients;
+using HttpClient.Resilience.Analyzers.CodeFixes;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.Tests.TestInfrastructure;
 
@@ -1441,5 +1442,152 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
         var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
 
         Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenHostedServiceConsumesTypedClient()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddHostedService<PaymentWorker>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentWorker(PaymentsClient paymentsClient)
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddHostedService<THostedService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR004, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHostedServiceHasNoTypedClientConsumer()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddHostedService<PaymentWorker>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentWorker
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddHostedService<THostedService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHostedServiceReceiverIsCustomLookalike()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(HostBuilder builder)
+                {
+                    builder.AddHostedService<PaymentWorker>();
+                }
+            }
+
+            public sealed class PaymentWorker(PaymentsClient paymentsClient)
+            {
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class HostBuilder
+            {
+                public HostBuilder AddHostedService<THostedService>() => this;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedForHostedServiceRegistration()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddHostedService<PaymentWorker>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentWorker(PaymentsClient paymentsClient)
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddHostedService<THostedService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Single(diagnostics);
+
+        var titles = await CodeFixVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer, HCR004_ChangeToScopedLifetimeCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
     }
 }

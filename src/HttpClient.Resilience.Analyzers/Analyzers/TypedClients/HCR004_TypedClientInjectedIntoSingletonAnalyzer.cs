@@ -61,6 +61,74 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
                 DiagnosticDescriptors.HCR004,
                 singleton.Location));
         }
+
+        foreach (var invocation in roots.SelectMany(root => root.DescendantNodes().OfType<InvocationExpressionSyntax>()))
+        {
+            if (!IsHostedServiceRegistration(
+                    invocation,
+                    context.Compilation,
+                    context.CancellationToken,
+                    out var hostedTypeName) ||
+                !ConstructorConsumesTypedClient(
+                    roots,
+                    hostedTypeName,
+                    typedClients,
+                    context.Compilation,
+                    context.CancellationToken))
+            {
+                continue;
+            }
+
+            context.ReportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.HCR004,
+                invocation.GetLocation()));
+        }
+    }
+
+    private static bool IsHostedServiceRegistration(
+        InvocationExpressionSyntax invocation,
+        Compilation compilation,
+        System.Threading.CancellationToken cancellationToken,
+        out string hostedTypeName)
+    {
+        hostedTypeName = string.Empty;
+
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+            memberAccess.Name is not GenericNameSyntax genericName ||
+            genericName.Identifier.ValueText != "AddHostedService" ||
+            genericName.TypeArgumentList.Arguments.Count != 1)
+        {
+            return false;
+        }
+
+        var semanticModel = GetSemanticModel(compilation, invocation.SyntaxTree);
+        if (!IsServiceCollectionReceiver(memberAccess.Expression, semanticModel, cancellationToken))
+        {
+            return false;
+        }
+
+        var resolvedType = semanticModel.GetTypeInfo(
+            genericName.TypeArgumentList.Arguments[0],
+            cancellationToken).Type;
+        if (resolvedType is null || resolvedType is IErrorTypeSymbol)
+        {
+            return false;
+        }
+
+        hostedTypeName = NormalizeTypeName(resolvedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        return true;
+    }
+
+    private static bool IsServiceCollectionReceiver(
+        ExpressionSyntax receiver,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return semanticModel.GetTypeInfo(receiver, cancellationToken).Type is { } receiverType &&
+            receiverType is not IErrorTypeSymbol &&
+            receiverType.Name == "IServiceCollection" &&
+            (receiverType.ContainingNamespace.IsGlobalNamespace ||
+                receiverType.ContainingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection");
     }
 
     private static ISet<string> GetTypedClientTypeNames(
