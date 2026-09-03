@@ -233,10 +233,13 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
 
         var variable = declaration.Declaration.Variables[0]
             .WithInitializer(SyntaxFactory.EqualsValueClause(assignment.Right.WithoutTrivia()));
+        var assignmentTrivia = assignmentStatement
+            .GetLeadingTrivia()
+            .AddRange(assignmentStatement.GetTrailingTrivia());
         var usingDeclaration = declaration
             .WithDeclaration(declaration.Declaration.WithVariables(SyntaxFactory.SingletonSeparatedList(variable)))
             .WithUsingKeyword(SyntaxFactory.Token(SyntaxKind.UsingKeyword).WithTrailingTrivia(SyntaxFactory.Space))
-            .WithTrailingTrivia(assignmentStatement.GetTrailingTrivia())
+            .WithTrailingTrivia(assignmentTrivia)
             .WithAdditionalAnnotations(Formatter.Annotation);
         var statements = block.Statements
             .Replace(declaration, usingDeclaration)
@@ -263,10 +266,13 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
 
         var variable = declaration.Declaration.Variables[0]
             .WithInitializer(SyntaxFactory.EqualsValueClause(assignment.Right.WithoutTrivia()));
+        var assignmentTrivia = assignmentStatement
+            .GetLeadingTrivia()
+            .AddRange(assignmentStatement.GetTrailingTrivia());
         var usingDeclaration = declaration
             .WithDeclaration(declaration.Declaration.WithVariables(SyntaxFactory.SingletonSeparatedList(variable)))
             .WithUsingKeyword(SyntaxFactory.Token(SyntaxKind.UsingKeyword).WithTrailingTrivia(SyntaxFactory.Space))
-            .WithTrailingTrivia(assignmentStatement.GetTrailingTrivia())
+            .WithTrailingTrivia(assignmentTrivia)
             .WithAdditionalAnnotations(Formatter.Annotation);
         var usingStatement = declarationStatement.WithStatement(usingDeclaration);
         var members = compilationUnit.Members;
