@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Composition;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HttpClient.Resilience.Analyzers.Diagnostics;
@@ -42,12 +43,17 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
                 declaration.AwaitKeyword == default &&
                 declaration.Declaration.Variables.Count == 1)
             {
-                context.RegisterCodeFix(
-                    CodeAction.Create(
-                        "Dispose stream with using declaration",
-                        cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
-                        nameof(HCR081_DisposeStreamCodeFixProvider)),
-                    diagnostic);
+                var variableName = declaration.Declaration.Variables[0].Identifier.ValueText;
+                if (!VariableEscapesScope(node, variableName))
+                {
+                    context.RegisterCodeFix(
+                        CodeAction.Create(
+                            "Dispose stream with using declaration",
+                            cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
+                            nameof(HCR081_DisposeStreamCodeFixProvider)),
+                        diagnostic);
+                }
+
                 continue;
             }
 
@@ -58,18 +64,23 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
                     out var adjacentDeclaration,
                     out var assignmentStatement))
             {
-                context.RegisterCodeFix(
-                    CodeAction.Create(
-                        "Dispose stream with using declaration",
-                        cancellationToken => MergeDeclarationAndAssignmentAsync(
-                            context.Document,
-                            block,
-                            adjacentDeclaration,
-                            assignment!,
-                            assignmentStatement,
-                            cancellationToken),
-                        nameof(HCR081_DisposeStreamCodeFixProvider)),
-                    diagnostic);
+                var mergedName = adjacentDeclaration.Declaration.Variables[0].Identifier.ValueText;
+                if (!VariableEscapesScope(node, mergedName))
+                {
+                    context.RegisterCodeFix(
+                        CodeAction.Create(
+                            "Dispose stream with using declaration",
+                            cancellationToken => MergeDeclarationAndAssignmentAsync(
+                                context.Document,
+                                block,
+                                adjacentDeclaration,
+                                assignment!,
+                                assignmentStatement,
+                                cancellationToken),
+                            nameof(HCR081_DisposeStreamCodeFixProvider)),
+                        diagnostic);
+                }
+
                 continue;
             }
 
@@ -80,19 +91,23 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
                     out var topLevelDeclaration,
                     out var topLevelAssignmentStatement))
             {
-                context.RegisterCodeFix(
-                    CodeAction.Create(
-                        "Dispose stream with using declaration",
-                        cancellationToken => TopLevelUsingDeclarationMerge.MergeDeclarationAndAssignmentAsync(
-                            context.Document,
-                            compilationUnit,
-                            declarationStatement,
-                            topLevelDeclaration,
-                            assignment!,
-                            topLevelAssignmentStatement,
-                            cancellationToken),
-                        nameof(HCR081_DisposeStreamCodeFixProvider)),
-                    diagnostic);
+                var topLevelName = topLevelDeclaration.Declaration.Variables[0].Identifier.ValueText;
+                if (!VariableEscapesScope(node, topLevelName))
+                {
+                    context.RegisterCodeFix(
+                        CodeAction.Create(
+                            "Dispose stream with using declaration",
+                            cancellationToken => TopLevelUsingDeclarationMerge.MergeDeclarationAndAssignmentAsync(
+                                context.Document,
+                                compilationUnit,
+                                declarationStatement,
+                                topLevelDeclaration,
+                                assignment!,
+                                topLevelAssignmentStatement,
+                                cancellationToken),
+                            nameof(HCR081_DisposeStreamCodeFixProvider)),
+                        diagnostic);
+                }
             }
         }
     }
@@ -141,6 +156,36 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
         assignmentStatement = statement;
         return true;
     }
+
+    private static bool VariableEscapesScope(SyntaxNode node, string variableName)
+    {
+        if (string.IsNullOrEmpty(variableName))
+        {
+            return false;
+        }
+
+        SyntaxNode? scope = node.FirstAncestorOrSelf<BlockSyntax>();
+        scope ??= node.FirstAncestorOrSelf<CompilationUnitSyntax>();
+        if (scope is null)
+        {
+            return false;
+        }
+
+        // Disposing at scope end breaks callers when the stream outlives the block:
+        // returned directly or stored into a member or another container.
+        return scope.DescendantNodes()
+            .Any(descendant => descendant switch
+            {
+                ReturnStatementSyntax { Expression: IdentifierNameSyntax returned } =>
+                    returned.Identifier.ValueText == variableName,
+                AssignmentExpressionSyntax assignment when assignment.Left is not IdentifierNameSyntax =>
+                    assignment.Right.DescendantNodesAndSelf()
+                        .OfType<IdentifierNameSyntax>()
+                        .Any(identifier => identifier.Identifier.ValueText == variableName),
+                _ => false,
+            });
+    }
+
     private static async Task<Document> AddUsingDeclarationAsync(
         Document document,
         LocalDeclarationStatementSyntax declaration,
