@@ -53,8 +53,22 @@ internal static class UsingDeclarationEscapeGate
                 return true;
             }
 
+            // Object, collection, array, and `with` initializers all store into
+            // the new aggregate (WithInitializerExpression shares this node type).
+            if (current is InitializerExpressionSyntax)
+            {
+                return true;
+            }
+
             if (current is AssignmentExpressionSyntax assignment)
             {
+                // Initializer members (`new Foo { Bar = value }`) store into the
+                // new aggregate even though the member reads as an identifier.
+                if (assignment.Parent is InitializerExpressionSyntax)
+                {
+                    return true;
+                }
+
                 // `variable = ...` keeps ownership local; any other target
                 // (member, element, or container) leaks it.
                 return assignment.Left is not IdentifierNameSyntax;
