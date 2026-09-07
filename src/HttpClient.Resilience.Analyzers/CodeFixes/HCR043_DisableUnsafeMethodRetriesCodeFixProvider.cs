@@ -40,6 +40,7 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
             return;
         }
 
+        // Stryker disable once boolean: analyzer code fixes do not run on a captured SynchronizationContext
         var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken)
             .ConfigureAwait(false);
 
@@ -98,6 +99,7 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
     {
         // Stryker disable once boolean: analyzer code fixes do not run on a captured SynchronizationContext
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        // Stryker disable once boolean: analyzer code fixes do not run on a captured SynchronizationContext
         var semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
         if (root is null || semanticModel is null)
         {
