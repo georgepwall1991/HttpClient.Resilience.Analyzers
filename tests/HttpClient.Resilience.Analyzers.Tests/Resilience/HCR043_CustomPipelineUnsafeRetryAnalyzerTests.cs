@@ -319,6 +319,17 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
 
         Assert.Empty(diagnostics);
     }
+    [Fact]
+    public async Task DoesNotReport_WhenNamedClientOnlySendsSafeHttpMethods()
+    {
+        var source = CustomPipelineSources.NamedClient(
+            httpCall: """client.GetAsync("/catalog", cancellationToken)""");
+
+        var diagnostics = await AnalyzerVerifier<HCR043_CustomPipelineUnsafeRetryAnalyzer>
+            .GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
 
     [Fact]
     public async Task DoesNotReport_WhenPipelineOnlyAddsTimeout()
