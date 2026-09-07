@@ -787,6 +787,63 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
 
         Assert.Empty(diagnostics);
     }
+    [Fact]
+    public async Task DoesNotReport_WhenAddRetryOverloadsMixFrameworkAndCustomExtensions()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using CustomRetry;
+            using Polly;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<PaymentsClient>()
+                        .AddResilienceHandler("payments", builder =>
+                        {
+                            builder.AddRetry(new HttpRetryStrategyOptions());
+                        });
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            namespace Polly
+            {
+                public static class FrameworkRetryExtensions
+                {
+                    public static ResiliencePipelineBuilder AddRetry(
+                        this ResiliencePipelineBuilder builder,
+                        HttpRetryStrategyOptions options) => builder;
+                }
+            }
+            namespace CustomRetry
+            {
+                public static class CustomRetryExtensions
+                {
+                    public static ResiliencePipelineBuilder AddRetry(
+                        this ResiliencePipelineBuilder builder,
+                        HttpRetryStrategyOptions options) => builder;
+                }
+            }
+
+            """ + CustomPipelineSources.FrameworkStubs;
+
+        var diagnostics = await AnalyzerVerifier<HCR043_CustomPipelineUnsafeRetryAnalyzer>
+            .GetDiagnosticsAllowingCompilerErrorsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
 
     [Fact]
     public async Task DoesNotReport_WhenConfigureCallbackIsMethodGroupOnAnotherType()
