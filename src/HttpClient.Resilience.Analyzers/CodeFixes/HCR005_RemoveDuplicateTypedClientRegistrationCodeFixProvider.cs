@@ -108,7 +108,6 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
         {
             migratedRoot = MigrateTopLevelTrivia(annotatedRoot, compilationUnit, annotatedGlobal, significantTrivia);
         }
-        // Stryker disable once equality: migrating empty trivia is a no-op
         else if (significantTrivia.Count > 0 && annotatedStatement.Parent is BlockSyntax block)
         {
             var index = block.Statements.IndexOf(annotatedStatement);
