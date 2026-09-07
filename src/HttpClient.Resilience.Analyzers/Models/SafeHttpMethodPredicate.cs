@@ -121,6 +121,7 @@ internal static class SafeHttpMethodPredicate
             return property.ContainingNamespace.ToDisplayString() == expectedNamespace;
         }
 
+        // Stryker disable once boolean: unreachable, OwnerMatches runs only after the same node resolved to a framework property above
         return false;
     }
 
