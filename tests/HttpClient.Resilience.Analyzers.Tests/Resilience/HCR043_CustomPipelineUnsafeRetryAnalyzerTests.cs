@@ -921,6 +921,21 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
         Assert.Contains("builder.AddRetry(retryOptions);", fixedSource, StringComparison.Ordinal);
         Assert.DoesNotContain("builder.AddRetry(new HttpRetryStrategyOptions())", fixedSource, StringComparison.Ordinal);
     }
+    [Fact]
+    public async Task CodeFix_DoesNotDuplicateExistingResilienceUsing()
+    {
+        const string resilienceUsing = "using Microsoft.Extensions.Http.Resilience;";
+        var source = CustomPipelineSources.TypedClient(
+            extraUsings: resilienceUsing);
+
+        var fixedSource = await CodeFixVerifier<HCR043_CustomPipelineUnsafeRetryAnalyzer, HCR043_DisableUnsafeMethodRetriesCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("var retryOptions = new HttpRetryStrategyOptions();", fixedSource, StringComparison.Ordinal);
+        var first = fixedSource.IndexOf(resilienceUsing, StringComparison.Ordinal);
+        Assert.True(first >= 0, "Expected the resilience using to be present.");
+        Assert.Equal(-1, fixedSource.IndexOf(resilienceUsing, first + resilienceUsing.Length, StringComparison.Ordinal));
+    }
 
     [Fact]
     public async Task CodeFix_PreservesObjectInitializer()
