@@ -72,6 +72,23 @@ public sealed class UsingDeclarationEscapeGateTests
         Assert.True(UsingDeclarationEscapeGate.VariableEscapesScope(declaration, "response"));
         await Task.CompletedTask;
     }
+    [Fact]
+    public async Task ObjectInitializerMember_Escapes()
+    {
+        var declaration = ParseResponseDeclaration("var holder = new Holder { Value = response };");
+
+        Assert.True(UsingDeclarationEscapeGate.VariableEscapesScope(declaration, "response"));
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task CollectionInitializerElement_Escapes()
+    {
+        var declaration = ParseResponseDeclaration("var items = new System.Collections.Generic.List<object> { response };");
+
+        Assert.True(UsingDeclarationEscapeGate.VariableEscapesScope(declaration, "response"));
+        await Task.CompletedTask;
+    }
 
     [Fact]
     public async Task MemberCall_DoesNotEscape()
