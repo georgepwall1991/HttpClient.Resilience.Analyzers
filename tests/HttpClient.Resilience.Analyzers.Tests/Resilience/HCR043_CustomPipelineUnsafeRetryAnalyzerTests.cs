@@ -961,6 +961,22 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
         Assert.DoesNotContain("var retryOptions2 =", fixedSource, StringComparison.Ordinal);
     }
     [Fact]
+    public async Task CodeFix_IsNotOffered_WhenAddRetryHasNoArguments()
+    {
+        var source = CustomPipelineSources.TypedClient(
+            pipelineConfigure: """
+                builder =>
+                        {
+                            builder.AddRetry();
+                        }
+                """);
+
+        var titles = await CodeFixVerifier<HCR043_CustomPipelineUnsafeRetryAnalyzer, HCR043_DisableUnsafeMethodRetriesCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+    [Fact]
     public async Task CodeFix_ReusesOptionsVariableFromMultiDeclarator()
     {
         var source = CustomPipelineSources.TypedClient(
