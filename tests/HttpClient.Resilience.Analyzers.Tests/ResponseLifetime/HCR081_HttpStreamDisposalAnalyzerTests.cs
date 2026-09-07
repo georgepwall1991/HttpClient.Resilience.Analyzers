@@ -1018,6 +1018,36 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
 
         Assert.Empty(titles);
     }
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenStreamIsStoredIntoInitializer()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Holder
+            {
+                public Stream? Value { get; set; }
+            }
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync();
+                    await stream.CopyToAsync(Stream.Null);
+                    var holder = new Holder { Value = stream };
+                    _ = holder;
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
 
     [Fact]
     public async Task CodeFix_IsNotOfferedWhenDirectiveGuardsTopLevelAssignment()
