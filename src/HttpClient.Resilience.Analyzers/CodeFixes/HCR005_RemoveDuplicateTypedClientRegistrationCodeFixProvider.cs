@@ -82,7 +82,9 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
         ExpressionStatementSyntax statement,
         CancellationToken cancellationToken)
     {
+        // Stryker disable once boolean: analyzer code fixes do not run on a captured SynchronizationContext
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        // Stryker disable once block: fix documents always have syntax roots
         if (root is null)
         {
             return document;
@@ -106,6 +108,7 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
         {
             migratedRoot = MigrateTopLevelTrivia(annotatedRoot, compilationUnit, annotatedGlobal, significantTrivia);
         }
+        // Stryker disable once equality: migrating empty trivia is a no-op
         else if (significantTrivia.Count > 0 && annotatedStatement.Parent is BlockSyntax block)
         {
             var index = block.Statements.IndexOf(annotatedStatement);
@@ -136,6 +139,8 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
             // global member by index instead.
             var members = updatedUnit.Members;
             var removeIndex = members.IndexOf(globalToRemove);
+            // Stryker disable once equality: registrations always follow the services declaration, so the removed member is never first
+            // Stryker disable once block: the removed member was just located in this collection
             if (removeIndex < 0)
             {
                 return document;
@@ -146,6 +151,7 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
         }
 
         var newRoot = migratedRoot.RemoveNode(statementToRemove, SyntaxRemoveOptions.KeepNoTrivia);
+        // Stryker disable once block: the annotated statement is present, so removal always succeeds
         if (newRoot is null)
         {
             return document;
@@ -162,6 +168,8 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
     {
         var members = compilationUnit.Members;
         var index = members.IndexOf(removedGlobal);
+        // Stryker disable once equality: registrations always follow the services declaration, so the removed member is never first
+        // Stryker disable once block: the removed member was just located in this collection
         if (index < 0)
         {
             return root;

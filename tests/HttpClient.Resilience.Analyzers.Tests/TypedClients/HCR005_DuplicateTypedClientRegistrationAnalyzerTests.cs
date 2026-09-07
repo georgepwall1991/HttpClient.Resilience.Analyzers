@@ -964,6 +964,53 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzerTests
         Assert.Contains(expectedBlock, normalized, StringComparison.Ordinal);
     }
     [Fact]
+    public async Task CodeFix_MigratesCommentToFollowingStatementWhenRemovingFirstDuplicate()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    // Sets up the duplicate client.
+                    services.AddTransient<PaymentsClient>();
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton<AuditService>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class AuditService
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        var normalized = fixedSource.Replace("\r\n", "\n");
+        var expectedComment = """
+                // Sets up the duplicate client.
+                services.AddHttpClient<PaymentsClient>();
+        """.Replace("\r\n", "\n");
+
+        Assert.Contains(expectedComment, normalized, StringComparison.Ordinal);
+        Assert.DoesNotContain("services.AddTransient<PaymentsClient>();", normalized, StringComparison.Ordinal);
+    }
+    [Fact]
     public async Task CodeFix_IsNotOffered_WhenDuplicateRegistrationHasFactoryPolicy()
     {
         const string source = """
