@@ -273,6 +273,7 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
 
         if (!block.ChildNodes().OfType<LocalDeclarationStatementSyntax>()
                 .Any(candidate =>
+                    // Stryker disable once equality: a declaration cannot start where the invocation starts
                     candidate.SpanStart < invocation.SpanStart &&
                     semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is ILocalSymbol declared &&
                     DeclaresLocal(candidate, declared)))
@@ -282,6 +283,7 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         // Any earlier method call on the same options variable may already be a guard we do
         // not recognize; adding ours blindly could double-guard or mask a custom strategy.
         if (block.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                // Stryker disable once equality: the invocation's own receiver is never its options argument
                 .Any(guardInvocation => guardInvocation.SpanStart < invocation.SpanStart &&
                     guardInvocation.Expression is MemberAccessExpressionSyntax
                     {
