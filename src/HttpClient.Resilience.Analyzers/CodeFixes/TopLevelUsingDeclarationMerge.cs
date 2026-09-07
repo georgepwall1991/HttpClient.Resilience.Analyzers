@@ -81,7 +81,9 @@ internal static class TopLevelUsingDeclarationMerge
         GlobalStatementSyntax assignmentStatement,
         CancellationToken cancellationToken)
     {
+        // Stryker disable once boolean: analyzer code fixes do not run on a captured SynchronizationContext
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        // Stryker disable once block: fix documents always have syntax roots
         if (root is null)
         {
             return document;
