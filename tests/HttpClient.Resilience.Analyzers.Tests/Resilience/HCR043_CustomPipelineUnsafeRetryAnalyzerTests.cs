@@ -960,6 +960,44 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
         Assert.Contains("builder.AddRetry(retryOptions);", fixedSource, StringComparison.Ordinal);
         Assert.DoesNotContain("var retryOptions2 =", fixedSource, StringComparison.Ordinal);
     }
+    [Fact]
+    public async Task CodeFix_ReusesOptionsVariableFromMultiDeclarator()
+    {
+        var source = CustomPipelineSources.TypedClient(
+            pipelineConfigure: """
+                builder =>
+                        {
+                            HttpRetryStrategyOptions other = new(), options = new();
+                            builder.AddRetry(options);
+                        }
+                """);
+
+        var titles = await CodeFixVerifier<HCR043_CustomPipelineUnsafeRetryAnalyzer, HCR043_DisableUnsafeMethodRetriesCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Equal(HCR043_DisableUnsafeMethodRetriesCodeFixProvider.Title, Assert.Single(titles));
+    }
+
+    [Fact]
+    public async Task CodeFix_SkipsTakenRetryOptionsNames()
+    {
+        var source = CustomPipelineSources.TypedClient(
+            pipelineConfigure: """
+                builder =>
+                        {
+                            var retryOptions = new HttpRetryStrategyOptions();
+                            var retryOptions2 = new HttpRetryStrategyOptions();
+                            builder.AddRetry(new HttpRetryStrategyOptions());
+                        }
+                """);
+
+        var fixedSource = await CodeFixVerifier<HCR043_CustomPipelineUnsafeRetryAnalyzer, HCR043_DisableUnsafeMethodRetriesCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("var retryOptions3 = new HttpRetryStrategyOptions();", fixedSource, StringComparison.Ordinal);
+        Assert.Contains("retryOptions3.DisableForUnsafeHttpMethods();", fixedSource, StringComparison.Ordinal);
+        Assert.Contains("builder.AddRetry(retryOptions3);", fixedSource, StringComparison.Ordinal);
+    }
 
     [Fact]
     public async Task CodeFix_IsNotOffered_WhenOptionsVariableAlreadyHasGuardAttempt()
