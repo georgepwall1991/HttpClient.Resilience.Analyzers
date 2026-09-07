@@ -150,6 +150,7 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
             return document;
         }
 
+        // Stryker disable once boolean: analyzer code fixes do not run on a captured SynchronizationContext
         var editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
         if (hasInlineCreation)
         {
@@ -162,7 +163,9 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         }
 
         var changedDocument = editor.GetChangedDocument();
+        // Stryker disable once boolean: analyzer code fixes do not run on a captured SynchronizationContext
         var changedRoot = await changedDocument.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+        // Stryker disable once block: fix documents always have syntax roots
         if (changedRoot is null)
         {
             return changedDocument;
