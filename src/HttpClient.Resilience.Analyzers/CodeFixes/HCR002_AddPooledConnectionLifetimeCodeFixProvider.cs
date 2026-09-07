@@ -203,6 +203,7 @@ public sealed class HCR002_AddPooledConnectionLifetimeCodeFixProvider : CodeFixP
         // Namespace comparison alone would accept a source-defined impersonator in the
         // System.Net.Http namespace, for which GetTypeByMetadataName can even return the
         // impersonator itself, so require a metadata-defined framework type identity.
+        // Stryker disable once linq: a type symbol's locations share a single origin, so All and Any agree here
         return handlerType.Locations.All(static location => location.IsInMetadata) &&
             semanticModel.Compilation.GetTypeByMetadataName("System.Net.Http.SocketsHttpHandler") is { } frameworkType &&
             SymbolEqualityComparer.Default.Equals(handlerType.OriginalDefinition, frameworkType);
