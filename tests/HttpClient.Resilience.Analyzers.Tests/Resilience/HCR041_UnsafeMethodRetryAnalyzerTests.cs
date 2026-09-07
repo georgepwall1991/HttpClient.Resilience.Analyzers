@@ -990,6 +990,210 @@ public sealed class HCR041_UnsafeMethodRetryAnalyzerTests
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticIds.HCR041, diagnostic.Id);
     }
+    [Fact]
+    public async Task ReportsDiagnostic_WhenGuardCandidatesMixFrameworkAndCustomOverloads()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using CustomRetryGuards;
+            using Microsoft.Extensions.Http.Resilience;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<PaymentsClient>()
+                        .AddStandardResilienceHandler(options => options.Retry.DisableForUnsafeHttpMethods());
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public sealed class StandardHttpResilienceOptions
+            {
+                public RetryOptions Retry { get; } = new();
+            }
+
+            public sealed class RetryOptions
+            {
+            }
+
+            namespace Microsoft.Extensions.Http.Resilience
+            {
+                public static class FrameworkRetryOptionsExtensions
+                {
+                    public static void DisableForUnsafeHttpMethods(this RetryOptions options)
+                    {
+                    }
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder, System.Action<StandardHttpResilienceOptions> configure) => builder;
+            }
+
+            namespace CustomRetryGuards
+            {
+                public static class RetryOptionsExtensions
+                {
+                    public static void DisableForUnsafeHttpMethods(this RetryOptions options)
+                    {
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>
+            .GetDiagnosticsAllowingCompilerErrorsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR041, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenAmbiguousGuardOverloadsAreAllFramework()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<PaymentsClient>()
+                        .AddStandardResilienceHandler(options => options.Retry.DisableForUnsafeHttpMethods());
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public sealed class StandardHttpResilienceOptions
+            {
+                public RetryOptions Retry { get; } = new();
+            }
+
+            public sealed class RetryOptions
+            {
+            }
+
+            public static class GlobalRetryOptionsExtensionsA
+            {
+                public static void DisableForUnsafeHttpMethods(this RetryOptions options)
+                {
+                }
+            }
+
+            public static class GlobalRetryOptionsExtensionsB
+            {
+                public static void DisableForUnsafeHttpMethods(this RetryOptions options)
+                {
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder, System.Action<StandardHttpResilienceOptions> configure) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>
+            .GetDiagnosticsAllowingCompilerErrorsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenGuardMethodIsUnresolvable()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient<PaymentsClient>()
+                        .AddStandardResilienceHandler(options => options.Retry.DisableForUnsafeHttpMethods());
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public sealed class StandardHttpResilienceOptions
+            {
+                public RetryOptions Retry { get; } = new();
+            }
+
+            public sealed class RetryOptions
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder, System.Action<StandardHttpResilienceOptions> configure) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>
+            .GetDiagnosticsAllowingCompilerErrorsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
 
     [Fact]
     public async Task DoesNotReport_WhenUnresolvedBuilderServicesSharesServiceCollectionPropertyName()
