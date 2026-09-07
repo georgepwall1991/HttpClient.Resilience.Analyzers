@@ -795,7 +795,7 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
             using System.Threading;
             using System.Threading.Tasks;
             using CustomRetry;
-            using Microsoft.Extensions.Http.Resilience;
+            using Polly;
 
             public static class Registrations
             {
@@ -818,7 +818,7 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
                 }
             }
 
-            namespace Microsoft.Extensions.Http.Resilience
+            namespace Polly
             {
                 public static class FrameworkRetryExtensions
                 {
@@ -827,7 +827,6 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
                         HttpRetryStrategyOptions options) => builder;
                 }
             }
-
             namespace CustomRetry
             {
                 public static class CustomRetryExtensions
