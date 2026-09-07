@@ -138,7 +138,6 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
             // global member by index instead.
             var members = updatedUnit.Members;
             var removeIndex = members.IndexOf(globalToRemove);
-            // Stryker disable once equality: registrations always follow the services declaration, so the removed member is never first
             // Stryker disable once block: the removed member was just located in this collection
             if (removeIndex < 0)
             {
@@ -167,7 +166,6 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
     {
         var members = compilationUnit.Members;
         var index = members.IndexOf(removedGlobal);
-        // Stryker disable once equality: registrations always follow the services declaration, so the removed member is never first
         // Stryker disable once block: the removed member was just located in this collection
         if (index < 0)
         {
