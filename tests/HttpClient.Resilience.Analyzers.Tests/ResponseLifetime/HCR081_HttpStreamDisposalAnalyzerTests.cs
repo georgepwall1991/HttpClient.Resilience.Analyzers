@@ -990,6 +990,34 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
 
         Assert.Empty(titles);
     }
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenStreamIsPassedAsArgument()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync();
+                    await stream.CopyToAsync(Stream.Null);
+                    Takes(stream);
+                }
+
+                private static void Takes(Stream value)
+                {
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
 
     [Fact]
     public async Task CodeFix_IsNotOfferedWhenDirectiveGuardsTopLevelAssignment()
