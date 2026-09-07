@@ -1488,6 +1488,36 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
 
         Assert.Empty(titles);
     }
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenResponseIsStoredIntoInitializer()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Holder
+            {
+                public HttpResponseMessage? Value { get; set; }
+            }
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    _ = await response.Content.ReadAsStringAsync(cancellationToken);
+                    var holder = new Holder { Value = response };
+                    _ = holder;
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer, HCR060_DisposeResponseCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
 
     [Fact]
     public async Task DoesNotReport_WhenResponseIsReturned()
