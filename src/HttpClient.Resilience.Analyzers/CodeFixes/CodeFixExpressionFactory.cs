@@ -9,10 +9,17 @@ namespace HttpClient.Resilience.Analyzers.CodeFixes;
 /// </summary>
 internal static class CodeFixExpressionFactory
 {
+    private static readonly ExpressionSyntax DisableForUnsafeHttpMethodsLambda =
+        BuildDisableForUnsafeHttpMethodsLambda();
+
     /// <summary>
-    /// Builds <c>options => options.Retry.DisableForUnsafeHttpMethods()</c>.
+    /// Builds <c>options => options.Retry.DisableForUnsafeHttpMethods()</c>. The resulting tree
+    /// is immutable and cached, so repeated fix applications share one instance.
     /// </summary>
-    public static ExpressionSyntax CreateDisableForUnsafeHttpMethodsLambda()
+    public static ExpressionSyntax CreateDisableForUnsafeHttpMethodsLambda() =>
+        DisableForUnsafeHttpMethodsLambda;
+
+    private static ExpressionSyntax BuildDisableForUnsafeHttpMethodsLambda()
     {
         return SyntaxFactory.SimpleLambdaExpression(
             SyntaxFactory.Parameter(SyntaxFactory.Identifier("options")),

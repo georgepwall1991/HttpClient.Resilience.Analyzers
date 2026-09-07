@@ -52,7 +52,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 Or add an explicit package reference:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.164" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.192" PrivateAssets="all" />
 ```
 
 `PrivateAssets="all"` prevents the analyzer from flowing to projects that consume your project.
@@ -62,7 +62,7 @@ For a whole solution, add the package once in `Directory.Build.props`:
 ```xml
 <Project>
   <ItemGroup>
-    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.164">
+    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.192">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
@@ -145,7 +145,7 @@ The rules intentionally focus on concrete production risks. Heuristic checks use
 | [`HCR001`](docs/rules/HCR001.md) | Lifetime | Creating and disposing `HttpClient` in request paths | Warning | Partial |
 | [`HCR002`](docs/rules/HCR002.md) | Lifetime | Long-lived manual clients without `PooledConnectionLifetime` | Warning | Yes |
 | [`HCR003`](docs/rules/HCR003.md) | Lifetime | Cached `IHttpClientFactory.CreateClient()` results | Warning | Guide |
-| [`HCR004`](docs/rules/HCR004.md) | Typed clients | Typed clients injected into singleton services | Warning | Guide |
+| [`HCR004`](docs/rules/HCR004.md) | Typed clients | Typed clients injected into singleton services | Warning | Yes |
 | [`HCR005`](docs/rules/HCR005.md) | Typed clients | Duplicate typed-client registrations | Warning | Yes |
 | [`HCR020`](docs/rules/HCR020.md) | Handlers | `DelegatingHandler` capturing scoped request data | Warning | Guide |
 | [`HCR040`](docs/rules/HCR040.md) | Resilience | Duplicate resilience handlers in one client pipeline | Warning | Yes |
@@ -162,7 +162,7 @@ The rules intentionally focus on concrete production risks. Heuristic checks use
 | [`HCR082`](docs/rules/HCR082.md) | Resilience | Per-request resilience pipeline construction | Warning | Guide |
 | [`HCR083`](docs/rules/HCR083.md) | Typed clients | Relative URLs used without a configured `BaseAddress` | Warning | Guide |
 | [`HCR084`](docs/rules/HCR084.md) | Named clients | Duplicated string literals for named-client names | Warning | Guide |
-| [`HCR085`](docs/rules/HCR085.md) | Typed clients | Different implementations sharing one implicit client name | Warning | Guide |
+| [`HCR085`](docs/rules/HCR085.md) | Typed clients | Different implementations sharing one implicit client name | Warning | Partial |
 
 See the [rules index](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/) for categories and recommended rollout order, or open an individual rule for exact detection details and limitations.
 

@@ -32,46 +32,69 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
             return;
         }
 
-        var diagnostic = context.Diagnostics[0];
-        var node = root.FindNode(diagnostic.Location.SourceSpan);
-        var declaration = node.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>();
-
-        if (declaration is not null &&
-            declaration.UsingKeyword == default &&
-            declaration.AwaitKeyword == default &&
-            declaration.Declaration.Variables.Count == 1)
+        foreach (var diagnostic in context.Diagnostics)
         {
-            context.RegisterCodeFix(
-                CodeAction.Create(
-                    "Dispose stream with using declaration",
-                    cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
-                    nameof(HCR081_DisposeStreamCodeFixProvider)),
-                diagnostic);
-            return;
-        }
+            var node = root.FindNode(diagnostic.Location.SourceSpan);
+            var declaration = node.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>();
 
-        var assignment = node.FirstAncestorOrSelf<AssignmentExpressionSyntax>();
-        if (!TryGetAdjacentDeclaration(
-                assignment,
-                out var block,
-                out var adjacentDeclaration,
-                out var assignmentStatement))
-        {
-            return;
-        }
+            if (declaration is not null &&
+                declaration.UsingKeyword == default &&
+                declaration.AwaitKeyword == default &&
+                declaration.Declaration.Variables.Count == 1)
+            {
+                context.RegisterCodeFix(
+                    CodeAction.Create(
+                        "Dispose stream with using declaration",
+                        cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
+                        nameof(HCR081_DisposeStreamCodeFixProvider)),
+                    diagnostic);
+                continue;
+            }
 
-        context.RegisterCodeFix(
-            CodeAction.Create(
-                "Dispose stream with using declaration",
-                cancellationToken => MergeDeclarationAndAssignmentAsync(
-                    context.Document,
-                    block,
-                    adjacentDeclaration,
-                    assignment!,
-                    assignmentStatement,
-                    cancellationToken),
-                nameof(HCR081_DisposeStreamCodeFixProvider)),
-            diagnostic);
+            var assignment = node.FirstAncestorOrSelf<AssignmentExpressionSyntax>();
+            if (TryGetAdjacentDeclaration(
+                    assignment,
+                    out var block,
+                    out var adjacentDeclaration,
+                    out var assignmentStatement))
+            {
+                context.RegisterCodeFix(
+                    CodeAction.Create(
+                        "Dispose stream with using declaration",
+                        cancellationToken => MergeDeclarationAndAssignmentAsync(
+                            context.Document,
+                            block,
+                            adjacentDeclaration,
+                            assignment!,
+                            assignmentStatement,
+                            cancellationToken),
+                        nameof(HCR081_DisposeStreamCodeFixProvider)),
+                    diagnostic);
+                continue;
+            }
+
+            if (TopLevelUsingDeclarationMerge.TryGetAdjacentDeclaration(
+                    assignment,
+                    out var compilationUnit,
+                    out var declarationStatement,
+                    out var topLevelDeclaration,
+                    out var topLevelAssignmentStatement))
+            {
+                context.RegisterCodeFix(
+                    CodeAction.Create(
+                        "Dispose stream with using declaration",
+                        cancellationToken => TopLevelUsingDeclarationMerge.MergeDeclarationAndAssignmentAsync(
+                            context.Document,
+                            compilationUnit,
+                            declarationStatement,
+                            topLevelDeclaration,
+                            assignment!,
+                            topLevelAssignmentStatement,
+                            cancellationToken),
+                        nameof(HCR081_DisposeStreamCodeFixProvider)),
+                    diagnostic);
+            }
+        }
     }
 
     private static bool TryGetAdjacentDeclaration(
@@ -107,12 +130,17 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
             return false;
         }
 
+        if (TopLevelUsingDeclarationMerge.ContainsDirectiveTrivia(previousDeclaration) ||
+            TopLevelUsingDeclarationMerge.ContainsDirectiveTrivia(statement))
+        {
+            return false;
+        }
+
         block = containingBlock;
         declaration = previousDeclaration;
         assignmentStatement = statement;
         return true;
     }
-
     private static async Task<Document> AddUsingDeclarationAsync(
         Document document,
         LocalDeclarationStatementSyntax declaration,
@@ -147,10 +175,13 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
 
         var variable = declaration.Declaration.Variables[0]
             .WithInitializer(SyntaxFactory.EqualsValueClause(assignment.Right.WithoutTrivia()));
+        var assignmentTrivia = assignmentStatement
+            .GetLeadingTrivia()
+            .AddRange(assignmentStatement.GetTrailingTrivia());
         var usingDeclaration = declaration
             .WithDeclaration(declaration.Declaration.WithVariables(SyntaxFactory.SingletonSeparatedList(variable)))
             .WithUsingKeyword(SyntaxFactory.Token(SyntaxKind.UsingKeyword).WithTrailingTrivia(SyntaxFactory.Space))
-            .WithTrailingTrivia(assignmentStatement.GetTrailingTrivia())
+            .WithTrailingTrivia(assignmentTrivia)
             .WithAdditionalAnnotations(Formatter.Annotation);
         var statements = block.Statements
             .Replace(declaration, usingDeclaration)

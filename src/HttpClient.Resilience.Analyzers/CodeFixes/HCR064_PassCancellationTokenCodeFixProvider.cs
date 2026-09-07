@@ -36,79 +36,81 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
             return;
         }
 
-        var diagnostic = context.Diagnostics[0];
-        var invocation = root.FindNode(diagnostic.Location.SourceSpan).FirstAncestorOrSelf<InvocationExpressionSyntax>();
-        if (invocation is null)
+        foreach (var diagnostic in context.Diagnostics)
         {
-            return;
-        }
-
-        var nonCancelableTokenArgument = invocation.ArgumentList.Arguments
-            .FirstOrDefault(argument =>
-                ArgumentTargetsCancellationToken(invocation, argument, semanticModel, context.CancellationToken) &&
-                IsNonCancelableTokenExpression(argument.Expression, semanticModel, context.CancellationToken));
-
-        var cancellationTokens = semanticModel.LookupSymbols(invocation.SpanStart)
-            .Where(symbol => symbol is ILocalSymbol or IParameterSymbol)
-            .Where(symbol => IsCancellationToken(symbol switch
+            var invocation = root.FindNode(diagnostic.Location.SourceSpan).FirstAncestorOrSelf<InvocationExpressionSyntax>();
+            if (invocation is null)
             {
-                ILocalSymbol local => local.Type,
-                IParameterSymbol parameter => parameter.Type,
-                _ => null
-            }) || IsCancellationTokenSource(symbol switch
-            {
-                ILocalSymbol local => local.Type,
-                IParameterSymbol parameter => parameter.Type,
-                _ => null
-            }))
-            .ToArray();
-
-        if (cancellationTokens.Length == 0)
-        {
-            return;
-        }
-
-        var cancellationTokenParameterName = GetCancellationTokenParameterName(
-            invocation,
-            semanticModel,
-            context.CancellationToken);
-
-        foreach (var cancellationTokenSymbol in cancellationTokens.OrderBy(
-                     symbol => symbol.Name,
-                     System.StringComparer.Ordinal))
-        {
-            var symbolType = cancellationTokenSymbol switch
-            {
-                ILocalSymbol local => local.Type,
-                IParameterSymbol parameter => parameter.Type,
-                _ => null
-            };
-            var tokenDisplayName = IsCancellationTokenSource(symbolType)
-                ? cancellationTokenSymbol.Name + ".Token"
-                : cancellationTokenSymbol.Name;
-            ExpressionSyntax tokenExpression = CreateIdentifierName(cancellationTokenSymbol.Name);
-            if (IsCancellationTokenSource(symbolType))
-            {
-                tokenExpression = SyntaxFactory.MemberAccessExpression(
-                    SyntaxKind.SimpleMemberAccessExpression,
-                    tokenExpression,
-                    SyntaxFactory.IdentifierName("Token"));
+                continue;
             }
 
-            var tokenArgument = SyntaxFactory.Argument(tokenExpression)
-                .WithNameColon(SyntaxFactory.NameColon(CreateIdentifierName(cancellationTokenParameterName)));
+            var nonCancelableTokenArgument = invocation.ArgumentList.Arguments
+                .FirstOrDefault(argument =>
+                    ArgumentTargetsCancellationToken(invocation, argument, semanticModel, context.CancellationToken) &&
+                    IsNonCancelableTokenExpression(argument.Expression, semanticModel, context.CancellationToken));
 
-            context.RegisterCodeFix(
-                CodeAction.Create(
-                    $"Pass '{tokenDisplayName}' cancellation token",
-                    cancellationToken => PassCancellationTokenAsync(
-                        context.Document,
-                        invocation,
-                        tokenArgument,
-                        nonCancelableTokenArgument,
-                        cancellationToken),
-                    $"{nameof(HCR064_PassCancellationTokenCodeFixProvider)}.{cancellationTokenSymbol.Name}"),
-                diagnostic);
+            var cancellationTokens = semanticModel.LookupSymbols(invocation.SpanStart)
+                .Where(symbol => symbol is ILocalSymbol or IParameterSymbol)
+                .Where(symbol => IsCancellationToken(symbol switch
+                {
+                    ILocalSymbol local => local.Type,
+                    IParameterSymbol parameter => parameter.Type,
+                    _ => null
+                }) || IsCancellationTokenSource(symbol switch
+                {
+                    ILocalSymbol local => local.Type,
+                    IParameterSymbol parameter => parameter.Type,
+                    _ => null
+                }))
+                .ToArray();
+
+            if (cancellationTokens.Length == 0)
+            {
+                continue;
+            }
+
+            var cancellationTokenParameterName = GetCancellationTokenParameterName(
+                invocation,
+                semanticModel,
+                context.CancellationToken);
+
+            foreach (var cancellationTokenSymbol in cancellationTokens.OrderBy(
+                         symbol => symbol.Name,
+                         System.StringComparer.Ordinal))
+            {
+                var symbolType = cancellationTokenSymbol switch
+                {
+                    ILocalSymbol local => local.Type,
+                    IParameterSymbol parameter => parameter.Type,
+                    _ => null
+                };
+                var tokenDisplayName = IsCancellationTokenSource(symbolType)
+                    ? cancellationTokenSymbol.Name + ".Token"
+                    : cancellationTokenSymbol.Name;
+                ExpressionSyntax tokenExpression = CreateIdentifierName(cancellationTokenSymbol.Name);
+                if (IsCancellationTokenSource(symbolType))
+                {
+                    tokenExpression = SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        tokenExpression,
+                        SyntaxFactory.IdentifierName("Token"));
+                }
+
+                var tokenArgument = SyntaxFactory.Argument(tokenExpression)
+                    .WithNameColon(SyntaxFactory.NameColon(CreateIdentifierName(cancellationTokenParameterName)));
+
+                context.RegisterCodeFix(
+                    CodeAction.Create(
+                        $"Pass '{tokenDisplayName}' cancellation token",
+                        cancellationToken => PassCancellationTokenAsync(
+                            context.Document,
+                            invocation,
+                            tokenArgument,
+                            nonCancelableTokenArgument,
+                            cancellationToken),
+                        $"{nameof(HCR064_PassCancellationTokenCodeFixProvider)}.{cancellationTokenSymbol.Name}"),
+                    diagnostic);
+            }
         }
     }
 

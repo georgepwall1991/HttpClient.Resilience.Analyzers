@@ -98,6 +98,16 @@ internal static class CustomPipelineSources
                     object options) => builder;
             }
         }
+
+        namespace Microsoft.Extensions.Http.Resilience
+        {
+            public static class HttpRetryStrategyOptionsExtensions
+            {
+                public static void DisableForUnsafeHttpMethods(this global::HttpRetryStrategyOptions options)
+                {
+                }
+            }
+        }
         """;
 
     public static string TypedClient(

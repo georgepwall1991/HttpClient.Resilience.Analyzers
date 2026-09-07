@@ -862,4 +862,268 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
             fixedSource,
             StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenTopLevelStreamIsAssignedAfterDeclaration()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+
+            HttpClient client = new();
+            using HttpResponseMessage response = await client.GetAsync("https://example.com");
+            Stream stream;
+            stream = await response.Content.ReadAsStreamAsync();
+            await stream.CopyToAsync(Stream.Null);
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR081, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task CodeFix_MergesAdjacentDeclarationAndAssignmentInTopLevelStatements()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+
+            HttpClient client = new();
+            using HttpResponseMessage response = await client.GetAsync("https://example.com");
+            Stream stream;
+            stream = await response.Content.ReadAsStreamAsync();
+            await stream.CopyToAsync(Stream.Null);
+            """;
+
+        const string expected = """
+            using System.IO;
+            using System.Net.Http;
+
+            HttpClient client = new();
+            using HttpResponseMessage response = await client.GetAsync("https://example.com");
+
+            using Stream stream = await response.Content.ReadAsStreamAsync();
+            await stream.CopyToAsync(Stream.Null);
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Equal(NormalizeLineEndings(expected), NormalizeLineEndings(fixedSource));
+    }
+
+    [Fact]
+    public async Task CodeFix_FixAllMergesTopLevelDeclarations()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+
+            HttpClient client = new();
+            using HttpResponseMessage response = await client.GetAsync("https://example.com");
+            Stream first;
+            first = await response.Content.ReadAsStreamAsync();
+            await first.CopyToAsync(Stream.Null);
+            Stream second;
+            second = await response.Content.ReadAsStreamAsync();
+            await second.CopyToAsync(Stream.Null);
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .ApplyFixAllInDocumentAsync(source);
+
+        Assert.Contains(
+            "using Stream first = await response.Content.ReadAsStreamAsync();",
+            fixedSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "using Stream second = await response.Content.ReadAsStreamAsync();",
+            fixedSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedForNonAdjacentTopLevelAssignment()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+
+            HttpClient client = new();
+            using HttpResponseMessage response = await client.GetAsync("https://example.com");
+            Stream stream;
+            System.Console.WriteLine("Copying content.");
+            stream = await response.Content.ReadAsStreamAsync();
+            await stream.CopyToAsync(Stream.Null);
+            """;
+
+        var titles = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedWhenDirectiveGuardsTopLevelAssignment()
+    {
+        const string source = """
+            #define DEBUG
+            using System.IO;
+            using System.Net.Http;
+
+            HttpClient client = new();
+            using HttpResponseMessage response = await client.GetAsync("https://example.com");
+            Stream stream;
+            #if DEBUG
+            stream = await response.Content.ReadAsStreamAsync();
+            #endif
+            await stream.CopyToAsync(Stream.Null);
+            """;
+
+        var titles = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedWhenDirectiveGuardsBlockAssignment()
+    {
+        const string source = """
+            #define DEBUG
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response)
+                {
+                    Stream stream;
+            #if DEBUG
+                    stream = await response.Content.ReadAsStreamAsync();
+            #endif
+                    await stream.CopyToAsync(Stream.Null);
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenAwaitUsingDeclarationOwnsStream()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response)
+                {
+                    await using var stream = await response.Content.ReadAsStreamAsync();
+                    await stream.CopyToAsync(Stream.Null);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task CodeFix_PreservesCommentsBetweenAdjacentDeclarationAndAssignment()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response)
+                {
+                    Stream stream;
+                    // The stream must be disposed here.
+                    stream = await response.Content.ReadAsStreamAsync();
+                    await stream.CopyToAsync(Stream.Null);
+                }
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("The stream must be disposed here.", fixedSource);
+        Assert.Contains("using Stream stream = await response.Content.ReadAsStreamAsync()", fixedSource);
+        Assert.DoesNotContain("Stream stream;", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_PreservesCommentsBetweenTopLevelDeclarationAndAssignment()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+
+            HttpClient client = new();
+            using HttpResponseMessage response = await client.GetAsync("https://example.com");
+            Stream stream;
+            // The stream must be disposed here.
+            stream = await response.Content.ReadAsStreamAsync();
+            await stream.CopyToAsync(Stream.Null);
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("The stream must be disposed here.", fixedSource);
+        Assert.Contains("using Stream stream = await response.Content.ReadAsStreamAsync()", fixedSource);
+        Assert.DoesNotContain("Stream stream;", fixedSource);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOfferedWhenDirectiveSitsInsideTopLevelAssignment()
+    {
+        const string source = """
+            #define DEBUG
+            using System.IO;
+            using System.Net.Http;
+
+            HttpClient client = new();
+            using HttpResponseMessage response = await client.GetAsync("https://example.com");
+            Stream stream;
+            stream = await response.Content.ReadAsStreamAsync(
+            #if DEBUG
+                System.Threading.CancellationToken.None
+            #else
+                default
+            #endif
+                );
+            await stream.CopyToAsync(Stream.Null);
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR081, diagnostic.Id);
+
+        var titles = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    private static string NormalizeLineEndings(string value)
+    {
+        return value.Replace("\r\n", "\n");
+    }
 }

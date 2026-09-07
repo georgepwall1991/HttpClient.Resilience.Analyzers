@@ -38,6 +38,10 @@ The package catches outbound HTTP reliability bugs at build time, including sock
 - [HCR084](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR084/): Duplicated named-client string literals
 - [HCR085](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR085/): Implicit typed-client name collisions
 
+## Code fixes
+
+Automatic fixes ship for: HCR001, HCR002, HCR004, HCR005, HCR040, HCR041, HCR042, HCR043, HCR060, HCR061, HCR063, HCR064, HCR081 (full), and HCR085 (partial — adds kebab-case names derived from the fully qualified implementation type). All fixes support Fix All via BatchFixer. Rules without automatic fixes (HCR003, HCR020, HCR062, HCR080, HCR082, HCR083, HCR084) include manual guidance in their rule pages.
+
 ## Optional
 
 - [NuGet package](https://www.nuget.org/packages/HttpClient.Resilience.Analyzers)
