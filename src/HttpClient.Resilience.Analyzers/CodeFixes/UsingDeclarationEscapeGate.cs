@@ -18,8 +18,8 @@ internal static class UsingDeclarationEscapeGate
             return false;
         }
 
-        SyntaxNode? scope = node.FirstAncestorOrSelf<BlockSyntax>();
-        scope ??= node.FirstAncestorOrSelf<CompilationUnitSyntax>();
+        SyntaxNode? scope = node.FirstAncestorOrSelf<BlockSyntax>() as SyntaxNode ??
+            node.FirstAncestorOrSelf<CompilationUnitSyntax>();
         if (scope is null)
         {
             return false;
