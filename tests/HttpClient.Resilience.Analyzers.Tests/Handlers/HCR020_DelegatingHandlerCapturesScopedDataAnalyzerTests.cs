@@ -1155,4 +1155,149 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
 
         Assert.Empty(diagnostics);
     }
+    [Fact]
+    public async Task ReportsDiagnostic_WhenScopedRegistrationAndHandlerAreNamespaced()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<App.IUserContext, App.UserContext>();
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddScoped<TService, TImplementation>(this IServiceCollection services) => services;
+            }
+
+            namespace App
+            {
+                public sealed class UserHeaderHandler(IUserContext userContext) : DelegatingHandler
+                {
+                }
+
+                public interface IUserContext
+                {
+                }
+
+                public sealed class UserContext : IUserContext
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenNamespacedScopedFactoryConstructsImplementation()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<App.IUserContext>(sp => new App.UserContext());
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddScoped<TService>(
+                    this IServiceCollection services,
+                    Func<IServiceProvider, TService> factory) => services;
+            }
+
+            public interface IServiceProvider
+            {
+            }
+
+            namespace App
+            {
+                public sealed class UserHeaderHandler(UserContext userContext) : DelegatingHandler
+                {
+                }
+
+                public interface IUserContext
+                {
+                }
+
+                public sealed class UserContext : IUserContext
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenNamespacedScopedRegistrationDiffersFromGlobalParameterType()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<App.IUserContext, App.UserContext>();
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddScoped<TService, TImplementation>(this IServiceCollection services) => services;
+            }
+
+            public interface IUserContext
+            {
+            }
+
+            public sealed class UserHeaderHandler(IUserContext userContext) : DelegatingHandler
+            {
+            }
+
+            namespace App
+            {
+                public interface IUserContext
+                {
+                }
+
+                public sealed class UserContext : IUserContext
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
 }
