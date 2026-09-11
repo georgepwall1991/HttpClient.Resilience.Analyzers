@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -18,6 +19,28 @@ internal static class CodeFixExpressionFactory
     /// </summary>
     public static ExpressionSyntax CreateDisableForUnsafeHttpMethodsLambda() =>
         DisableForUnsafeHttpMethodsLambda;
+
+    /// <summary>
+    /// Creates an identifier name that stays valid when the source name is a keyword
+    /// (for example a lambda parameter declared as <c>@event</c>).
+    /// </summary>
+    public static IdentifierNameSyntax CreateIdentifierName(string name) =>
+        SyntaxFactory.IdentifierName(CreateIdentifier(name));
+
+    /// <summary>
+    /// Creates an identifier token that stays valid when the source name is a keyword.
+    /// The emitted text is verbatim (<c>@event</c>) while the value text stays the
+    /// bare name so the identifier still binds to the original declaration.
+    /// </summary>
+    public static SyntaxToken CreateIdentifier(string name) =>
+        SyntaxFacts.GetKeywordKind(name) == SyntaxKind.None
+            ? SyntaxFactory.Identifier(name)
+            : SyntaxFactory.Identifier(
+                SyntaxTriviaList.Empty,
+                SyntaxKind.IdentifierToken,
+                "@" + name,
+                name,
+                SyntaxTriviaList.Empty);
 
     private static ExpressionSyntax BuildDisableForUnsafeHttpMethodsLambda()
     {

@@ -61,21 +61,21 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
             // A configure delegate already exists: inject the guard as its first statement
             // instead of replacing the user's configuration.
             var lambda = SyntaxTransparency.Unwrap(invocation.ArgumentList.Arguments[0].Expression) as LambdaExpressionSyntax;
-            var parameterName = lambda switch
+            var parameter = lambda switch
             {
-                SimpleLambdaExpressionSyntax simple => simple.Parameter.Identifier.ValueText,
+                SimpleLambdaExpressionSyntax simple => simple.Parameter,
                 ParenthesizedLambdaExpressionSyntax parenthesized when
                     parenthesized.ParameterList.Parameters.Count == 1 =>
-                    parenthesized.ParameterList.Parameters[0].Identifier.ValueText,
+                    parenthesized.ParameterList.Parameters[0],
                 _ => null
             };
 
-            if (parameterName is null || lambda!.Body is null)
+            if (parameter is null || lambda!.Body is null)
             {
                 continue;
             }
 
-            if (BodyAlreadyDisablesRetries(lambda.Body, parameterName))
+            if (BodyAlreadyDisablesRetries(lambda.Body, parameter.Identifier.ValueText))
             {
                 continue;
             }
@@ -87,7 +87,7 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
                         context.Document,
                         invocation,
                         lambda,
-                        parameterName,
+                        parameter,
                         cancellationToken),
                     nameof(HCR041_DisableUnsafeMethodRetriesCodeFixProvider)),
                 diagnostic);
@@ -124,7 +124,7 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         Document document,
         InvocationExpressionSyntax invocation,
         LambdaExpressionSyntax lambda,
-        string parameterName,
+        ParameterSyntax parameter,
         CancellationToken cancellationToken)
     {
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
@@ -139,7 +139,7 @@ public sealed class HCR041_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
                     SyntaxKind.SimpleMemberAccessExpression,
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName(parameterName),
+                        CodeFixExpressionFactory.CreateIdentifierName(parameter.Identifier.ValueText),
                         SyntaxFactory.IdentifierName("Retry")),
                     SyntaxFactory.IdentifierName("DisableForUnsafeHttpMethods"))));
 
