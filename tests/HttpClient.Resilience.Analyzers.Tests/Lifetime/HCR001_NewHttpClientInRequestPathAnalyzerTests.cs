@@ -969,4 +969,58 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
         Assert.Empty(titles);
     }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenCreationConfiguresHandler()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory httpClientFactory)
+                {
+                    var handler = new HttpClientHandler { UseProxy = false };
+                    return new HttpClient(handler, disposeHandler: true);
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenCreationHasInitializer()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory httpClientFactory)
+                {
+                    return new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
 }
