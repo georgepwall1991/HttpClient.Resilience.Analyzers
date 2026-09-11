@@ -533,13 +533,19 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
     private static bool IsDisposeInvocation(ExpressionSyntax expression, string variableName)
     {
         expression = UnwrapTransparentExpressions(expression);
+        if (expression is AwaitExpressionSyntax awaitExpression)
+        {
+            expression = UnwrapTransparentExpressions(awaitExpression.Expression);
+        }
 
+        // HttpResponseMessage.DisposeAsync disposes synchronously, so an unawaited
+        // call still counts as disposal evidence.
         return expression is InvocationExpressionSyntax
         {
             Expression: MemberAccessExpressionSyntax
             {
                 Expression: { } disposedExpression,
-                Name.Identifier.ValueText: "Dispose"
+                Name.Identifier.ValueText: "Dispose" or "DisposeAsync"
             }
         } && IsDirectVariableReference(disposedExpression, variableName);
     }
@@ -558,8 +564,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             .DescendantNodes()
             .OfType<UsingStatementSyntax>()
             .Any(usingStatement => usingStatement.SpanStart > aliasStart &&
-                usingStatement.Expression is { } expression &&
-                IsDirectVariableReference(expression, aliasName) &&
+                UsingStatementOwnsAlias(usingStatement, aliasName) &&
                 !IsVariableReassignedBetween(containingBlock, aliasName, aliasStart, usingStatement.SpanStart)) ||
             IsAliasOwnershipTransferredInBlock(
                 containingBlock,
@@ -567,6 +572,21 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
                 aliasStart,
                 (nestedAliasName, nestedAliasStart) =>
                     AliasIsOwnedByUsingStatement(containingBlock, nestedAliasName, nestedAliasStart));
+    }
+
+    private static bool UsingStatementOwnsAlias(UsingStatementSyntax usingStatement, string aliasName)
+    {
+        if (usingStatement.Expression is { } expression &&
+            IsDirectVariableReference(expression, aliasName))
+        {
+            return true;
+        }
+
+        // using (var alias = response) { ... } — the using owns the resource through
+        // the declared alias even though the tracked variable is only the initializer.
+        return usingStatement.Declaration?.Variables.Any(variable =>
+            variable.Initializer?.Value is { } initializer &&
+            IsDirectVariableReference(initializer, aliasName)) == true;
     }
 
     private static bool IsOwnedByUsingDeclaration(BlockSyntax containingBlock, string variableName, int declarationStart)
