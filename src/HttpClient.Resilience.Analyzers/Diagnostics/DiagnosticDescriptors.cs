@@ -175,6 +175,12 @@ public static class DiagnosticDescriptors
             helpLinkUri: $"{DocsSiteUrl}rules/{id}/");
     }
 
+    public static readonly DiagnosticDescriptor HCR087 = Create(
+        DiagnosticIds.HCR087,
+        "BaseAddress should end with a trailing slash",
+        "BaseAddress '{0}' has a path that does not end with '/'; relative URIs resolve against the parent segment and drop the last path component",
+        DiagnosticCategories.Lifetime);
+
     public static readonly DiagnosticDescriptor HCR088 = Create(
         DiagnosticIds.HCR088,
         "Typed client has no HttpClient-accepting constructor",

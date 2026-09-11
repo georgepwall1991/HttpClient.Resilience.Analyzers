@@ -1,4 +1,4 @@
-// HCR001, HCR006, HCR002, HCR003 shapes.
+// HCR001, HCR006, HCR087, HCR002, HCR003 shapes.
 using System;
 using System.Net.Http;
 using System.Threading;
@@ -63,6 +63,16 @@ public sealed class CorpusInvalidTimeoutFactory
     {
         var client = new HttpClient();
         client.Timeout = TimeSpan.Zero;
+        return client;
+    }
+}
+
+public sealed class CorpusBaseAddressFactory
+{
+    public HttpClient Create()
+    {
+        var client = new HttpClient();
+        client.BaseAddress = new Uri("https://api.example.com/v1");
         return client;
     }
 }
