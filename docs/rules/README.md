@@ -41,6 +41,7 @@ Each rule page includes:
 | Rule | Title | Default profile | Fix support |
 |---|---|---:|---|
 | [`HCR020`](HCR020.md) | `DelegatingHandler` should not capture scoped request data | Warning | Guide |
+| [`HCR022`](HCR022.md) | Disabled server certificate validation | Warning | Fix |
 
 ### Resilience
 

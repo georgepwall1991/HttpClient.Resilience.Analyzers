@@ -42,6 +42,12 @@ public static class DiagnosticDescriptors
         "DelegatingHandler should not capture scoped request data",
         DiagnosticCategories.Handlers);
 
+    public static readonly DiagnosticDescriptor HCR022 = Create(
+        DiagnosticIds.HCR022,
+        "Do not disable server certificate validation",
+        "Do not disable server certificate validation",
+        DiagnosticCategories.Handlers);
+
     public static readonly DiagnosticDescriptor HCR040 = Create(
         DiagnosticIds.HCR040,
         "Do not stack duplicate resilience handlers",
