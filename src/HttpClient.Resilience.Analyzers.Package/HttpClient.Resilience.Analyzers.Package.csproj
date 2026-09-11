@@ -5,7 +5,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>HttpClient.Resilience.Analyzers</PackageId>
-    <Version>0.1.198</Version>
+    <Version>0.1.199</Version>
     <Title>HttpClient Resilience Analyzers — IHttpClientFactory, Polly, and Http.Resilience</Title>
     <Authors>George Wall</Authors>
     <Copyright>Copyright (c) George Wall and contributors 2026</Copyright>
@@ -17,7 +17,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Fix HCR041/HCR043 code fixes emitting uncompilable code for keyword-named identifiers, alias-only usings, and value-returning lambdas.</PackageReleaseNotes>
+    <PackageReleaseNotes>Fix HCR064 treating CancellationToken locals declared after the call as usable, producing a false positive and a CS0841 fix.</PackageReleaseNotes>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
