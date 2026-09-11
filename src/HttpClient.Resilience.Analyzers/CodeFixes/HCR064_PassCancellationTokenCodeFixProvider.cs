@@ -87,7 +87,7 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
                 var tokenDisplayName = IsCancellationTokenSource(symbolType)
                     ? cancellationTokenSymbol.Name + ".Token"
                     : cancellationTokenSymbol.Name;
-                ExpressionSyntax tokenExpression = CreateIdentifierName(cancellationTokenSymbol.Name);
+                ExpressionSyntax tokenExpression = CodeFixExpressionFactory.CreateIdentifierName(cancellationTokenSymbol.Name);
                 if (IsCancellationTokenSource(symbolType))
                 {
                     tokenExpression = SyntaxFactory.MemberAccessExpression(
@@ -97,7 +97,7 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
                 }
 
                 var tokenArgument = SyntaxFactory.Argument(tokenExpression)
-                    .WithNameColon(SyntaxFactory.NameColon(CreateIdentifierName(cancellationTokenParameterName)));
+                    .WithNameColon(SyntaxFactory.NameColon(CodeFixExpressionFactory.CreateIdentifierName(cancellationTokenParameterName)));
 
                 context.RegisterCodeFix(
                     CodeAction.Create(
@@ -194,11 +194,6 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
         return document.WithSyntaxRoot(root.ReplaceNode(invocation, updatedInvocation));
     }
 
-    private static IdentifierNameSyntax CreateIdentifierName(string name)
-    {
-        var text = SyntaxFacts.GetKeywordKind(name) == SyntaxKind.None ? name : "@" + name;
-        return SyntaxFactory.IdentifierName(SyntaxFactory.Identifier(text));
-    }
 
     private static bool IsCancellationToken(ITypeSymbol? type)
     {
