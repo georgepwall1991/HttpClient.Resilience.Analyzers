@@ -42,6 +42,12 @@ public static class DiagnosticDescriptors
         "DelegatingHandler should not capture scoped request data",
         DiagnosticCategories.Handlers);
 
+    public static readonly DiagnosticDescriptor HCR021 = Create(
+        DiagnosticIds.HCR021,
+        "DelegatingHandler.SendAsync should forward the cancellation token",
+        "DelegatingHandler.SendAsync should forward the cancellation token to base.SendAsync",
+        DiagnosticCategories.Handlers);
+
     public static readonly DiagnosticDescriptor HCR022 = Create(
         DiagnosticIds.HCR022,
         "Do not disable server certificate validation",

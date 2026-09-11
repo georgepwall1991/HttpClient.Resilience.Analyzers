@@ -52,7 +52,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 Or add an explicit package reference:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.206" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.207" PrivateAssets="all" />
 ```
 
 `PrivateAssets="all"` prevents the analyzer from flowing to projects that consume your project.
@@ -62,7 +62,7 @@ For a whole solution, add the package once in `Directory.Build.props`:
 ```xml
 <Project>
   <ItemGroup>
-    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.206">
+    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.207">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
@@ -148,6 +148,7 @@ The rules intentionally focus on concrete production risks. Heuristic checks use
 | [`HCR004`](docs/rules/HCR004.md) | Typed clients | Typed clients injected into singleton services | Warning | Yes |
 | [`HCR005`](docs/rules/HCR005.md) | Typed clients | Duplicate typed-client registrations | Warning | Yes |
 | [`HCR020`](docs/rules/HCR020.md) | Handlers | `DelegatingHandler` capturing scoped request data | Warning | Guide |
+| [`HCR021`](docs/rules/HCR021.md) | Handlers | `base.SendAsync` dropping the cancellation token | Warning | Guide |
 | [`HCR022`](docs/rules/HCR022.md) | Handlers | Disabled server certificate validation | Warning | Fix |
 | [`HCR040`](docs/rules/HCR040.md) | Resilience | Duplicate resilience handlers in one client pipeline | Warning | Yes |
 | [`HCR041`](docs/rules/HCR041.md) | Resilience | Unsafe HTTP methods retried without explicit configuration | Warning | Yes |
