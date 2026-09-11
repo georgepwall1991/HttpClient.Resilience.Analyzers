@@ -45,6 +45,14 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
                 continue;
             }
 
+            // Replacing the creation with factory.CreateClient() drops any handler
+            // or initializer configuration (proxy, certificates, cookies, timeouts).
+            // Only a bare new HttpClient() converts without losing behavior.
+            if (creation.ArgumentList?.Arguments.Count > 0 || creation.Initializer is not null)
+            {
+                continue;
+            }
+
             var factoryName = FindFactoryParameterName(creation) ??
                 FindFactoryMemberName(creation, semanticModel, context.CancellationToken);
             if (factoryName is null)
