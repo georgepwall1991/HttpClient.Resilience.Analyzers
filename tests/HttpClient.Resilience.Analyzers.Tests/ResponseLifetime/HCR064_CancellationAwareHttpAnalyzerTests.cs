@@ -1031,4 +1031,84 @@ public sealed class HCR064_CancellationAwareHttpAnalyzerTests
             fixedSource,
             StringComparison.Ordinal);
     }
+    [Fact]
+    public async Task DoesNotReport_WhenCancellationTokenIsDeclaredAfterTheCall()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    var response = await client.GetAsync("https://example.com");
+                    CancellationToken cancellationToken = CancellationToken.None;
+                    return response;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task CodeFix_OffersOnlyTokensDeclaredBeforeTheCall()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client, CancellationToken callerToken)
+                {
+                    var response = await client.GetAsync("https://example.com");
+                    CancellationToken laterToken = CancellationToken.None;
+                    return response;
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR064_CancellationAwareHttpAnalyzer, HCR064_PassCancellationTokenCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        var title = Assert.Single(titles);
+        Assert.Equal("Pass 'callerToken' cancellation token", title);
+    }
+
+    [Fact]
+    public async Task CodeFix_OffersOuterBlockTokenDeclaredBeforeTheCall()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> GetAsync(HttpClient client)
+                {
+                    CancellationToken outerToken = CancellationToken.None;
+                    if (client is not null)
+                    {
+                        return await client.GetAsync("https://example.com");
+                    }
+
+                    return await client.GetAsync("https://example.com", outerToken);
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR064_CancellationAwareHttpAnalyzer, HCR064_PassCancellationTokenCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        var title = Assert.Single(titles);
+        Assert.Equal("Pass 'outerToken' cancellation token", title);
+    }
+
 }

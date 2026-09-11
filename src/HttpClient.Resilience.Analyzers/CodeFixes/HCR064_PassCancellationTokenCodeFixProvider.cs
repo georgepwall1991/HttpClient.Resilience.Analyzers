@@ -51,6 +51,7 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
 
             var cancellationTokens = semanticModel.LookupSymbols(invocation.SpanStart)
                 .Where(symbol => symbol is ILocalSymbol or IParameterSymbol)
+                .Where(symbol => symbol is not ILocalSymbol local || IsDeclaredBefore(local, invocation.SpanStart))
                 .Where(symbol => IsCancellationToken(symbol switch
                 {
                     ILocalSymbol local => local.Type,
@@ -112,6 +113,13 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
                     diagnostic);
             }
         }
+    }
+
+    private static bool IsDeclaredBefore(ILocalSymbol local, int position)
+    {
+        // LookupSymbols also reports locals that are in scope but declared later in
+        // the same block; referencing them is CS0841, so they are not usable tokens.
+        return local.DeclaringSyntaxReferences.Any(reference => reference.Span.End <= position);
     }
 
     private static string GetCancellationTokenParameterName(
