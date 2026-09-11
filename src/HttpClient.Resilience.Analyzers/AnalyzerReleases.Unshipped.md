@@ -8,6 +8,7 @@ HCR006 | HttpClient.Lifetime | Warning | HttpClient.Timeout must be a positive T
 HCR021 | HttpClient.Handlers | Warning | DelegatingHandler.SendAsync should forward the cancellation token
 HCR022 | HttpClient.Handlers | Warning | Do not disable server certificate validation
 HCR065 | HttpClient.ResponseLifetime | Warning | Do not resend the same HttpRequestMessage instance
+HCR087 | HttpClient.Lifetime | Warning | BaseAddress with a path must end with a trailing slash
 HCR088 | HttpClient.TypedClients | Warning | Do not send the same HttpRequestMessage more than once
 
 ### Removed Rules

@@ -4,6 +4,7 @@
 01-Lifetime.cs(29,40): warning HCR002: Long-lived manual HttpClient should configure PooledConnectionLifetime
 01-Lifetime.cs(43,9): warning HCR003: Do not cache IHttpClientFactory.CreateClient() results long-term
 01-Lifetime.cs(65,26): warning HCR006: HttpClient.Timeout must be a positive TimeSpan or Timeout.InfiniteTimeSpan
+01-Lifetime.cs(75,30): warning HCR087: BaseAddress 'https://api.example.com/v1' has a path that does not end with '/'; relative URIs resolve against the parent segment and drop the last path component
 02-TypedClients.cs(12,18): warning HCR004: Do not inject typed HttpClient clients into singleton services
 02-TypedClients.cs(13,18): warning HCR005: Do not separately register a typed client already registered by AddHttpClient<T>()
 02-TypedClients.cs(15,18): warning HCR085: Typed clients 'CorpusStripeClient' and 'CorpusAdyenClient' share the implicit HttpClient name for 'ICorpusSharedClient'; specify distinct names or link them to an explicit named client

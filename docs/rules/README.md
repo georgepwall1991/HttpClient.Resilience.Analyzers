@@ -36,6 +36,7 @@ Each rule page includes:
 | [`HCR083`](HCR083.md) | Configure `BaseAddress` for typed clients that use relative URLs | Warning | Guide |
 | [`HCR084`](HCR084.md) | Avoid duplicated string literals for named `HttpClient` names | Warning | Guide |
 | [`HCR085`](HCR085.md) | Multiple typed clients on one interface should use explicit names | Warning | Partial |
+| [`HCR087`](HCR087.md) | `BaseAddress` with a path must end with `/` or relative URIs drop the last segment | Warning | No fix |
 | [`HCR088`](HCR088.md) | Typed client registered via `AddHttpClient<T>` has no `HttpClient` constructor parameter | Warning | No fix |
 
 ### Handlers
