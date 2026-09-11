@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -60,6 +61,15 @@ internal static class TopLevelUsingDeclarationMerge
             return false;
         }
 
+        if (SyntaxTransparency.LocalIsReassignedBetween(
+                root,
+                variables[0].Identifier.ValueText,
+                assignmentGlobal.Span.End,
+                root.Span.End))
+        {
+            return false;
+        }
+
         compilationUnit = root;
         declarationStatement = previousGlobal;
         declaration = previousDeclaration;
@@ -70,6 +80,28 @@ internal static class TopLevelUsingDeclarationMerge
     internal static bool ContainsDirectiveTrivia(SyntaxNode node)
     {
         return node.DescendantTrivia().Any(trivia => trivia.IsDirective);
+    }
+
+    /// <summary>
+    /// True when the declared local is reassigned (including via ref/out) anywhere
+    /// after <paramref name="position"/> inside its containing scope, or when the
+    /// containing scope cannot be determined — callers must withhold the fix then.
+    /// </summary>
+    internal static bool IsReassignedAfter(
+        LocalDeclarationStatementSyntax declaration,
+        string localName,
+        int position)
+    {
+        var scope = declaration.Parent switch
+        {
+            BlockSyntax block => (SyntaxNode)block,
+            SwitchSectionSyntax section => section,
+            GlobalStatementSyntax global => global.Parent,
+            _ => null
+        };
+
+        return scope is null ||
+            SyntaxTransparency.LocalIsReassignedBetween(scope, localName, position, scope.Span.End);
     }
 
     internal static async Task<Document> MergeDeclarationAndAssignmentAsync(

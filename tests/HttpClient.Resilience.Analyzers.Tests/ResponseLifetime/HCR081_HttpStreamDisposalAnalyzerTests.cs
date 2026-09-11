@@ -1122,6 +1122,31 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
         Assert.Empty(titles);
     }
 
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenStreamIsReassignedLater()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(HttpClient client)
+                {
+                    var stream = await client.GetStreamAsync("https://example.com");
+                    await stream.CopyToAsync(Stream.Null);
+                    stream = await client.GetStreamAsync("https://example.com/other");
+                }
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR081_HttpStreamDisposalAnalyzer, HCR081_DisposeStreamCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
     private static string NormalizeLineEndings(string value)
     {
         return value.Replace("\r\n", "\n");

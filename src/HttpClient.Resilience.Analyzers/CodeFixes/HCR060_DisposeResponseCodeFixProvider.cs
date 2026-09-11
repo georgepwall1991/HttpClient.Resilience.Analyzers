@@ -39,7 +39,11 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
 
             if (declaration is not null &&
                 declaration.UsingKeyword == default &&
-                declaration.Declaration.Variables.Count == 1)
+                declaration.Declaration.Variables.Count == 1 &&
+                !TopLevelUsingDeclarationMerge.IsReassignedAfter(
+                    declaration,
+                    declaration.Declaration.Variables[0].Identifier.ValueText,
+                    declaration.Span.End))
             {
                 context.RegisterCodeFix(
                     CodeAction.Create(
@@ -130,7 +134,11 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
         }
 
         if (TopLevelUsingDeclarationMerge.ContainsDirectiveTrivia(previousDeclaration) ||
-            TopLevelUsingDeclarationMerge.ContainsDirectiveTrivia(statement))
+            TopLevelUsingDeclarationMerge.ContainsDirectiveTrivia(statement) ||
+            TopLevelUsingDeclarationMerge.IsReassignedAfter(
+                previousDeclaration,
+                variables[0].Identifier.ValueText,
+                statement.Span.End))
         {
             return false;
         }
