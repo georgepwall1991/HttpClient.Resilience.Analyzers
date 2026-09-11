@@ -4,6 +4,7 @@ dotnet_diagnostic.HCR002.severity = suggestion
 dotnet_diagnostic.HCR003.severity = suggestion
 dotnet_diagnostic.HCR004.severity = suggestion
 dotnet_diagnostic.HCR005.severity = suggestion
+dotnet_diagnostic.HCR006.severity = suggestion
 dotnet_diagnostic.HCR020.severity = suggestion
 dotnet_diagnostic.HCR021.severity = suggestion
 dotnet_diagnostic.HCR022.severity = suggestion
