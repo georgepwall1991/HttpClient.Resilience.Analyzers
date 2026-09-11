@@ -58,6 +58,16 @@ public sealed class HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider
         ExpressionStatementSyntax statement,
         InvocationExpressionSyntax invocation)
     {
+        // RemoveNode can only detach statements that live in a block or a
+        // top-level global statement; embedded statements (if/else/loops)
+        // would throw at apply time.
+        if (statement.Parent is not (BlockSyntax or GlobalStatementSyntax))
+        {
+            return false;
+        }
+
+        // A registration that carries arguments (factory delegates, options) is not
+        // obviously safe to drop — keep the fix limited to plain registrations.
         if (invocation.ArgumentList.Arguments.Count != 0)
         {
             return false;
