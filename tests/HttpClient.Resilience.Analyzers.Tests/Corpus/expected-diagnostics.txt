@@ -21,6 +21,7 @@
 04-ResponseLifetime.cs(42,55): warning HCR063: Avoid sync-over-async around outbound HTTP
 04-ResponseLifetime.cs(50,23): warning HCR064: Use cancellation-aware HTTP APIs when a token is available
 04-ResponseLifetime.cs(63,13): warning HCR081: Dispose streams returned from HTTP content
+04-ResponseLifetime.cs(76,49): warning HCR065: Do not send the same HttpRequestMessage more than once
 05-HandlersAndConcurrency.cs(20,37): warning HCR084: Avoid duplicated string literals for named HttpClient names
 05-HandlersAndConcurrency.cs(24,40): warning HCR020: DelegatingHandler should not capture scoped request data
 05-HandlersAndConcurrency.cs(33,21): info HCR080: High-concurrency HTTP fan-out should use bounded concurrency or connection limits
