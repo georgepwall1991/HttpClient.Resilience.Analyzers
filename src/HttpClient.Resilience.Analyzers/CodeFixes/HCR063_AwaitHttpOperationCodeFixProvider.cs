@@ -42,6 +42,17 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
                 continue;
             }
 
+            // await cannot appear inside a lock statement or a nameof expression.
+            if (blockingExpression.Ancestors().Any(static ancestor =>
+                    ancestor is LockStatementSyntax ||
+                    ancestor is InvocationExpressionSyntax
+                    {
+                        Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" }
+                    }))
+            {
+                continue;
+            }
+
             // Match the surrounding convention: members that already use ConfigureAwait(false)
             // get an awaited call that preserves it.
             context.RegisterCodeFix(
@@ -183,7 +194,18 @@ public sealed class HCR063_AwaitHttpOperationCodeFixProvider : CodeFixProvider
         }
 
         ExpressionSyntax replacement = SyntaxFactory.AwaitExpression(operation.WithoutTrivia());
-        if (blockingExpression.Parent is MemberAccessExpressionSyntax or ElementAccessExpressionSyntax)
+
+        // await binds to the whole following expression, so member/element/conditional
+        // access, invocation, and null-suppression on the blocking expression all need
+        // the awaited operation parenthesized to keep the original semantics.
+        var parent = blockingExpression.Parent;
+        if (parent is MemberAccessExpressionSyntax or
+                ElementAccessExpressionSyntax or
+                ConditionalAccessExpressionSyntax or
+                MemberBindingExpressionSyntax or
+                InvocationExpressionSyntax ||
+            parent is PostfixUnaryExpressionSyntax postfix &&
+                postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression))
         {
             replacement = SyntaxFactory.ParenthesizedExpression(replacement);
         }
