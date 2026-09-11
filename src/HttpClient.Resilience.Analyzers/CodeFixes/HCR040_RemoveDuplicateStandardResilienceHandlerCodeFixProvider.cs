@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HttpClient.Resilience.Analyzers.Diagnostics;
+using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
@@ -43,6 +44,19 @@ public sealed class HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvid
                 continue;
             }
 
+            var receiverIsInvocation =
+                SyntaxTransparency.Unwrap(memberAccess.Expression) is InvocationExpressionSyntax;
+            var statement = invocation.Parent as ExpressionStatementSyntax;
+            var statementIsRemovable = statement?.Parent is BlockSyntax or GlobalStatementSyntax;
+
+            // A chained duplicate (receiver is another invocation) is collapsed by
+            // replacing the call with its receiver. A standalone duplicate statement
+            // can be removed outright, but only when its parent supports removal.
+            if (!receiverIsInvocation && !statementIsRemovable)
+            {
+                continue;
+            }
+
             context.RegisterCodeFix(
                 CodeAction.Create(
                     "Remove duplicate resilience handler",
@@ -64,12 +78,20 @@ public sealed class HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvid
             return document;
         }
 
-        if (duplicateInvocation.Parent is ExpressionStatementSyntax expressionStatement)
+        if (SyntaxTransparency.Unwrap(previousInvocation) is not InvocationExpressionSyntax &&
+            duplicateInvocation.Parent is ExpressionStatementSyntax expressionStatement)
         {
-            return document.WithSyntaxRoot(root.RemoveNode(expressionStatement, SyntaxRemoveOptions.KeepExteriorTrivia) ?? root);
+            // Standalone duplicate call: remove the statement. For top-level programs
+            // the removable node is the wrapping GlobalStatementSyntax.
+            var nodeToRemove = (SyntaxNode)(expressionStatement.Parent is GlobalStatementSyntax globalStatement
+                ? globalStatement
+                : expressionStatement);
+            return document.WithSyntaxRoot(root.RemoveNode(nodeToRemove, SyntaxRemoveOptions.KeepExteriorTrivia) ?? root);
         }
 
-        var replacement = previousInvocation
+        var unwrappedReceiver = SyntaxTransparency.Unwrap(previousInvocation);
+
+        var replacement = unwrappedReceiver
             .WithTriviaFrom(duplicateInvocation)
             .WithAdditionalAnnotations(Formatter.Annotation);
         var comments = duplicateInvocation
