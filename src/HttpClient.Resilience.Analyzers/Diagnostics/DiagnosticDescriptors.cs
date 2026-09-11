@@ -174,4 +174,10 @@ public static class DiagnosticDescriptors
             isEnabledByDefault: true,
             helpLinkUri: $"{DocsSiteUrl}rules/{id}/");
     }
+
+    public static readonly DiagnosticDescriptor HCR088 = Create(
+        DiagnosticIds.HCR088,
+        "Typed client has no HttpClient-accepting constructor",
+        "Typed client '{0}' has no constructor that accepts HttpClient; the factory cannot inject the configured client",
+        DiagnosticCategories.TypedClients);
 }

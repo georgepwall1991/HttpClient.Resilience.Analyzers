@@ -1,4 +1,4 @@
-// HCR004, HCR005, HCR083, HCR085 shapes, with registrations deliberately split
+// HCR004, HCR088, HCR005, HCR083, HCR085 shapes, with registrations deliberately split
 // across corpus files so the compilation-wide analyzers must join cross-tree.
 using System.Net.Http;
 using System.Threading;
@@ -21,11 +21,11 @@ public interface ICorpusSharedClient
 {
 }
 
-public sealed class CorpusStripeClient : ICorpusSharedClient
+public sealed class CorpusStripeClient(HttpClient httpClient) : ICorpusSharedClient
 {
 }
 
-public sealed class CorpusAdyenClient : ICorpusSharedClient
+public sealed class CorpusAdyenClient(HttpClient httpClient) : ICorpusSharedClient
 {
 }
 
@@ -54,5 +54,18 @@ public sealed class CorpusRelativeUrlClient
     public Task<HttpResponseMessage> SendAsync(CancellationToken cancellationToken)
     {
         return _client.GetAsync("/payments", cancellationToken);
+    }
+}
+
+public sealed class CorpusMissingCtorClient
+{
+    public CorpusMissingCtorClient(string apiKey) { }
+}
+
+public sealed class CorpusMissingCtorStartup
+{
+    public void Configure(IServiceCollection services)
+    {
+        services.AddHttpClient<CorpusMissingCtorClient>();
     }
 }

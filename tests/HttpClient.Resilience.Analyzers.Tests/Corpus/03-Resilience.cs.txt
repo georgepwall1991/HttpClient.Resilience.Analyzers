@@ -88,7 +88,7 @@ public sealed class CorpusUnsafePaymentsClient(HttpClient httpClient)
     }
 }
 
-public sealed class CorpusOuterClient
+public sealed class CorpusOuterClient(HttpClient httpClient)
 {
     public sealed class CorpusNestedUnsafeClient(HttpClient httpClient)
     {
