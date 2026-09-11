@@ -172,7 +172,7 @@ public static class DiagnosticDescriptors
             category,
             defaultSeverity,
             isEnabledByDefault: true,
-            description: messageFormat);
+            helpLinkUri: $"{DocsSiteUrl}rules/{id}/");
     }
 
     public static readonly DiagnosticDescriptor HCR088 = Create(
