@@ -1,4 +1,5 @@
-// HCR001, HCR002, HCR003 shapes.
+// HCR001, HCR006, HCR002, HCR003 shapes.
+using System;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -53,5 +54,15 @@ public sealed class CorpusConfiguredStaticClient
     public Task<HttpResponseMessage> GetAsync(CancellationToken cancellationToken)
     {
         return Client.GetAsync("https://example.com", cancellationToken);
+    }
+}
+
+public sealed class CorpusInvalidTimeoutFactory
+{
+    public HttpClient Create()
+    {
+        var client = new HttpClient();
+        client.Timeout = TimeSpan.Zero;
+        return client;
     }
 }

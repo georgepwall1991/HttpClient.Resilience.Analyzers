@@ -52,7 +52,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 Or add an explicit package reference:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.208" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.209" PrivateAssets="all" />
 ```
 
 `PrivateAssets="all"` prevents the analyzer from flowing to projects that consume your project.
@@ -62,7 +62,7 @@ For a whole solution, add the package once in `Directory.Build.props`:
 ```xml
 <Project>
   <ItemGroup>
-    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.208">
+    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.209">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
@@ -147,6 +147,7 @@ The rules intentionally focus on concrete production risks. Heuristic checks use
 | [`HCR003`](docs/rules/HCR003.md) | Lifetime | Cached `IHttpClientFactory.CreateClient()` results | Warning | Guide |
 | [`HCR004`](docs/rules/HCR004.md) | Typed clients | Typed clients injected into singleton services | Warning | Yes |
 | [`HCR005`](docs/rules/HCR005.md) | Typed clients | Duplicate typed-client registrations | Warning | Yes |
+| [`HCR006`](docs/rules/HCR006.md) | Lifetime | `HttpClient.Timeout` set to a non-positive value | Warning | Fix |
 | [`HCR020`](docs/rules/HCR020.md) | Handlers | `DelegatingHandler` capturing scoped request data | Warning | Guide |
 | [`HCR021`](docs/rules/HCR021.md) | Handlers | `base.SendAsync` dropping the cancellation token | Warning | Guide |
 | [`HCR022`](docs/rules/HCR022.md) | Handlers | Disabled server certificate validation | Warning | Fix |

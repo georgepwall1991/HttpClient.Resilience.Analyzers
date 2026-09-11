@@ -36,6 +36,12 @@ public static class DiagnosticDescriptors
         "Do not separately register a typed client already registered by AddHttpClient<T>()",
         DiagnosticCategories.TypedClients);
 
+    public static readonly DiagnosticDescriptor HCR006 = Create(
+        DiagnosticIds.HCR006,
+        "HttpClient.Timeout must be a positive TimeSpan",
+        "HttpClient.Timeout must be a positive TimeSpan or Timeout.InfiniteTimeSpan",
+        DiagnosticCategories.Lifetime);
+
     public static readonly DiagnosticDescriptor HCR020 = Create(
         DiagnosticIds.HCR020,
         "DelegatingHandler should not capture scoped request data",
