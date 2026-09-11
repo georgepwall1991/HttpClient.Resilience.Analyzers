@@ -17,7 +17,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Add HCR088: flag AddHttpClient<T> registrations whose typed client has no constructor accepting HttpClient.</PackageReleaseNotes>
+    <PackageReleaseNotes>Add HCR088: flag AddHttpClient&lt;T&gt; registrations whose typed client has no constructor accepting HttpClient.</PackageReleaseNotes>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
