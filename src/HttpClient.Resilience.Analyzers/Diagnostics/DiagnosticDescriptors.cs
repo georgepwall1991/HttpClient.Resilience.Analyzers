@@ -108,6 +108,13 @@ public static class DiagnosticDescriptors
         "Use cancellation-aware HTTP APIs when a token is available",
         DiagnosticCategories.ResponseLifetime);
 
+    public static readonly DiagnosticDescriptor HCR065 = Create(
+        DiagnosticIds.HCR065,
+        "Do not send the same HttpRequestMessage more than once",
+        "Do not send the same HttpRequestMessage more than once",
+        DiagnosticCategories.ResponseLifetime);
+
+
     public static readonly DiagnosticDescriptor HCR080 = Create(
         DiagnosticIds.HCR080,
         "High-concurrency HTTP fan-out should use bounded concurrency or connection limits",

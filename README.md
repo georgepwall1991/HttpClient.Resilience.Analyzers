@@ -52,7 +52,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 Or add an explicit package reference:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.207" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.208" PrivateAssets="all" />
 ```
 
 `PrivateAssets="all"` prevents the analyzer from flowing to projects that consume your project.
@@ -62,7 +62,7 @@ For a whole solution, add the package once in `Directory.Build.props`:
 ```xml
 <Project>
   <ItemGroup>
-    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.207">
+    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.208">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
@@ -159,6 +159,7 @@ The rules intentionally focus on concrete production risks. Heuristic checks use
 | [`HCR062`](docs/rules/HCR062.md) | Response lifetime | Per-request values written to `DefaultRequestHeaders` | Warning | Guide |
 | [`HCR063`](docs/rules/HCR063.md) | Response lifetime | Sync-over-async around outbound HTTP | Warning | Partial |
 | [`HCR064`](docs/rules/HCR064.md) | Response lifetime | HTTP calls that omit an available `CancellationToken` | Warning | Yes |
+| [`HCR065`](docs/rules/HCR065.md) | ResponseLifetime | Resending the same `HttpRequestMessage` | Warning | Guide |
 | [`HCR080`](docs/rules/HCR080.md) | Concurrency | Obvious unbounded `Task.WhenAll` HTTP fan-out | Suggestion | Guide |
 | [`HCR081`](docs/rules/HCR081.md) | Response lifetime | Undisposed streams returned from HTTP content | Warning | Partial |
 | [`HCR082`](docs/rules/HCR082.md) | Resilience | Per-request resilience pipeline construction | Warning | Guide |

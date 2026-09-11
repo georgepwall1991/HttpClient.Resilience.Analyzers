@@ -44,6 +44,7 @@ $expectedDiagnosticIds = @(
     'HCR062',
     'HCR063',
     'HCR064',
+    'HCR065',
     'HCR080',
     'HCR081',
     'HCR082',
