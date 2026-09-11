@@ -96,6 +96,7 @@ nav:
       - HCR083: rules/HCR083.md
       - HCR084: rules/HCR084.md
       - HCR085: rules/HCR085.md
+      - HCR088: rules/HCR088.md
   - Configuration: configuration.md
   - Adoption: adoption.md
   - FAQ: faq.md

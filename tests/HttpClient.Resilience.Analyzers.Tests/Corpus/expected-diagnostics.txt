@@ -8,6 +8,7 @@
 02-TypedClients.cs(13,18): warning HCR005: Do not separately register a typed client already registered by AddHttpClient<T>()
 02-TypedClients.cs(15,18): warning HCR085: Typed clients 'CorpusStripeClient' and 'CorpusAdyenClient' share the implicit HttpClient name for 'ICorpusSharedClient'; specify distinct names or link them to an explicit named client
 02-TypedClients.cs(56,33): warning HCR083: Configure BaseAddress for typed clients that use relative URLs
+02-TypedClients.cs(69,32): warning HCR088: Typed client 'CorpusMissingCtorClient' has no constructor that accepts HttpClient; the factory cannot inject the configured client
 03-Resilience.cs(17,14): warning HCR040: Do not stack duplicate resilience handlers
 03-Resilience.cs(24,14): warning HCR041: Standard resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
 03-Resilience.cs(32,14): warning HCR041: Standard resilience retries unsafe HTTP methods. Disable retries for POST/PUT/PATCH/DELETE/CONNECT unless the operation is idempotent.
