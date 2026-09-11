@@ -15,6 +15,7 @@ dotnet_diagnostic.HCR003.severity = warning
 dotnet_diagnostic.HCR004.severity = warning
 dotnet_diagnostic.HCR005.severity = warning
 dotnet_diagnostic.HCR020.severity = warning
+dotnet_diagnostic.HCR021.severity = warning
 dotnet_diagnostic.HCR022.severity = warning
 dotnet_diagnostic.HCR040.severity = warning
 dotnet_diagnostic.HCR041.severity = warning

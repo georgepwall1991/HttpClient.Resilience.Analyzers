@@ -5,6 +5,7 @@ dotnet_diagnostic.HCR003.severity = error
 dotnet_diagnostic.HCR004.severity = error
 dotnet_diagnostic.HCR005.severity = error
 dotnet_diagnostic.HCR020.severity = error
+dotnet_diagnostic.HCR021.severity = error
 dotnet_diagnostic.HCR022.severity = error
 dotnet_diagnostic.HCR040.severity = error
 dotnet_diagnostic.HCR041.severity = error

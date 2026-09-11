@@ -8,6 +8,7 @@ public static class DiagnosticIds
     public const string HCR004 = "HCR004";
     public const string HCR005 = "HCR005";
     public const string HCR020 = "HCR020";
+    public const string HCR021 = "HCR021";
     public const string HCR022 = "HCR022";
     public const string HCR040 = "HCR040";
     public const string HCR041 = "HCR041";
