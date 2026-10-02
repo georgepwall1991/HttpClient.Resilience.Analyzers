@@ -969,4 +969,137 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
         Assert.Empty(titles);
     }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenCreationConfiguresHandler()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory httpClientFactory)
+                {
+                    var handler = new HttpClientHandler { UseProxy = false };
+                    return new HttpClient(handler, disposeHandler: true);
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenCreationHasInitializer()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                public HttpClient Create(IHttpClientFactory httpClientFactory)
+                {
+                    return new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                }
+            }
+
+            public interface IHttpClientFactory
+            {
+                HttpClient CreateClient(string name = "");
+            }
+            """;
+
+        var titles = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+    [Fact]
+    public async Task ReportsDiagnostic_WhenControllerConstructorCreatesHttpClient()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class OrdersController
+            {
+                private readonly HttpClient _client;
+
+                public OrdersController()
+                {
+                    _client = new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenControllerGetAccessorCreatesHttpClient()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class OrdersController
+            {
+                public HttpClient Client
+                {
+                    get { return new HttpClient(); }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenControllerExpressionBodiedPropertyCreatesHttpClient()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class OrdersController
+            {
+                public HttpClient Client => new HttpClient();
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenControllerFieldInitializerCreatesHttpClient()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class OrdersController
+            {
+                private readonly HttpClient _client = new HttpClient();
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
 }

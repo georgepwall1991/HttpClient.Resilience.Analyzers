@@ -194,4 +194,131 @@ public sealed class HCR062_DefaultRequestHeadersMutationAnalyzerTests
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticIds.HCR062, diagnostic.Id);
     }
+    [Fact]
+    public async Task DoesNotReport_WhenHeadersAreSetInsideAddHttpClientConfigureDelegate()
+    {
+        var source = $$"""
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services.AddHttpClient("payments", client =>
+                        client.DefaultRequestHeaders.Add("X-Tenant", "northwind"));
+                }
+            }
+
+            {{CustomPipelineSources.FrameworkStubs}}
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHeadersAreSetInsideConfigureHttpClientDelegate()
+    {
+        var source = $$"""
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services
+                        .AddHttpClient("payments")
+                        .ConfigureHttpClient(client =>
+                            client.DefaultRequestHeaders.Add("X-Tenant", "northwind"));
+                }
+            }
+
+            {{CustomPipelineSources.FrameworkStubs}}
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHeadersAreSetInsideRegisteredTypedClientConstructor()
+    {
+        var source = $$"""
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+                public PaymentsClient(HttpClient client)
+                {
+                    client.DefaultRequestHeaders.Add("X-Tenant", "northwind");
+                }
+            }
+
+            {{CustomPipelineSources.FrameworkStubs}}
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenConfigureDelegateMutatesADifferentClient()
+    {
+        var source = $$"""
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                private static readonly HttpClient Shared = new HttpClient();
+
+                public static IHttpClientBuilder Configure(IServiceCollection services)
+                {
+                    return services.AddHttpClient("payments", client =>
+                        Shared.DefaultRequestHeaders.Add("X-Tenant", "northwind"));
+                }
+            }
+
+            {{CustomPipelineSources.FrameworkStubs}}
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR062, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenUnregisteredConstructorMutatesHeaders()
+    {
+        var source = $$"""
+            using System.Net.Http;
+
+            public sealed class PaymentsClient
+            {
+                public PaymentsClient(HttpClient client)
+                {
+                    client.DefaultRequestHeaders.Add("X-Tenant", "northwind");
+                }
+            }
+
+            {{CustomPipelineSources.FrameworkStubs}}
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR062, diagnostic.Id);
+    }
+
 }

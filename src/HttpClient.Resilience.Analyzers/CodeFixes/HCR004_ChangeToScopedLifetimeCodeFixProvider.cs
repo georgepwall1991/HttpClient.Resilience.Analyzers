@@ -44,7 +44,8 @@ public sealed class HCR004_ChangeToScopedLifetimeCodeFixProvider : CodeFixProvid
             var invocation = node.FirstAncestorOrSelf<InvocationExpressionSyntax>();
 
             if (invocation?.Expression is not MemberAccessExpressionSyntax memberAccess ||
-                !IsAddSingletonName(memberAccess.Name))
+                !IsAddSingletonName(memberAccess.Name) ||
+                !HasOnlyScopedCompatibleArguments(invocation))
             {
                 continue;
             }
@@ -66,6 +67,22 @@ public sealed class HCR004_ChangeToScopedLifetimeCodeFixProvider : CodeFixProvid
             IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "AddSingleton",
             _ => false
         };
+    }
+
+    private static bool HasOnlyScopedCompatibleArguments(InvocationExpressionSyntax invocation)
+    {
+        // AddScoped has no instance-taking overload: typeof(...) arguments and
+        // factory lambdas convert cleanly, but a pre-constructed instance
+        // (object creation, variable, method group) would not compile.
+        foreach (var argument in invocation.ArgumentList.Arguments)
+        {
+            if (argument.Expression is not (TypeOfExpressionSyntax or LambdaExpressionSyntax or AnonymousMethodExpressionSyntax))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static async Task<Document> ChangeToScopedAsync(

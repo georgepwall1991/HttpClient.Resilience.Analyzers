@@ -70,14 +70,14 @@ internal sealed class UnsafeHttpCallIndex
     internal sealed class Snapshot
     {
         public Snapshot(
-            IReadOnlyCollection<ClassDeclarationSyntax> typedClientClassesWithUnsafeCalls,
+            IReadOnlyCollection<TypeDeclarationSyntax> typedClientClassesWithUnsafeCalls,
             IReadOnlyCollection<string> namedClientsWithUnsafeCalls)
         {
             TypedClientClassesWithUnsafeCalls = typedClientClassesWithUnsafeCalls;
             NamedClientsWithUnsafeCalls = namedClientsWithUnsafeCalls;
         }
 
-        public IReadOnlyCollection<ClassDeclarationSyntax> TypedClientClassesWithUnsafeCalls { get; }
+        public IReadOnlyCollection<TypeDeclarationSyntax> TypedClientClassesWithUnsafeCalls { get; }
 
         public IReadOnlyCollection<string> NamedClientsWithUnsafeCalls { get; }
 
@@ -93,7 +93,7 @@ internal sealed class UnsafeHttpCallIndex
         }
 
         private static bool DeclaredTypeMatchesRegistration(
-            ClassDeclarationSyntax classDeclaration,
+            TypeDeclarationSyntax classDeclaration,
             TypedClientRegistration registration)
         {
             if (registration.ResolvedTypeName is not null)
@@ -121,7 +121,7 @@ internal sealed class UnsafeHttpCallIndex
             return registrationTypeName;
         }
 
-        private static string GetQualifiedClassName(ClassDeclarationSyntax classDeclaration)
+        private static string GetQualifiedClassName(TypeDeclarationSyntax classDeclaration)
         {
             var namespaceName = string.Join(
                 ".",
@@ -148,15 +148,37 @@ internal sealed class UnsafeHttpCallIndex
         private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _localFactories = new();
         private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _memberHttpClients = new();
         private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _memberFactories = new();
+        private readonly Dictionary<SyntaxTree, SemanticModel> _semanticModels = new();
+        private readonly Compilation _compilation;
         private readonly IReadOnlyList<SyntaxNode> _roots;
         private readonly System.Threading.CancellationToken _cancellationToken;
         private Dictionary<(string TypeName, string ConstantName), string>? _constantStrings;
 
-        public UnsafeCallScan(IReadOnlyList<SyntaxNode> roots, System.Threading.CancellationToken cancellationToken)
+        public UnsafeCallScan(
+            Compilation compilation,
+            IReadOnlyList<SyntaxNode> roots,
+            System.Threading.CancellationToken cancellationToken)
         {
+            _compilation = compilation;
             _roots = roots;
             _cancellationToken = cancellationToken;
         }
+
+        public System.Threading.CancellationToken CancellationToken => _cancellationToken;
+
+#pragma warning disable RS1030 // The index is syntax-first; semantic models are only touched for unresolved var locals.
+        public SemanticModel GetSemanticModel(SyntaxTree syntaxTree)
+        {
+            if (_semanticModels.TryGetValue(syntaxTree, out var cached))
+            {
+                return cached;
+            }
+
+            var semanticModel = _compilation.GetSemanticModel(syntaxTree);
+            _semanticModels[syntaxTree] = semanticModel;
+            return semanticModel;
+        }
+#pragma warning restore RS1030
 
         public string? TryGetConstantString(string constantName, string? typeName)
         {
@@ -252,9 +274,9 @@ internal sealed class UnsafeHttpCallIndex
         System.Threading.CancellationToken cancellationToken)
     {
         var roots = CompilationSyntaxIndex.GetRoots(compilation, cancellationToken);
-        var scan = new UnsafeCallScan(roots, cancellationToken);
+        var scan = new UnsafeCallScan(compilation, roots, cancellationToken);
 
-        var typedClientClassesWithUnsafeCalls = new HashSet<ClassDeclarationSyntax>();
+        var typedClientClassesWithUnsafeCalls = new HashSet<TypeDeclarationSyntax>();
         var namedClientsWithUnsafeCalls = new HashSet<string>(System.StringComparer.Ordinal);
 
         foreach (var root in roots)
@@ -276,13 +298,13 @@ internal sealed class UnsafeHttpCallIndex
         return new Snapshot(typedClientClassesWithUnsafeCalls, namedClientsWithUnsafeCalls);
     }
 
-    private static void AddEnclosingClasses(SyntaxNode node, HashSet<ClassDeclarationSyntax> classes)
+    private static void AddEnclosingClasses(SyntaxNode node, HashSet<TypeDeclarationSyntax> classes)
     {
         for (var ancestor = node.Parent; ancestor is not null; ancestor = ancestor.Parent)
         {
-            if (ancestor is ClassDeclarationSyntax classDeclaration)
+            if (ancestor is TypeDeclarationSyntax typeDeclaration)
             {
-                classes.Add(classDeclaration);
+                classes.Add(typeDeclaration);
             }
         }
     }
@@ -372,7 +394,7 @@ internal sealed class UnsafeHttpCallIndex
             .Any(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText &&
                 parameter.Type is not null &&
                 IsHttpClientTypeName(parameter.Type)) == true ||
-            identifier.FirstAncestorOrSelf<ClassDeclarationSyntax>()?
+            identifier.FirstAncestorOrSelf<TypeDeclarationSyntax>()?
                 .ParameterList?.Parameters
                 .Any(parameter => parameter.Identifier.ValueText == identifier.Identifier.ValueText &&
                     parameter.Type is not null &&
@@ -392,7 +414,19 @@ internal sealed class UnsafeHttpCallIndex
             .OfType<VariableDeclaratorSyntax>()
             .Any(variable => variable.Identifier.ValueText == name &&
                 variable.Parent is VariableDeclarationSyntax declaration &&
-                IsHttpClientTypeName(declaration.Type)));
+                (IsHttpClientTypeName(declaration.Type) ||
+                    LocalVariableResolvesToHttpClient(variable, scan))));
+    }
+
+    private static bool LocalVariableResolvesToHttpClient(
+        VariableDeclaratorSyntax variable,
+        UnsafeCallScan scan)
+    {
+        // var client = _client; — the declared type syntax is 'var', so only the
+        // semantic model can prove the local is an HttpClient.
+        var semanticModel = scan.GetSemanticModel(variable.SyntaxTree);
+        return semanticModel.GetDeclaredSymbol(variable, scan.CancellationToken) is ILocalSymbol local &&
+            KnownSymbols.HttpClientSymbols.IsHttpClient(local.Type);
     }
 
     private static bool FieldOrPropertyLooksLikeHttpClient(IdentifierNameSyntax identifier, UnsafeCallScan scan)

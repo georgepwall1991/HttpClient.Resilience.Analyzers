@@ -250,10 +250,18 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         return semanticModel.LookupSymbols(invocation.SpanStart)
             .Any(symbol => symbol switch
             {
-                ILocalSymbol local => IsCancellationToken(local.Type) || IsCancellationTokenSource(local.Type),
+                ILocalSymbol local => IsDeclaredBefore(local, invocation.SpanStart) &&
+                    (IsCancellationToken(local.Type) || IsCancellationTokenSource(local.Type)),
                 IParameterSymbol parameter => IsCancellationToken(parameter.Type) || IsCancellationTokenSource(parameter.Type),
                 _ => false
             });
+    }
+
+    private static bool IsDeclaredBefore(ILocalSymbol local, int position)
+    {
+        // LookupSymbols also reports locals that are in scope but declared later in
+        // the same block; referencing them is CS0841, so they are not usable tokens.
+        return local.DeclaringSyntaxReferences.Any(reference => reference.Span.End <= position);
     }
 
     private static bool EnclosingParameterListHasCancellationToken(

@@ -1,4 +1,4 @@
-// HCR060, HCR061, HCR062, HCR063, HCR064, HCR081 shapes.
+// HCR060, HCR065, HCR061, HCR062, HCR063, HCR064, HCR081 shapes.
 using System.IO;
 using System.Net.Http;
 using System.Threading;
@@ -62,5 +62,24 @@ public sealed class CorpusUndisposedStreamService
         response.EnsureSuccessStatusCode();
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         await stream.CopyToAsync(destination, cancellationToken);
+    }
+}
+
+public sealed class CorpusRetryHandler : DelegatingHandler
+{
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var response = await base.SendAsync(request, cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                return response;
+            }
+        }
+
+        return new HttpResponseMessage();
     }
 }
