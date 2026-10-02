@@ -51,6 +51,7 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
 
             var cancellationTokens = semanticModel.LookupSymbols(invocation.SpanStart)
                 .Where(symbol => symbol is ILocalSymbol or IParameterSymbol)
+                .Where(symbol => symbol is not ILocalSymbol local || IsDeclaredBefore(local, invocation.SpanStart))
                 .Where(symbol => IsCancellationToken(symbol switch
                 {
                     ILocalSymbol local => local.Type,
@@ -87,7 +88,7 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
                 var tokenDisplayName = IsCancellationTokenSource(symbolType)
                     ? cancellationTokenSymbol.Name + ".Token"
                     : cancellationTokenSymbol.Name;
-                ExpressionSyntax tokenExpression = CreateIdentifierName(cancellationTokenSymbol.Name);
+                ExpressionSyntax tokenExpression = CodeFixExpressionFactory.CreateIdentifierName(cancellationTokenSymbol.Name);
                 if (IsCancellationTokenSource(symbolType))
                 {
                     tokenExpression = SyntaxFactory.MemberAccessExpression(
@@ -97,7 +98,7 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
                 }
 
                 var tokenArgument = SyntaxFactory.Argument(tokenExpression)
-                    .WithNameColon(SyntaxFactory.NameColon(CreateIdentifierName(cancellationTokenParameterName)));
+                    .WithNameColon(SyntaxFactory.NameColon(CodeFixExpressionFactory.CreateIdentifierName(cancellationTokenParameterName)));
 
                 context.RegisterCodeFix(
                     CodeAction.Create(
@@ -112,6 +113,13 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
                     diagnostic);
             }
         }
+    }
+
+    private static bool IsDeclaredBefore(ILocalSymbol local, int position)
+    {
+        // LookupSymbols also reports locals that are in scope but declared later in
+        // the same block; referencing them is CS0841, so they are not usable tokens.
+        return local.DeclaringSyntaxReferences.Any(reference => reference.Span.End <= position);
     }
 
     private static string GetCancellationTokenParameterName(
@@ -194,11 +202,6 @@ public sealed class HCR064_PassCancellationTokenCodeFixProvider : CodeFixProvide
         return document.WithSyntaxRoot(root.ReplaceNode(invocation, updatedInvocation));
     }
 
-    private static IdentifierNameSyntax CreateIdentifierName(string name)
-    {
-        var text = SyntaxFacts.GetKeywordKind(name) == SyntaxKind.None ? name : "@" + name;
-        return SyntaxFactory.IdentifierName(SyntaxFactory.Identifier(text));
-    }
 
     private static bool IsCancellationToken(ITypeSymbol? type)
     {

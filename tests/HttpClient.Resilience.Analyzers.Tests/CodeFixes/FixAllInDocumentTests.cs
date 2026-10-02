@@ -253,6 +253,174 @@ public sealed class FixAllInDocumentTests
     }
 
     [Fact]
+    public async Task HCR005_EmbeddedStatementOffersNoFix()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services, bool flag)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    if (flag)
+                        services.AddTransient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddTransient<TService>(this IServiceCollection services) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Single(diagnostics);
+
+        var titles = await CodeFixVerifier<HCR005_DuplicateTypedClientRegistrationAnalyzer, HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+
+    [Fact]
+    public async Task HCR040_StatementShapedChainCollapsesToFirstHandler()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<GitHubClient>().AddStandardResilienceHandler().AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services) => null!;
+
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Single(diagnostics);
+
+        var fixedSource = await CodeFixVerifier<HCR040_StackedResilienceHandlersAnalyzer, HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("services.AddHttpClient<GitHubClient>().AddStandardResilienceHandler();", fixedSource, System.StringComparison.Ordinal);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(fixedSource, "AddStandardResilienceHandler\\(\\)"));
+    }
+
+    [Fact]
+    public async Task HCR040_StandaloneDuplicateStatementIsRemoved()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    IHttpClientBuilder builder = services.AddHttpClient<GitHubClient>();
+                    builder.AddStandardResilienceHandler();
+                    builder.AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services) => null!;
+
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Single(diagnostics);
+
+        var fixedSource = await CodeFixVerifier<HCR040_StackedResilienceHandlersAnalyzer, HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("IHttpClientBuilder builder = services.AddHttpClient<GitHubClient>();", fixedSource, System.StringComparison.Ordinal);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(fixedSource, "AddStandardResilienceHandler\\(\\)"));
+    }
+
+    [Fact]
+    public async Task HCR040_EmbeddedStatementChainCollapses()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services, bool flag)
+                {
+                    if (flag)
+                        services.AddHttpClient<GitHubClient>().AddStandardResilienceHandler().AddStandardResilienceHandler();
+                }
+            }
+
+            public sealed class GitHubClient
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class HttpClientBuilderExtensions
+            {
+                public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services) => null!;
+
+                public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR040_StackedResilienceHandlersAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Single(diagnostics);
+
+        var fixedSource = await CodeFixVerifier<HCR040_StackedResilienceHandlersAnalyzer, HCR040_RemoveDuplicateStandardResilienceHandlerCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("services.AddHttpClient<GitHubClient>().AddStandardResilienceHandler();", fixedSource, System.StringComparison.Ordinal);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(fixedSource, "AddStandardResilienceHandler\\(\\)"));
+    }
+
+    [Fact]
     public async Task HCR041_FixAllConfiguresEveryStandardResilienceHandler()
     {
         const string source = """

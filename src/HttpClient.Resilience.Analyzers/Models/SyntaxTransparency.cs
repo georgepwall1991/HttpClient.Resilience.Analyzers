@@ -27,18 +27,30 @@ internal static class SyntaxTransparency
     }
 
     public static bool LocalIsReassignedBetween(
-        BlockSyntax containingBlock,
+        SyntaxNode containingNode,
         string localName,
         int start,
         int end)
     {
-        return containingBlock
+        return containingNode
             .DescendantNodes()
-            .OfType<AssignmentExpressionSyntax>()
-            .Any(assignment => assignment.SpanStart > start &&
-                assignment.SpanStart < end &&
-                assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
-                assignment.Left is IdentifierNameSyntax identifier &&
-                identifier.Identifier.ValueText == localName);
+            .Any(node => node switch
+            {
+                AssignmentExpressionSyntax assignment =>
+                    assignment.SpanStart > start &&
+                    assignment.SpanStart < end &&
+                    assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                    assignment.Left is IdentifierNameSyntax assignedIdentifier &&
+                    assignedIdentifier.Identifier.ValueText == localName,
+                // ref/out arguments reassign the variable just like an assignment.
+                ArgumentSyntax argument =>
+                    argument.SpanStart > start &&
+                    argument.SpanStart < end &&
+                    (argument.RefKindKeyword.IsKind(SyntaxKind.RefKeyword) ||
+                        argument.RefKindKeyword.IsKind(SyntaxKind.OutKeyword)) &&
+                    argument.Expression is IdentifierNameSyntax argumentIdentifier &&
+                    argumentIdentifier.Identifier.ValueText == localName,
+                _ => false
+            });
     }
 }

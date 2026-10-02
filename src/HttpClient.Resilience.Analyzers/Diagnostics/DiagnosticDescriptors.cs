@@ -36,10 +36,28 @@ public static class DiagnosticDescriptors
         "Do not separately register a typed client already registered by AddHttpClient<T>()",
         DiagnosticCategories.TypedClients);
 
+    public static readonly DiagnosticDescriptor HCR006 = Create(
+        DiagnosticIds.HCR006,
+        "HttpClient.Timeout must be a positive TimeSpan",
+        "HttpClient.Timeout must be a positive TimeSpan or Timeout.InfiniteTimeSpan",
+        DiagnosticCategories.Lifetime);
+
     public static readonly DiagnosticDescriptor HCR020 = Create(
         DiagnosticIds.HCR020,
         "DelegatingHandler should not capture scoped request data",
         "DelegatingHandler should not capture scoped request data",
+        DiagnosticCategories.Handlers);
+
+    public static readonly DiagnosticDescriptor HCR021 = Create(
+        DiagnosticIds.HCR021,
+        "DelegatingHandler.SendAsync should forward the cancellation token",
+        "DelegatingHandler.SendAsync should forward the cancellation token to base.SendAsync",
+        DiagnosticCategories.Handlers);
+
+    public static readonly DiagnosticDescriptor HCR022 = Create(
+        DiagnosticIds.HCR022,
+        "Do not disable server certificate validation",
+        "Do not disable server certificate validation",
         DiagnosticCategories.Handlers);
 
     public static readonly DiagnosticDescriptor HCR040 = Create(
@@ -96,6 +114,13 @@ public static class DiagnosticDescriptors
         "Use cancellation-aware HTTP APIs when a token is available",
         DiagnosticCategories.ResponseLifetime);
 
+    public static readonly DiagnosticDescriptor HCR065 = Create(
+        DiagnosticIds.HCR065,
+        "Do not send the same HttpRequestMessage more than once",
+        "Do not send the same HttpRequestMessage more than once",
+        DiagnosticCategories.ResponseLifetime);
+
+
     public static readonly DiagnosticDescriptor HCR080 = Create(
         DiagnosticIds.HCR080,
         "High-concurrency HTTP fan-out should use bounded concurrency or connection limits",
@@ -149,4 +174,16 @@ public static class DiagnosticDescriptors
             isEnabledByDefault: true,
             helpLinkUri: $"{DocsSiteUrl}rules/{id}/");
     }
+
+    public static readonly DiagnosticDescriptor HCR087 = Create(
+        DiagnosticIds.HCR087,
+        "BaseAddress should end with a trailing slash",
+        "BaseAddress '{0}' has a path that does not end with '/'; relative URIs resolve against the parent segment and drop the last path component",
+        DiagnosticCategories.Lifetime);
+
+    public static readonly DiagnosticDescriptor HCR088 = Create(
+        DiagnosticIds.HCR088,
+        "Typed client has no HttpClient-accepting constructor",
+        "Typed client '{0}' has no constructor that accepts HttpClient; the factory cannot inject the configured client",
+        DiagnosticCategories.TypedClients);
 }

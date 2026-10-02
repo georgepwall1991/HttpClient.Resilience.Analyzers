@@ -32,15 +32,20 @@ Each rule page includes:
 |---|---|---:|---|
 | [`HCR004`](HCR004.md) | Do not inject typed `HttpClient` clients into singleton services | Warning | Yes |
 | [`HCR005`](HCR005.md) | Do not separately register a typed client already registered by `AddHttpClient<T>()` | Warning | Yes |
+| [`HCR006`](HCR006.md) | `HttpClient.Timeout` must be a positive `TimeSpan` | Warning | Fix |
 | [`HCR083`](HCR083.md) | Configure `BaseAddress` for typed clients that use relative URLs | Warning | Guide |
 | [`HCR084`](HCR084.md) | Avoid duplicated string literals for named `HttpClient` names | Warning | Guide |
 | [`HCR085`](HCR085.md) | Multiple typed clients on one interface should use explicit names | Warning | Partial |
+| [`HCR087`](HCR087.md) | `BaseAddress` with a path must end with `/` or relative URIs drop the last segment | Warning | No fix |
+| [`HCR088`](HCR088.md) | Typed client registered via `AddHttpClient<T>` has no `HttpClient` constructor parameter | Warning | No fix |
 
 ### Handlers
 
 | Rule | Title | Default profile | Fix support |
 |---|---|---:|---|
 | [`HCR020`](HCR020.md) | `DelegatingHandler` should not capture scoped request data | Warning | Guide |
+| [`HCR021`](HCR021.md) | `DelegatingHandler.SendAsync` should forward the cancellation token | Warning | Guide |
+| [`HCR022`](HCR022.md) | Disabled server certificate validation | Warning | Fix |
 
 ### Resilience
 
@@ -61,6 +66,7 @@ Each rule page includes:
 | [`HCR062`](HCR062.md) | Prefer per-request headers over mutating `DefaultRequestHeaders` | Warning | Guide |
 | [`HCR063`](HCR063.md) | Avoid sync-over-async around outbound HTTP | Warning | Partial |
 | [`HCR064`](HCR064.md) | Use cancellation-aware HTTP APIs when a token is available | Warning | Yes |
+| [`HCR065`](HCR065.md) | Do not send the same `HttpRequestMessage` more than once | Warning | Guide |
 | [`HCR081`](HCR081.md) | Dispose streams returned from HTTP content | Warning | Partial |
 
 ### Concurrency

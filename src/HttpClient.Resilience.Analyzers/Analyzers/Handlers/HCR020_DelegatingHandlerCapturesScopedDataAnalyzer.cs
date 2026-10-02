@@ -54,7 +54,7 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
 
     private static void AnalyzeClass(
         SyntaxNodeAnalysisContext context,
-        ISet<string> scopedTypes,
+        ScopedTypeNames scopedTypes,
         ISet<string> handlerTypes)
     {
         var classDeclaration = (ClassDeclarationSyntax)context.Node;
@@ -228,21 +228,126 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
             : namespaceName + "." + classDeclaration.Identifier.ValueText;
     }
 
-    private static ISet<string> GetKnownScopedTypes(
+    private sealed class ScopedTypeNames
+    {
+        // Verbatim registration names plus resolved fully-qualified names; consulted
+        // only when the consumer's type resolves semantically.
+        public readonly ISet<string> Resolved = new HashSet<string>(System.StringComparer.Ordinal);
+
+        // Raw and simple registration names; consulted only for unresolved syntax.
+        public readonly ISet<string> Comparable = new HashSet<string>(System.StringComparer.Ordinal);
+    }
+
+    private static ScopedTypeNames GetKnownScopedTypes(
         Compilation compilation,
         System.Threading.CancellationToken cancellationToken)
     {
-        return new HashSet<string>(
-            ServiceRegistrationCollector.CollectFrameworkRegistrations(compilation, cancellationToken)
-                .Where(registration => registration.Kind == ServiceRegistrationKind.Scoped)
-                .SelectMany(registration => new[]
+        var scopedTypes = new ScopedTypeNames();
+
+        foreach (var registration in ServiceRegistrationCollector
+            .CollectFrameworkRegistrations(compilation, cancellationToken)
+            .Where(registration => registration.Kind == ServiceRegistrationKind.Scoped))
+        {
+            foreach (var typeName in new[]
+            {
+                registration.ServiceTypeName,
+                registration.ImplementationTypeName
+            })
+            {
+                if (typeName is null)
                 {
-                    registration.ServiceTypeName,
-                    registration.ImplementationTypeName
-                })
-                .Where(typeName => typeName is not null)
-                .SelectMany(typeName => TypeNameUtilities.GetComparableNames(typeName!)),
-            System.StringComparer.Ordinal);
+                    continue;
+                }
+
+                scopedTypes.Resolved.Add(typeName);
+                foreach (var comparableName in TypeNameUtilities.GetComparableNames(typeName))
+                {
+                    scopedTypes.Comparable.Add(comparableName);
+                }
+            }
+
+            // Raw syntax names only match consumers that spell the type the same way;
+            // resolve the registration's type syntax so namespaced scoped services are
+            // recognized under their fully-qualified name.
+            var registrationModel = GetSemanticModel(compilation, registration.Invocation.SyntaxTree);
+            foreach (var typeSyntax in GetRegistrationTypeSyntaxes(registration.Invocation))
+            {
+                var resolvedType = registrationModel.GetTypeInfo(typeSyntax, cancellationToken).Type;
+                if (resolvedType is null || resolvedType is IErrorTypeSymbol)
+                {
+                    continue;
+                }
+
+                scopedTypes.Resolved.Add(NormalizeTypeName(
+                    resolvedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+            }
+        }
+
+        return scopedTypes;
+    }
+
+    private static IEnumerable<TypeSyntax> GetRegistrationTypeSyntaxes(InvocationExpressionSyntax invocation)
+    {
+        if (invocation.Expression is MemberAccessExpressionSyntax
+            {
+                Name: GenericNameSyntax genericName
+            })
+        {
+            foreach (var typeArgument in genericName.TypeArgumentList.Arguments)
+            {
+                yield return typeArgument;
+            }
+        }
+
+        foreach (var argument in invocation.ArgumentList.Arguments)
+        {
+            foreach (var typeSyntax in GetArgumentTypeSyntaxes(argument.Expression))
+            {
+                yield return typeSyntax;
+            }
+        }
+    }
+
+    private static IEnumerable<TypeSyntax> GetArgumentTypeSyntaxes(ExpressionSyntax expression)
+    {
+        switch (expression)
+        {
+            case TypeOfExpressionSyntax typeOfExpression:
+                yield return typeOfExpression.Type;
+                yield break;
+            case ObjectCreationExpressionSyntax objectCreation:
+                yield return objectCreation.Type;
+                yield break;
+            case LambdaExpressionSyntax { Body: ExpressionSyntax body }:
+                foreach (var typeSyntax in GetArgumentTypeSyntaxes(body))
+                {
+                    yield return typeSyntax;
+                }
+
+                yield break;
+            case LambdaExpressionSyntax { Body: BlockSyntax block }:
+                foreach (var returnExpression in block.Statements
+                    .OfType<ReturnStatementSyntax>()
+                    .Select(returnStatement => returnStatement.Expression)
+                    .OfType<ExpressionSyntax>())
+                {
+                    foreach (var typeSyntax in GetArgumentTypeSyntaxes(returnExpression))
+                    {
+                        yield return typeSyntax;
+                    }
+                }
+
+                yield break;
+            case ParenthesizedExpressionSyntax parenthesized:
+                foreach (var typeSyntax in GetArgumentTypeSyntaxes(parenthesized.Expression))
+                {
+                    yield return typeSyntax;
+                }
+
+                yield break;
+            default:
+                yield break;
+        }
     }
 
 #pragma warning disable RS1030 // HCR020 performs compilation-wide scoped-service matching and needs cross-tree semantic type checks.
@@ -275,7 +380,7 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
 
     private static bool IsRequestScopedType(
         TypeSyntax type,
-        ISet<string> scopedTypes,
+        ScopedTypeNames scopedTypes,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
@@ -296,7 +401,7 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
         {
             var qualifiedTypeName = NormalizeTypeName(type.ToString());
             return QualifiedRequestScopedTypeNames.Contains(qualifiedTypeName, System.StringComparer.Ordinal) ||
-                scopedTypes.Contains(qualifiedTypeName);
+                scopedTypes.Comparable.Contains(qualifiedTypeName);
         }
 
         var simpleTypeName = GetSimpleTypeName(type);
@@ -306,14 +411,14 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
         }
 
         return TypeNameUtilities.GetComparableNames(simpleTypeName)
-            .Any(scopedTypes.Contains);
+            .Any(scopedTypes.Comparable.Contains);
     }
 
-    private static bool IsRequestScopedType(ITypeSymbol type, ISet<string> scopedTypes)
+    private static bool IsRequestScopedType(ITypeSymbol type, ScopedTypeNames scopedTypes)
     {
         var qualifiedTypeName = NormalizeTypeName(type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
         if (QualifiedRequestScopedTypeNames.Contains(qualifiedTypeName, System.StringComparer.Ordinal) ||
-            scopedTypes.Contains(qualifiedTypeName))
+            scopedTypes.Resolved.Contains(qualifiedTypeName))
         {
             return true;
         }
@@ -324,8 +429,7 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
         }
 
         return RequestScopedTypeNames.Contains(type.Name, System.StringComparer.Ordinal) ||
-            TypeNameUtilities.GetComparableNames(type.Name)
-            .Any(scopedTypes.Contains);
+            scopedTypes.Resolved.Contains(type.Name);
     }
 
     private static bool TryGetRequestScopedWrapperArgument(TypeSyntax type, out TypeSyntax wrappedType)
