@@ -144,6 +144,87 @@ public sealed class HCR004_ChangeToScopedLifetimeCodeFixProviderTests
         Assert.Contains("services.AddScoped<PaymentReport>();", fixedSource, System.StringComparison.Ordinal);
     }
 
+
+    [Fact]
+    public async Task CodeFix_IsNotOffered_WhenTypeofSingletonCarriesInstance()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton(typeof(PaymentJob), new PaymentJob(null!));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentJob(PaymentsClient paymentsClient)
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton(this IServiceCollection services, System.Type serviceType, object instance) => services;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>.GetDiagnosticsAsync(source);
+        Assert.Single(diagnostics);
+
+        var titles = await CodeFixVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer, HCR004_ChangeToScopedLifetimeCodeFixProvider>
+            .GetCodeFixTitlesAsync(source);
+
+        Assert.Empty(titles);
+    }
+
+    [Fact]
+    public async Task CodeFix_ChangesFactoryLambdaOverloadToScoped()
+    {
+        const string source = """
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHttpClient<PaymentsClient>();
+                    services.AddSingleton(typeof(PaymentJob), provider => new PaymentJob(null!));
+                }
+            }
+
+            public sealed class PaymentsClient
+            {
+            }
+
+            public sealed class PaymentJob(PaymentsClient paymentsClient)
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHttpClient<TClient>(this IServiceCollection services) => services;
+                public static IServiceCollection AddSingleton(this IServiceCollection services, System.Type serviceType, System.Func<object, object> factory) => services;
+                public static IServiceCollection AddScoped(this IServiceCollection services, System.Type serviceType, System.Func<object, object> factory) => services;
+            }
+            """;
+
+        var fixedSource = await CodeFixVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer, HCR004_ChangeToScopedLifetimeCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("services.AddScoped(typeof(PaymentJob), provider => new PaymentJob(null!));", fixedSource, System.StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task CodeFix_TitleMentionsScopedLifetime()
     {

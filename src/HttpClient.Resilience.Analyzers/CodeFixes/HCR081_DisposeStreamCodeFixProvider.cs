@@ -40,14 +40,23 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
             if (declaration is not null &&
                 declaration.UsingKeyword == default &&
                 declaration.AwaitKeyword == default &&
-                declaration.Declaration.Variables.Count == 1)
+                declaration.Declaration.Variables.Count == 1 &&
+                !TopLevelUsingDeclarationMerge.IsReassignedAfter(
+                    declaration,
+                    declaration.Declaration.Variables[0].Identifier.ValueText,
+                    declaration.Span.End))
             {
-                context.RegisterCodeFix(
-                    CodeAction.Create(
-                        "Dispose stream with using declaration",
-                        cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
-                        nameof(HCR081_DisposeStreamCodeFixProvider)),
-                    diagnostic);
+                var variableName = declaration.Declaration.Variables[0].Identifier.ValueText;
+                if (!UsingDeclarationEscapeGate.VariableEscapesScope(node, variableName))
+                {
+                    context.RegisterCodeFix(
+                        CodeAction.Create(
+                            "Dispose stream with using declaration",
+                            cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
+                            nameof(HCR081_DisposeStreamCodeFixProvider)),
+                        diagnostic);
+                }
+
                 continue;
             }
 
@@ -58,18 +67,23 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
                     out var adjacentDeclaration,
                     out var assignmentStatement))
             {
-                context.RegisterCodeFix(
-                    CodeAction.Create(
-                        "Dispose stream with using declaration",
-                        cancellationToken => MergeDeclarationAndAssignmentAsync(
-                            context.Document,
-                            block,
-                            adjacentDeclaration,
-                            assignment!,
-                            assignmentStatement,
-                            cancellationToken),
-                        nameof(HCR081_DisposeStreamCodeFixProvider)),
-                    diagnostic);
+                var mergedName = adjacentDeclaration.Declaration.Variables[0].Identifier.ValueText;
+                if (!UsingDeclarationEscapeGate.VariableEscapesScope(node, mergedName))
+                {
+                    context.RegisterCodeFix(
+                        CodeAction.Create(
+                            "Dispose stream with using declaration",
+                            cancellationToken => MergeDeclarationAndAssignmentAsync(
+                                context.Document,
+                                block,
+                                adjacentDeclaration,
+                                assignment!,
+                                assignmentStatement,
+                                cancellationToken),
+                            nameof(HCR081_DisposeStreamCodeFixProvider)),
+                        diagnostic);
+                }
+
                 continue;
             }
 
@@ -80,19 +94,23 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
                     out var topLevelDeclaration,
                     out var topLevelAssignmentStatement))
             {
-                context.RegisterCodeFix(
-                    CodeAction.Create(
-                        "Dispose stream with using declaration",
-                        cancellationToken => TopLevelUsingDeclarationMerge.MergeDeclarationAndAssignmentAsync(
-                            context.Document,
-                            compilationUnit,
-                            declarationStatement,
-                            topLevelDeclaration,
-                            assignment!,
-                            topLevelAssignmentStatement,
-                            cancellationToken),
-                        nameof(HCR081_DisposeStreamCodeFixProvider)),
-                    diagnostic);
+                var topLevelName = topLevelDeclaration.Declaration.Variables[0].Identifier.ValueText;
+                if (!UsingDeclarationEscapeGate.VariableEscapesScope(node, topLevelName))
+                {
+                    context.RegisterCodeFix(
+                        CodeAction.Create(
+                            "Dispose stream with using declaration",
+                            cancellationToken => TopLevelUsingDeclarationMerge.MergeDeclarationAndAssignmentAsync(
+                                context.Document,
+                                compilationUnit,
+                                declarationStatement,
+                                topLevelDeclaration,
+                                assignment!,
+                                topLevelAssignmentStatement,
+                                cancellationToken),
+                            nameof(HCR081_DisposeStreamCodeFixProvider)),
+                        diagnostic);
+                }
             }
         }
     }
@@ -131,7 +149,11 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
         }
 
         if (TopLevelUsingDeclarationMerge.ContainsDirectiveTrivia(previousDeclaration) ||
-            TopLevelUsingDeclarationMerge.ContainsDirectiveTrivia(statement))
+            TopLevelUsingDeclarationMerge.ContainsDirectiveTrivia(statement) ||
+            TopLevelUsingDeclarationMerge.IsReassignedAfter(
+                previousDeclaration,
+                variables[0].Identifier.ValueText,
+                statement.Span.End))
         {
             return false;
         }
@@ -141,6 +163,7 @@ public sealed class HCR081_DisposeStreamCodeFixProvider : CodeFixProvider
         assignmentStatement = statement;
         return true;
     }
+
     private static async Task<Document> AddUsingDeclarationAsync(
         Document document,
         LocalDeclarationStatementSyntax declaration,

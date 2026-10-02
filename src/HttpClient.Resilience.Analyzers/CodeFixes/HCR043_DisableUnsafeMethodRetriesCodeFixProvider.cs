@@ -54,10 +54,16 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
             }
 
             // The statement-based insertion requires a block; expression-bodied lambdas are
-            // handled by converting the whole lambda body.
+            // handled by converting the whole lambda body — but only when the lambda
+            // converts to a real delegate (expression trees cannot hold block bodies).
             var supportsStatementInsertion =
                 invocation.FirstAncestorOrSelf<StatementSyntax>()?.Parent is BlockSyntax ||
-                invocation.FirstAncestorOrSelf<LambdaExpressionSyntax>()?.Body is ExpressionSyntax;
+                invocation.FirstAncestorOrSelf<LambdaExpressionSyntax>() is { Body: ExpressionSyntax } lambda &&
+                semanticModel.GetTypeInfo(lambda, context.CancellationToken).ConvertedType is INamedTypeSymbol
+                {
+                    DelegateInvokeMethod: not null
+                };
+
             if (!supportsStatementInsertion)
             {
                 continue;
@@ -129,13 +135,22 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
             : optionsIdentifier!.Identifier.ValueText;
         var declaration = hasInlineCreation ? CreateOptionsDeclaration(optionsName, objectCreation) : null;
         var disableCall = CreateDisableCall(optionsName);
-        var identifier = SyntaxFactory.IdentifierName(optionsName);
+        var identifier = CodeFixExpressionFactory.CreateIdentifierName(optionsName);
 
         var lambda = invocation.FirstAncestorOrSelf<LambdaExpressionSyntax>();
         if (hasInlineCreation && lambda?.Body is ExpressionSyntax expressionBody)
         {
             var rewrittenExpression = expressionBody.ReplaceNode(objectCreation, identifier);
-            var block = SyntaxFactory.Block(declaration!, disableCall, SyntaxFactory.ExpressionStatement(rewrittenExpression));
+            var returnsValue = semanticModel.GetTypeInfo(lambda, cancellationToken).ConvertedType is INamedTypeSymbol
+            {
+                DelegateInvokeMethod.ReturnsVoid: false
+            };
+            var block = SyntaxFactory.Block(
+                declaration!,
+                disableCall,
+                returnsValue
+                    ? (StatementSyntax)SyntaxFactory.ReturnStatement(rewrittenExpression)
+                    : SyntaxFactory.ExpressionStatement(rewrittenExpression));
             var rewrittenRoot = EnsureResilienceImport(
                 root.ReplaceNode(
                     lambda,
@@ -190,24 +205,33 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
         }
 
         var alreadyImported = compilationUnit.Usings.Any(usingDirective =>
-            string.Equals(
+            usingDirective.Alias is null &&
+            usingDirective.StaticKeyword.IsKind(SyntaxKind.None) &&
+            (string.Equals(
                 usingDirective.Name?.ToFullString().Trim(),
                 ResilienceNamespace,
                 System.StringComparison.Ordinal) ||
             string.Equals(
                 usingDirective.Name?.ToFullString().Trim(),
                 "global::" + ResilienceNamespace,
-                System.StringComparison.Ordinal));
+                System.StringComparison.Ordinal)));
         if (alreadyImported)
         {
             return root;
         }
 
-        return compilationUnit.WithUsings(
-            compilationUnit.Usings.Insert(
-                0,
-                SyntaxFactory.UsingDirective(SyntaxFactory.ParseName(ResilienceNamespace))
-                    .WithAdditionalAnnotations(Formatter.Annotation)));
+        // Append after existing usings so file-header comments and global usings keep
+        // their positions; when there are no usings, move the unit's leading trivia
+        // (the file header) onto the new directive.
+        var newUsing = SyntaxFactory.UsingDirective(SyntaxFactory.ParseName(ResilienceNamespace))
+            .WithAdditionalAnnotations(Formatter.Annotation);
+        if (compilationUnit.Usings.Count == 0)
+        {
+            newUsing = newUsing.WithLeadingTrivia(compilationUnit.GetLeadingTrivia());
+            compilationUnit = compilationUnit.WithLeadingTrivia();
+        }
+
+        return compilationUnit.WithUsings(compilationUnit.Usings.Add(newUsing));
     }
     private static bool TryGetHttpRetryStrategyOptionsCreation(
         InvocationExpressionSyntax invocation,
@@ -424,7 +448,7 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
                 SyntaxFactory.VariableDeclaration(SyntaxFactory.IdentifierName("var"))
                     .WithVariables(
                         SyntaxFactory.SingletonSeparatedList(
-                            SyntaxFactory.VariableDeclarator(SyntaxFactory.Identifier(optionsName))
+                            SyntaxFactory.VariableDeclarator(CodeFixExpressionFactory.CreateIdentifier(optionsName))
                                 .WithInitializer(SyntaxFactory.EqualsValueClause(objectCreation.WithoutTrivia())))))
             .WithAdditionalAnnotations(Formatter.Annotation);
     }
@@ -435,7 +459,7 @@ public sealed class HCR043_DisableUnsafeMethodRetriesCodeFixProvider : CodeFixPr
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName(optionsName),
+                        CodeFixExpressionFactory.CreateIdentifierName(optionsName),
                         SyntaxFactory.IdentifierName("DisableForUnsafeHttpMethods"))))
             .WithAdditionalAnnotations(Formatter.Annotation);
     }

@@ -76,7 +76,10 @@ nav:
       - HCR003: rules/HCR003.md
       - HCR004: rules/HCR004.md
       - HCR005: rules/HCR005.md
+      - HCR006: rules/HCR006.md
       - HCR020: rules/HCR020.md
+      - HCR021: rules/HCR021.md
+      - HCR022: rules/HCR022.md
       - HCR040: rules/HCR040.md
       - HCR041: rules/HCR041.md
       - HCR042: rules/HCR042.md
@@ -86,12 +89,15 @@ nav:
       - HCR062: rules/HCR062.md
       - HCR063: rules/HCR063.md
       - HCR064: rules/HCR064.md
+      - HCR065: rules/HCR065.md
       - HCR080: rules/HCR080.md
       - HCR081: rules/HCR081.md
       - HCR082: rules/HCR082.md
       - HCR083: rules/HCR083.md
       - HCR084: rules/HCR084.md
       - HCR085: rules/HCR085.md
+      - HCR087: rules/HCR087.md
+      - HCR088: rules/HCR088.md
   - Configuration: configuration.md
   - Adoption: adoption.md
   - FAQ: faq.md

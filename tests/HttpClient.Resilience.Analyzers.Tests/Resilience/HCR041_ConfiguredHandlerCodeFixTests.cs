@@ -129,6 +129,23 @@ public sealed class HCR041_ConfiguredHandlerCodeFixTests
     }
 
     [Fact]
+    public async Task CodeFix_EscapesKeywordNamedLambdaParameter()
+    {
+        var source = Framework
+            .Replace("options =>", "@event =>", System.StringComparison.Ordinal)
+            .Replace("options.Retry.MaxRetryAttempts", "@event.Retry.MaxRetryAttempts", System.StringComparison.Ordinal);
+
+        Assert.Contains("@event =>", source, System.StringComparison.Ordinal);
+
+        var fixedSource = await CodeFixVerifier<HCR041_UnsafeMethodRetryAnalyzer, HCR041_DisableUnsafeMethodRetriesCodeFixProvider>
+            .ApplyFirstCodeFixAsync(source);
+
+        Assert.Contains("@event.Retry.DisableForUnsafeHttpMethods();", fixedSource, System.StringComparison.Ordinal);
+        Assert.Contains("@event.Retry.MaxRetryAttempts = 5;", fixedSource, System.StringComparison.Ordinal);
+        Assert.Empty(await AnalyzerVerifier<HCR041_UnsafeMethodRetryAnalyzer>.GetDiagnosticsAsync(fixedSource));
+    }
+
+    [Fact]
     public async Task CodeFix_FixAllHandlesMixedParameterlessAndConfiguredHandlers()
     {
         const string source = """

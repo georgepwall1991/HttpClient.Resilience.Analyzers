@@ -32,7 +32,10 @@ $expectedDiagnosticIds = @(
     'HCR003',
     'HCR004',
     'HCR005',
+    'HCR006',
     'HCR020',
+    'HCR021',
+    'HCR022',
     'HCR040',
     'HCR041',
     'HCR042',
@@ -42,12 +45,15 @@ $expectedDiagnosticIds = @(
     'HCR062',
     'HCR063',
     'HCR064',
+    'HCR065',
     'HCR080',
     'HCR081',
     'HCR082',
     'HCR083',
     'HCR084',
-    'HCR085'
+    'HCR085',
+    'HCR087',
+    'HCR088'
 )
 
 $unexpectedIds = @($diagnosticIds | Where-Object { $expectedDiagnosticIds -notcontains $_ })
@@ -78,9 +84,17 @@ foreach ($diagnosticId in $diagnosticIds) {
         "\b$diagnosticId\b" `
         "DiagnosticDescriptors.cs does not mention $diagnosticId."
 
-    Assert-Contains 'src\HttpClient.Resilience.Analyzers\AnalyzerReleases.Unshipped.md' `
-        "(?m)^$diagnosticId\s+\|" `
-        "AnalyzerReleases.Unshipped.md does not list $diagnosticId."
+    $releaseNotesText = (Get-Text 'src\HttpClient.Resilience.Analyzers\AnalyzerReleases.Unshipped.md') +
+        (Get-Text 'src\HttpClient.Resilience.Analyzers\AnalyzerReleases.Shipped.md')
+    if ($releaseNotesText -notmatch "(?m)^$diagnosticId\s+\|") {
+        throw "AnalyzerReleases.Unshipped.md/Shipped.md do not list $diagnosticId."
+    }
+
+    $unshippedText = Get-Text 'src\HttpClient.Resilience.Analyzers\AnalyzerReleases.Unshipped.md'
+    $shippedText = Get-Text 'src\HttpClient.Resilience.Analyzers\AnalyzerReleases.Shipped.md'
+    if ($unshippedText -match "(?m)^$diagnosticId\s+\|" -and $shippedText -match "(?m)^$diagnosticId\s+\|") {
+        throw "$diagnosticId is listed in both AnalyzerReleases.Unshipped.md and AnalyzerReleases.Shipped.md."
+    }
 
     Assert-Contains 'docs\implementation-status.md' `
         "\|\s*\x60$diagnosticId\x60\s*\|" `

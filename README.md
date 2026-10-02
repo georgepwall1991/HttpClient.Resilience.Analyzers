@@ -52,7 +52,7 @@ dotnet add package HttpClient.Resilience.Analyzers
 Or add an explicit package reference:
 
 ```xml
-<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.192" PrivateAssets="all" />
+<PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.211" PrivateAssets="all" />
 ```
 
 `PrivateAssets="all"` prevents the analyzer from flowing to projects that consume your project.
@@ -62,7 +62,7 @@ For a whole solution, add the package once in `Directory.Build.props`:
 ```xml
 <Project>
   <ItemGroup>
-    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.192">
+    <PackageReference Include="HttpClient.Resilience.Analyzers" Version="0.1.211">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
@@ -147,7 +147,10 @@ The rules intentionally focus on concrete production risks. Heuristic checks use
 | [`HCR003`](docs/rules/HCR003.md) | Lifetime | Cached `IHttpClientFactory.CreateClient()` results | Warning | Guide |
 | [`HCR004`](docs/rules/HCR004.md) | Typed clients | Typed clients injected into singleton services | Warning | Yes |
 | [`HCR005`](docs/rules/HCR005.md) | Typed clients | Duplicate typed-client registrations | Warning | Yes |
+| [`HCR006`](docs/rules/HCR006.md) | Lifetime | `HttpClient.Timeout` set to a non-positive value | Warning | Fix |
 | [`HCR020`](docs/rules/HCR020.md) | Handlers | `DelegatingHandler` capturing scoped request data | Warning | Guide |
+| [`HCR021`](docs/rules/HCR021.md) | Handlers | `base.SendAsync` dropping the cancellation token | Warning | Guide |
+| [`HCR022`](docs/rules/HCR022.md) | Handlers | Disabled server certificate validation | Warning | Fix |
 | [`HCR040`](docs/rules/HCR040.md) | Resilience | Duplicate resilience handlers in one client pipeline | Warning | Yes |
 | [`HCR041`](docs/rules/HCR041.md) | Resilience | Unsafe HTTP methods retried without explicit configuration | Warning | Yes |
 | [`HCR042`](docs/rules/HCR042.md) | Resilience | Unsafe HTTP methods hedged without explicit configuration | Warning | Yes |
@@ -157,12 +160,15 @@ The rules intentionally focus on concrete production risks. Heuristic checks use
 | [`HCR062`](docs/rules/HCR062.md) | Response lifetime | Per-request values written to `DefaultRequestHeaders` | Warning | Guide |
 | [`HCR063`](docs/rules/HCR063.md) | Response lifetime | Sync-over-async around outbound HTTP | Warning | Partial |
 | [`HCR064`](docs/rules/HCR064.md) | Response lifetime | HTTP calls that omit an available `CancellationToken` | Warning | Yes |
+| [`HCR065`](docs/rules/HCR065.md) | ResponseLifetime | Resending the same `HttpRequestMessage` | Warning | Guide |
 | [`HCR080`](docs/rules/HCR080.md) | Concurrency | Obvious unbounded `Task.WhenAll` HTTP fan-out | Suggestion | Guide |
 | [`HCR081`](docs/rules/HCR081.md) | Response lifetime | Undisposed streams returned from HTTP content | Warning | Partial |
 | [`HCR082`](docs/rules/HCR082.md) | Resilience | Per-request resilience pipeline construction | Warning | Guide |
 | [`HCR083`](docs/rules/HCR083.md) | Typed clients | Relative URLs used without a configured `BaseAddress` | Warning | Guide |
 | [`HCR084`](docs/rules/HCR084.md) | Named clients | Duplicated string literals for named-client names | Warning | Guide |
 | [`HCR085`](docs/rules/HCR085.md) | Typed clients | Different implementations sharing one implicit client name | Warning | Partial |
+| [`HCR087`](docs/rules/HCR087.md) | Lifetime | `BaseAddress` path missing trailing slash | Warning | No fix |
+| [`HCR088`](docs/rules/HCR088.md) | TypedClients | Typed client has no `HttpClient` constructor parameter | Warning | No fix |
 
 See the [rules index](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/) for categories and recommended rollout order, or open an individual rule for exact detection details and limitations.
 

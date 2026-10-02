@@ -39,14 +39,23 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
 
             if (declaration is not null &&
                 declaration.UsingKeyword == default &&
-                declaration.Declaration.Variables.Count == 1)
+                declaration.Declaration.Variables.Count == 1 &&
+                !TopLevelUsingDeclarationMerge.IsReassignedAfter(
+                    declaration,
+                    declaration.Declaration.Variables[0].Identifier.ValueText,
+                    declaration.Span.End))
             {
-                context.RegisterCodeFix(
-                    CodeAction.Create(
-                        "Dispose response with using declaration",
-                        cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
-                        nameof(HCR060_DisposeResponseCodeFixProvider)),
-                    diagnostic);
+                var variableName = declaration.Declaration.Variables[0].Identifier.ValueText;
+                if (!UsingDeclarationEscapeGate.VariableEscapesScope(node, variableName))
+                {
+                    context.RegisterCodeFix(
+                        CodeAction.Create(
+                            "Dispose response with using declaration",
+                            cancellationToken => AddUsingDeclarationAsync(context.Document, declaration, cancellationToken),
+                            nameof(HCR060_DisposeResponseCodeFixProvider)),
+                        diagnostic);
+                }
+
                 continue;
             }
 
@@ -57,18 +66,23 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
                     out var adjacentDeclaration,
                     out var assignmentStatement))
             {
-                context.RegisterCodeFix(
-                    CodeAction.Create(
-                        "Dispose response with using declaration",
-                        cancellationToken => MergeDeclarationAndAssignmentAsync(
-                            context.Document,
-                            block,
-                            adjacentDeclaration,
-                            assignment!,
-                            assignmentStatement,
-                            cancellationToken),
-                        nameof(HCR060_DisposeResponseCodeFixProvider)),
-                    diagnostic);
+                var mergedName = adjacentDeclaration.Declaration.Variables[0].Identifier.ValueText;
+                if (!UsingDeclarationEscapeGate.VariableEscapesScope(node, mergedName))
+                {
+                    context.RegisterCodeFix(
+                        CodeAction.Create(
+                            "Dispose response with using declaration",
+                            cancellationToken => MergeDeclarationAndAssignmentAsync(
+                                context.Document,
+                                block,
+                                adjacentDeclaration,
+                                assignment!,
+                                assignmentStatement,
+                                cancellationToken),
+                            nameof(HCR060_DisposeResponseCodeFixProvider)),
+                        diagnostic);
+                }
+
                 continue;
             }
 
@@ -79,19 +93,23 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
                     out var topLevelDeclaration,
                     out var topLevelAssignmentStatement))
             {
-                context.RegisterCodeFix(
-                    CodeAction.Create(
-                        "Dispose response with using declaration",
-                        cancellationToken => TopLevelUsingDeclarationMerge.MergeDeclarationAndAssignmentAsync(
-                            context.Document,
-                            compilationUnit,
-                            declarationStatement,
-                            topLevelDeclaration,
-                            assignment!,
-                            topLevelAssignmentStatement,
-                            cancellationToken),
-                        nameof(HCR060_DisposeResponseCodeFixProvider)),
-                    diagnostic);
+                var topLevelName = topLevelDeclaration.Declaration.Variables[0].Identifier.ValueText;
+                if (!UsingDeclarationEscapeGate.VariableEscapesScope(node, topLevelName))
+                {
+                    context.RegisterCodeFix(
+                        CodeAction.Create(
+                            "Dispose response with using declaration",
+                            cancellationToken => TopLevelUsingDeclarationMerge.MergeDeclarationAndAssignmentAsync(
+                                context.Document,
+                                compilationUnit,
+                                declarationStatement,
+                                topLevelDeclaration,
+                                assignment!,
+                                topLevelAssignmentStatement,
+                                cancellationToken),
+                            nameof(HCR060_DisposeResponseCodeFixProvider)),
+                        diagnostic);
+                }
             }
         }
     }
@@ -130,7 +148,11 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
         }
 
         if (TopLevelUsingDeclarationMerge.ContainsDirectiveTrivia(previousDeclaration) ||
-            TopLevelUsingDeclarationMerge.ContainsDirectiveTrivia(statement))
+            TopLevelUsingDeclarationMerge.ContainsDirectiveTrivia(statement) ||
+            TopLevelUsingDeclarationMerge.IsReassignedAfter(
+                previousDeclaration,
+                variables[0].Identifier.ValueText,
+                statement.Span.End))
         {
             return false;
         }
@@ -140,6 +162,7 @@ public sealed class HCR060_DisposeResponseCodeFixProvider : CodeFixProvider
         assignmentStatement = statement;
         return true;
     }
+
     private static async Task<Document> AddUsingDeclarationAsync(
         Document document,
         LocalDeclarationStatementSyntax declaration,

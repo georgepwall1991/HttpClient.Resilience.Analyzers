@@ -413,4 +413,71 @@ public sealed class HCR082_PerRequestResiliencePipelineAnalyzerTests
 
         Assert.Empty(diagnostics);
     }
+    [Fact]
+    public async Task ReportsDiagnostic_WhenControllerConstructorBuildsPipeline()
+    {
+        const string source = """
+            public sealed class PaymentsController
+            {
+                private readonly object _pipeline;
+
+                public PaymentsController()
+                {
+                    _pipeline = new Polly.ResiliencePipelineBuilder().Build();
+                }
+            }
+
+            namespace Polly
+            {
+                public sealed class ResiliencePipeline
+                {
+                }
+
+                public sealed class ResiliencePipelineBuilder
+                {
+                    public ResiliencePipeline Build()
+                    {
+                        return new ResiliencePipeline();
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR082_PerRequestResiliencePipelineAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR082, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenControllerExpressionBodiedPropertyBuildsPipeline()
+    {
+        const string source = """
+            public sealed class PaymentsController
+            {
+                public object Pipeline => new Polly.ResiliencePipelineBuilder().Build();
+            }
+
+            namespace Polly
+            {
+                public sealed class ResiliencePipeline
+                {
+                }
+
+                public sealed class ResiliencePipelineBuilder
+                {
+                    public ResiliencePipeline Build()
+                    {
+                        return new ResiliencePipeline();
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR082_PerRequestResiliencePipelineAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR082, diagnostic.Id);
+    }
+
 }

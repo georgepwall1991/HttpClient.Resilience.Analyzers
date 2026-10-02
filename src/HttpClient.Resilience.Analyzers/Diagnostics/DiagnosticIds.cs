@@ -7,7 +7,10 @@ public static class DiagnosticIds
     public const string HCR003 = "HCR003";
     public const string HCR004 = "HCR004";
     public const string HCR005 = "HCR005";
+    public const string HCR006 = "HCR006";
     public const string HCR020 = "HCR020";
+    public const string HCR021 = "HCR021";
+    public const string HCR022 = "HCR022";
     public const string HCR040 = "HCR040";
     public const string HCR041 = "HCR041";
     public const string HCR042 = "HCR042";
@@ -17,10 +20,13 @@ public static class DiagnosticIds
     public const string HCR062 = "HCR062";
     public const string HCR063 = "HCR063";
     public const string HCR064 = "HCR064";
+    public const string HCR065 = "HCR065";
     public const string HCR080 = "HCR080";
     public const string HCR081 = "HCR081";
     public const string HCR082 = "HCR082";
     public const string HCR083 = "HCR083";
     public const string HCR084 = "HCR084";
     public const string HCR085 = "HCR085";
+    public const string HCR087 = "HCR087";
+    public const string HCR088 = "HCR088";
 }
