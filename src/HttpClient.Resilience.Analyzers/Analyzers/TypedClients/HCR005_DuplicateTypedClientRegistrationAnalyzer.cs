@@ -33,11 +33,20 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzer : Diagnostic
             return;
         }
 
+        // Resolve each typed client once instead of rescanning and rebinding every typed
+        // client registration for every standalone registration.
+        var typedClientTypeNames = typedClientRegistrations
+            .SelectMany(registration => GetRegisteredTypeNames(
+                registration,
+                context.Compilation,
+                context.CancellationToken))
+            .ToArray();
+
         foreach (var registration in registrations.Where(IsStandaloneServiceRegistration))
         {
             if (!MatchesAnyTypedClientRegistration(
                     registration,
-                    typedClientRegistrations,
+                    typedClientTypeNames,
                     context.Compilation,
                     context.CancellationToken))
             {
@@ -67,19 +76,25 @@ public sealed class HCR005_DuplicateTypedClientRegistrationAnalyzer : Diagnostic
 
     private static bool MatchesAnyTypedClientRegistration(
         ServiceRegistrationModel registration,
-        IEnumerable<ServiceRegistrationModel> typedClientRegistrations,
+        IReadOnlyCollection<RegisteredTypeName> typedClientTypeNames,
         Compilation compilation,
         System.Threading.CancellationToken cancellationToken)
     {
-        var registrationTypes = GetRegisteredTypeNames(registration, compilation, cancellationToken).ToArray();
+        foreach (var registrationTypeName in GetRegisteredTypeNames(
+            registration,
+            compilation,
+            cancellationToken))
+        {
+            foreach (var typedClientTypeName in typedClientTypeNames)
+            {
+                if (TypeNamesMatch(registrationTypeName, typedClientTypeName))
+                {
+                    return true;
+                }
+            }
+        }
 
-        return registrationTypes
-            .Any(registrationTypeName => typedClientRegistrations
-                .SelectMany(typedClientRegistration => GetRegisteredTypeNames(
-                    typedClientRegistration,
-                    compilation,
-                    cancellationToken))
-                .Any(typedClientTypeName => TypeNamesMatch(registrationTypeName, typedClientTypeName)));
+        return false;
     }
 
     private static IEnumerable<RegisteredTypeName> GetRegisteredTypeNames(

@@ -59,10 +59,14 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        var memberAccess = (MemberAccessExpressionSyntax)invocation.Expression;
+        // `using static System.Threading.Tasks.Task;` makes the receiver an identifier,
+        // so never assume a member-access expression here.
+        var location = invocation.Expression is MemberAccessExpressionSyntax memberAccess
+            ? memberAccess.Name.GetLocation()
+            : invocation.Expression.GetLocation();
         context.ReportDiagnostic(Diagnostic.Create(
             DiagnosticDescriptors.HCR080,
-            memberAccess.Name.GetLocation()));
+            location));
     }
 
     private static bool IsTaskWhenAll(
@@ -70,6 +74,13 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
+        // Gate on the name before binding: this action runs for every invocation in the
+        // compilation and binding is the expensive part.
+        if (!HasWhenAllName(invocation))
+        {
+            return false;
+        }
+
         var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
         if (symbolInfo.Symbol is IMethodSymbol method)
         {
@@ -84,6 +95,16 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         }
 
         return IsSyntacticTaskWhenAll(invocation);
+    }
+
+    private static bool HasWhenAllName(InvocationExpressionSyntax invocation)
+    {
+        return invocation.Expression switch
+        {
+            MemberAccessExpressionSyntax { Name.Identifier.ValueText: "WhenAll" } => true,
+            IdentifierNameSyntax { Identifier.ValueText: "WhenAll" } => true,
+            _ => false
+        };
     }
 
     private static bool IsBclTaskWhenAll(IMethodSymbol method)
@@ -128,6 +149,20 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
             return true;
         }
 
+        // `Task.WhenAll(tasks.ToArray())` and `Task.WhenAll(tasks.ToList())` are common
+        // spellings; follow the underlying sequence local.
+        if (expression is InvocationExpressionSyntax
+            {
+                Expression: MemberAccessExpressionSyntax
+                {
+                    Name.Identifier.ValueText: "ToArray" or "ToList",
+                    Expression: { } sequence
+                }
+            })
+        {
+            expression = UnwrapTransparentExpressions(sequence);
+        }
+
         return expression is IdentifierNameSyntax identifier &&
             LocalValueContainsSelectWithHttpCall(
                 identifier,
@@ -141,14 +176,20 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        return expression
-            .DescendantNodesAndSelf()
-            .OfType<InvocationExpressionSyntax>()
-            .Any(invocation => IsSelectInvocationWithHttpCall(invocation, semanticModel, cancellationToken)) ||
-            expression
-                .DescendantNodesAndSelf()
-                .OfType<QueryExpressionSyntax>()
-                .Any(query => IsLinqQueryWithHttpCall(query, semanticModel, cancellationToken));
+        foreach (var node in expression.DescendantNodesAndSelf())
+        {
+            switch (node)
+            {
+                case InvocationExpressionSyntax invocation
+                    when IsSelectInvocationWithHttpCall(invocation, semanticModel, cancellationToken):
+                    return true;
+                case QueryExpressionSyntax query
+                    when IsLinqQueryWithHttpCall(query, semanticModel, cancellationToken):
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsLinqQueryWithHttpCall(

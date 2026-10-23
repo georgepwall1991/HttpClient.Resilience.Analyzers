@@ -97,6 +97,14 @@ public sealed class HCR006_InvalidHttpClientTimeoutAnalyzer : DiagnosticAnalyzer
         };
     }
 
+    private const double TicksPerMicrosecond = 10;
+    private const double TicksPerMillisecond = 10_000;
+    private const double TicksPerSecond = 10_000_000;
+    private const double TicksPerMinute = 600_000_000;
+    private const double TicksPerHour = 36_000_000_000;
+    private const double TicksPerDay = 864_000_000_000;
+    private const double InfiniteTimeoutTicks = -10_000;
+
     private static bool CreationHasNonPositiveConstantArgument(
         ObjectCreationExpressionSyntax creation,
         SemanticModel semanticModel,
@@ -108,13 +116,43 @@ public sealed class HCR006_InvalidHttpClientTimeoutAnalyzer : DiagnosticAnalyzer
             return true;
         }
 
-        // Every TimeSpan constructor takes numeric arguments; a non-positive first
-        // argument produces a non-positive TimeSpan.
-        return TryGetNumericConstant(
-            creation.ArgumentList.Arguments[0].Expression,
-            semanticModel,
-            cancellationToken,
-            out var value) && value <= 0;
+        var arguments = creation.ArgumentList.Arguments;
+        if (arguments.Count is not (1 or 3 or 4 or 5 or 6))
+        {
+            return false;
+        }
+
+        var values = new double[arguments.Count];
+        for (var index = 0; index < arguments.Count; index++)
+        {
+            if (!TryGetNumericConstant(
+                    arguments[index].Expression,
+                    semanticModel,
+                    cancellationToken,
+                    out values[index]))
+            {
+                return false;
+            }
+        }
+
+        // TimeSpan constructors combine their components linearly; a non-positive
+        // component in the first position does not imply a non-positive span, because
+        // later components can offset it (for example new TimeSpan(0, 1, 0)).
+        var ticks = arguments.Count switch
+        {
+            1 => values[0],
+            3 => values[0] * TicksPerHour + values[1] * TicksPerMinute + values[2] * TicksPerSecond,
+            4 => values[0] * TicksPerDay + values[1] * TicksPerHour +
+                values[2] * TicksPerMinute + values[3] * TicksPerSecond,
+            5 => values[0] * TicksPerDay + values[1] * TicksPerHour +
+                values[2] * TicksPerMinute + values[3] * TicksPerSecond +
+                values[4] * TicksPerMillisecond,
+            _ => values[0] * TicksPerDay + values[1] * TicksPerHour +
+                values[2] * TicksPerMinute + values[3] * TicksPerSecond +
+                values[4] * TicksPerMillisecond + values[5] * TicksPerMicrosecond
+        };
+
+        return ticks <= 0 && ticks != InfiniteTimeoutTicks;
     }
 
     private static bool IsTimeSpanFactoryWithNonPositiveArgument(
@@ -132,11 +170,19 @@ public sealed class HCR006_InvalidHttpClientTimeoutAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
-        return TryGetNumericConstant(
-            invocation.ArgumentList.Arguments[0].Expression,
-            semanticModel,
-            cancellationToken,
-            out var value) && value <= 0;
+        if (!TryGetNumericConstant(
+                invocation.ArgumentList.Arguments[0].Expression,
+                semanticModel,
+                cancellationToken,
+                out var value))
+        {
+            return false;
+        }
+
+        var ticks = ToTicks(memberAccess.Name.Identifier.ValueText, value);
+
+        // TimeSpan.FromMilliseconds(-1) is exactly Timeout.InfiniteTimeSpan.
+        return ticks <= 0 && ticks != InfiniteTimeoutTicks;
     }
 
     private static bool IsNegativeTimeSpanExpression(
@@ -146,16 +192,37 @@ public sealed class HCR006_InvalidHttpClientTimeoutAnalyzer : DiagnosticAnalyzer
     {
         // -TimeSpan.FromSeconds(5) — a negated positive factory result.
         var operand = SyntaxTransparency.Unwrap(prefix.Operand);
-        return operand is InvocationExpressionSyntax invocation &&
-            invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
-            memberAccess.Name.Identifier.ValueText.StartsWith("From", System.StringComparison.Ordinal) &&
-            ExpressionIsTimeSpanType(memberAccess.Expression, semanticModel, cancellationToken) &&
-            invocation.ArgumentList.Arguments.Count > 0 &&
-            TryGetNumericConstant(
+        if (operand is not InvocationExpressionSyntax invocation ||
+            invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+            !memberAccess.Name.Identifier.ValueText.StartsWith("From", System.StringComparison.Ordinal) ||
+            !ExpressionIsTimeSpanType(memberAccess.Expression, semanticModel, cancellationToken) ||
+            invocation.ArgumentList.Arguments.Count == 0 ||
+            !TryGetNumericConstant(
                 invocation.ArgumentList.Arguments[0].Expression,
                 semanticModel,
                 cancellationToken,
-                out var value) && value > 0;
+                out var value))
+        {
+            return false;
+        }
+
+        var ticks = ToTicks(memberAccess.Name.Identifier.ValueText, value);
+        // Negating 10,000 ticks produces Timeout.InfiniteTimeSpan, which is valid.
+        return ticks >= 0 && ticks != -InfiniteTimeoutTicks;
+    }
+
+    private static double ToTicks(string factoryName, double value)
+    {
+        return factoryName switch
+        {
+            "FromDays" => value * TicksPerDay,
+            "FromHours" => value * TicksPerHour,
+            "FromMinutes" => value * TicksPerMinute,
+            "FromSeconds" => value * TicksPerSecond,
+            "FromMilliseconds" => value * TicksPerMillisecond,
+            "FromMicroseconds" => value * TicksPerMicrosecond,
+            _ => value
+        };
     }
 
     private static bool TryGetNumericConstant(
@@ -217,7 +284,8 @@ public sealed class HCR006_InvalidHttpClientTimeoutAnalyzer : DiagnosticAnalyzer
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        var resolved = semanticModel.GetTypeInfo(type, cancellationToken).Type;
+        var resolved = semanticModel.GetSymbolInfo(type, cancellationToken).Symbol as ITypeSymbol ??
+            semanticModel.GetTypeInfo(type, cancellationToken).Type;
         if (resolved is not null && resolved is not IErrorTypeSymbol)
         {
             return IsTimeSpan(resolved);

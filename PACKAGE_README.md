@@ -21,9 +21,9 @@ Catch outbound HTTP reliability bugs at **build time**—socket exhaustion, miss
 - Duplicate typed-client registrations and shared implicit client names
 - Stacked `AddStandardResilienceHandler` pipelines, unsafe-method retries, unsafe-method hedging, and custom `AddResilienceHandler` pipelines that retry unsafe methods
 - Undisposed responses/streams, sync-over-async, missing `CancellationToken`
-- Unbounded HTTP fan-out and fragile named-client string literals
+- Unbounded HTTP fan-out, fragile named-client string literals, `BaseAddress` paths without a trailing slash, and typed clients without an `HttpClient` constructor
 
-The package currently ships **21** documented diagnostics (`HCR001`–`HCR085`), with automatic code fixes for common lifetime, retry, hedging, disposal, cancellation, and registration problems.
+The package currently ships **27** documented diagnostics (`HCR001`–`HCR088`), with automatic code fixes for common lifetime, retry, hedging, disposal, cancellation, and registration problems.
 
 ## Install
 
@@ -61,7 +61,7 @@ Product-flow diagrams from the real showcase sample (not stock screenshots):
 | Area | Examples |
 |---|---|
 | `HttpClient` lifetime | Per-request client creation, stale long-lived connections, cached factory clients |
-| Dependency injection | Typed clients held by singletons, duplicate registrations, scoped state in handlers |
+| Dependency injection | Typed clients held by singletons, duplicate registrations, scoped state in handlers, implicit-name collisions (HCR085) |
 | Resilience and Polly | Duplicate handlers, unsafe HTTP method retries, concurrent hedging of unsafe methods, custom pipelines retrying unsafe methods, per-request pipeline construction |
 | Response ownership | Undisposed `ResponseHeadersRead` responses and HTTP content streams |
 | Request correctness | Unchecked failure responses, shared default-header mutation, dropped cancellation tokens |

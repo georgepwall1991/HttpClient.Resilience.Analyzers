@@ -21,6 +21,21 @@ if ([string]::IsNullOrWhiteSpace($packageVersion) -or $packageVersion -eq $packa
 $tempDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ('hcr-consume-' + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $tempDirectory | Out-Null
 
+# Roslyn resolves .editorconfig paths against the physical path. On macOS the
+# default temp directory is exposed through a /var -> /private/var symlink, and
+# the analyzer config becomes invisible when it is passed through the symlink.
+# Info-level rules such as HCR080 then fall back to their default severity and
+# never appear in the build output. Canonicalize before creating the project.
+if (-not $IsWindows) {
+    $realpathCommand = Get-Command -CommandType Application realpath -ErrorAction SilentlyContinue
+    if ($null -ne $realpathCommand) {
+        $canonicalTempDirectory = & $realpathCommand.Source $tempDirectory 2>$null
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($canonicalTempDirectory)) {
+            $tempDirectory = $canonicalTempDirectory.Trim()
+        }
+    }
+}
+
 try {
     $projectPath = Join-Path $tempDirectory 'PackageConsumer.csproj'
     $programPath = Join-Path $tempDirectory 'Program.cs'
@@ -30,10 +45,10 @@ try {
     @"
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <RestoreSources>$packageDirectory</RestoreSources>
+    <RestoreSources>$packageDirectory;https://api.nuget.org/v3/index.json</RestoreSources>
     <RestorePackagesPath>$packagesPath</RestorePackagesPath>
   </PropertyGroup>
   <ItemGroup>
@@ -51,7 +66,10 @@ dotnet_diagnostic.HCR002.severity = warning
 dotnet_diagnostic.HCR003.severity = warning
 dotnet_diagnostic.HCR004.severity = warning
 dotnet_diagnostic.HCR005.severity = warning
+dotnet_diagnostic.HCR006.severity = warning
 dotnet_diagnostic.HCR020.severity = warning
+dotnet_diagnostic.HCR021.severity = warning
+dotnet_diagnostic.HCR022.severity = warning
 dotnet_diagnostic.HCR040.severity = warning
 dotnet_diagnostic.HCR041.severity = warning
 dotnet_diagnostic.HCR042.severity = warning
@@ -61,12 +79,15 @@ dotnet_diagnostic.HCR061.severity = warning
 dotnet_diagnostic.HCR062.severity = warning
 dotnet_diagnostic.HCR063.severity = warning
 dotnet_diagnostic.HCR064.severity = warning
+dotnet_diagnostic.HCR065.severity = warning
 dotnet_diagnostic.HCR080.severity = warning
 dotnet_diagnostic.HCR081.severity = warning
 dotnet_diagnostic.HCR082.severity = warning
 dotnet_diagnostic.HCR083.severity = warning
 dotnet_diagnostic.HCR084.severity = warning
 dotnet_diagnostic.HCR085.severity = warning
+dotnet_diagnostic.HCR087.severity = warning
+dotnet_diagnostic.HCR088.severity = warning
 "@ | Set-Content -LiteralPath $editorConfigPath
 
     @"
@@ -329,6 +350,80 @@ public sealed class BadStringlyNamedClientService
     }
 }
 
+public sealed class BadTimeoutClient
+{
+    public HttpClient Create()
+    {
+        return new HttpClient
+        {
+            Timeout = TimeSpan.Zero
+        };
+    }
+}
+
+public sealed class BadTokenHandler : DelegatingHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        return base.SendAsync(request, CancellationToken.None);
+    }
+}
+
+public sealed class BadCertificateValidationClient
+{
+    public HttpClient Create()
+    {
+        var handler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (_, _, _, _) => true
+        };
+
+        return new HttpClient(handler);
+    }
+}
+
+public sealed class BadRequestResendService
+{
+    public async Task SendAsync(
+        HttpClient client,
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        await client.SendAsync(request, cancellationToken);
+        await client.SendAsync(request, cancellationToken);
+    }
+}
+
+public sealed class BadBaseAddressClient
+{
+    public HttpClient Create()
+    {
+        var client = new HttpClient
+        {
+            BaseAddress = new Uri("https://api.example.com/v1")
+        };
+
+        return client;
+    }
+}
+
+public sealed class BadConstructorTypedClient
+{
+    public BadConstructorTypedClient(string apiKey)
+    {
+    }
+}
+
+public static class BadConstructorTypedClientRegistration
+{
+    public static void Configure(IServiceCollection services)
+    {
+        services.AddHttpClient<BadConstructorTypedClient>();
+    }
+}
+
 public interface IServiceCollection
 {
 }
@@ -451,7 +546,10 @@ public sealed class HttpRetryStrategyOptions
         'HCR003',
         'HCR004',
         'HCR005',
+        'HCR006',
         'HCR020',
+        'HCR021',
+        'HCR022',
         'HCR040',
         'HCR041',
         'HCR042',
@@ -461,12 +559,15 @@ public sealed class HttpRetryStrategyOptions
         'HCR062',
         'HCR063',
         'HCR064',
+        'HCR065',
         'HCR080',
         'HCR081',
         'HCR082',
         'HCR083',
         'HCR084',
-        'HCR085'
+        'HCR085',
+        'HCR087',
+        'HCR088'
     )
 
     $missingDiagnostics = @(

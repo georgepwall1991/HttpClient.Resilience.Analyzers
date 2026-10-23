@@ -5,7 +5,7 @@ description: Analyzer and code-fix coverage for every HCR rule, including IHttpC
 
 # Implementation Status
 
-This project currently implements every MVP diagnostic ID from the starter document plus the starter's first future-rule expansion through `HCR085`.
+This project currently implements every MVP diagnostic ID from the starter document plus the starter's future-rule expansion through `HCR088`.
 
 ## Implemented Rules
 

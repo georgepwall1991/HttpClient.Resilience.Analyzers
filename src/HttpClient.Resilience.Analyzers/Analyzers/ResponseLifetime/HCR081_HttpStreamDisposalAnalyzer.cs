@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.KnownSymbols;
+using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -79,12 +80,13 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
         initializer = UnwrapTransparentExpressions(initializer);
         if (initializer is AwaitExpressionSyntax awaitExpression)
         {
-            return awaitExpression.Expression
-                .DescendantNodesAndSelf()
-                .OfType<InvocationExpressionSyntax>()
-                .Any(invocation => IsHttpStreamCall(invocation, semanticModel, cancellationToken));
+            initializer = UnwrapTransparentExpressions(awaitExpression.Expression);
         }
 
+        initializer = UnwrapConfigureAwaitInvocation(initializer);
+
+        // Only the invocation that produces the assigned stream matters. A nested
+        // HTTP call inside another await does not transfer ownership to this local.
         return initializer is InvocationExpressionSyntax invocation &&
             IsHttpStreamCall(invocation, semanticModel, cancellationToken);
     }
@@ -295,9 +297,8 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
 
     private static bool IsReturned(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
-        return containingBlock
-            .DescendantNodes()
-            .OfType<ReturnStatementSyntax>()
+        return BlockSyntaxIndex.Get(containingBlock)
+            .Returns
             .Any(returnStatement => returnStatement.Expression is not null &&
                 TransfersStreamOwnership(
                     returnStatement.Expression,
@@ -330,12 +331,10 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
     {
         var aliases = GetVisibleStreamAliases(containingBlock, variableName, declarationStart);
 
-        return containingBlock
-            .DescendantNodes()
-            .OfType<FinallyClauseSyntax>()
-            .Any(finallyClause => finallyClause.Block
-                .DescendantNodes()
-                .OfType<InvocationExpressionSyntax>()
+        return BlockSyntaxIndex.Get(containingBlock)
+            .FinallyClauses
+            .Any(finallyClause => BlockSyntaxIndex.Get(finallyClause.Block)
+                .Invocations
                 .Any(invocation => aliases.Any(alias =>
                     AliasIsValidAt(containingBlock, alias, invocation.SpanStart) &&
                     IsDisposeInvocation(invocation, alias.Key))));
@@ -343,10 +342,22 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
 
     private static bool IsDisposeInvocation(ExpressionSyntax expression, string variableName)
     {
-        expression = UnwrapTransparentExpressions(expression);
-        if (expression is AwaitExpressionSyntax awaitExpression)
+        expression = UnwrapAwaitAndConfigureAwait(expression);
+
+        // stream?.Dispose() releases the stream conditionally, but it is still
+        // ownership evidence for the tracked local.
+        if (expression is ConditionalAccessExpressionSyntax
+            {
+                WhenNotNull: InvocationExpressionSyntax
+                {
+                    Expression: MemberBindingExpressionSyntax
+                    {
+                        Name.Identifier.ValueText: "Dispose" or "DisposeAsync"
+                    }
+                }
+            } conditionalAccess)
         {
-            expression = UnwrapTransparentExpressions(awaitExpression.Expression);
+            return TryGetAliasIdentifier(conditionalAccess.Expression) == variableName;
         }
 
         return expression is InvocationExpressionSyntax
@@ -357,24 +368,29 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
                 Name.Identifier.ValueText: "Dispose" or "DisposeAsync"
             }
         } &&
-            UnwrapTransparentExpressions(receiver) is IdentifierNameSyntax identifier &&
-            identifier.Identifier.ValueText == variableName;
+            TryGetAliasIdentifier(receiver) == variableName;
     }
 
     private static bool IsOwnedByUsingStatement(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
         var aliases = GetVisibleStreamAliases(containingBlock, variableName, declarationStart);
 
-        return containingBlock
-            .DescendantNodes()
-            .OfType<UsingStatementSyntax>()
-            .Any(usingStatement => usingStatement.Expression is { } expression &&
-                UnwrapTransparentExpressions(expression) is IdentifierNameSyntax identifier &&
-                AliasIsValidAt(
-                    containingBlock,
-                    aliases,
-                    identifier.Identifier.ValueText,
-                    usingStatement.SpanStart));
+        return BlockSyntaxIndex.Get(containingBlock)
+            .UsingStatements
+            .Any(usingStatement =>
+                (usingStatement.Expression is { } expression &&
+                    TryGetAliasIdentifier(expression) is { } aliasName &&
+                    AliasIsValidAt(containingBlock, aliases, aliasName, usingStatement.SpanStart)) ||
+                // using (var alias = stream) — the using owns the resource through the
+                // declared alias even though the tracked variable is only the initializer.
+                (usingStatement.Declaration?.Variables.Any(variable =>
+                    variable.Initializer?.Value is { } initializer &&
+                    TryGetAliasIdentifier(initializer) is { } declaredAliasName &&
+                    AliasIsValidAt(
+                        containingBlock,
+                        aliases,
+                        declaredAliasName,
+                        variable.SpanStart)) == true));
     }
 
     private static bool IsOwnedByUsingDeclaration(BlockSyntax containingBlock, string variableName, int declarationStart)
@@ -550,9 +566,8 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
         int streamDeclarationStart,
         int evidenceStart)
     {
-        return containingBlock
-            .DescendantNodes()
-            .OfType<VariableDeclaratorSyntax>()
+        return BlockSyntaxIndex.Get(containingBlock)
+            .Variables
             .Any(variable => variable.Identifier.ValueText == localName &&
                 variable.Initializer?.Value is { } initializer &&
                 variable.SpanStart > streamDeclarationStart &&
@@ -649,9 +664,8 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
         int start,
         int end)
     {
-        return containingBlock
-            .DescendantNodes()
-            .OfType<AssignmentExpressionSyntax>()
+        return BlockSyntaxIndex.Get(containingBlock)
+            .Assignments
             .Any(assignment => assignment.SpanStart > start &&
                 assignment.SpanStart < end &&
                 assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
@@ -676,5 +690,41 @@ public sealed class HCR081_HttpStreamDisposalAnalyzer : DiagnosticAnalyzer
                     return expression;
             }
         }
+    }
+
+    private static ExpressionSyntax UnwrapAwaitAndConfigureAwait(ExpressionSyntax expression)
+    {
+        expression = UnwrapTransparentExpressions(expression);
+        if (expression is AwaitExpressionSyntax awaitExpression)
+        {
+            expression = UnwrapTransparentExpressions(awaitExpression.Expression);
+        }
+
+        return UnwrapConfigureAwaitInvocation(expression);
+    }
+
+    private static ExpressionSyntax UnwrapConfigureAwaitInvocation(ExpressionSyntax expression)
+    {
+        while (expression is InvocationExpressionSyntax
+            {
+                Expression: MemberAccessExpressionSyntax
+                {
+                    Name.Identifier.ValueText: "ConfigureAwait",
+                    Expression: { } receiver
+                }
+            })
+        {
+            expression = UnwrapTransparentExpressions(receiver);
+        }
+
+        return expression;
+    }
+
+    private static string? TryGetAliasIdentifier(ExpressionSyntax expression)
+    {
+        expression = UnwrapAwaitAndConfigureAwait(expression);
+        return expression is IdentifierNameSyntax identifier
+            ? identifier.Identifier.ValueText
+            : null;
     }
 }

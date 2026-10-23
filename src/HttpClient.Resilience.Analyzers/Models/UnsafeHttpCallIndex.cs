@@ -81,6 +81,9 @@ internal sealed class UnsafeHttpCallIndex
 
         public IReadOnlyCollection<string> NamedClientsWithUnsafeCalls { get; }
 
+        public bool AnyClientSendsUnsafeHttpMethod =>
+            TypedClientClassesWithUnsafeCalls.Count > 0 || NamedClientsWithUnsafeCalls.Count > 0;
+
         public bool TypedClientSendsUnsafeHttpMethod(TypedClientRegistration typedClient)
         {
             return TypedClientClassesWithUnsafeCalls
@@ -144,8 +147,6 @@ internal sealed class UnsafeHttpCallIndex
     /// </summary>
     private sealed class UnsafeCallScan
     {
-        private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _localHttpClients = new();
-        private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _localFactories = new();
         private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _memberHttpClients = new();
         private readonly Dictionary<(SyntaxNode Scope, string Name), bool> _memberFactories = new();
         private readonly Dictionary<SyntaxTree, SemanticModel> _semanticModels = new();
@@ -188,12 +189,6 @@ internal sealed class UnsafeHttpCallIndex
                 ? value
                 : null;
         }
-
-        public bool GetOrAddLocalHttpClient(SyntaxNode scope, string name, System.Func<bool> compute) =>
-            GetOrAdd(_localHttpClients, scope, name, compute);
-
-        public bool GetOrAddLocalFactory(SyntaxNode scope, string name, System.Func<bool> compute) =>
-            GetOrAdd(_localFactories, scope, name, compute);
 
         public bool GetOrAddMemberHttpClient(SyntaxNode scope, string name, System.Func<bool> compute) =>
             GetOrAdd(_memberHttpClients, scope, name, compute);
@@ -317,7 +312,7 @@ internal sealed class UnsafeHttpCallIndex
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
             memberAccess.Name.Identifier.ValueText != "CreateClient" ||
             invocation.ArgumentList.Arguments.Count == 0 ||
-            !SyntacticReceiverLooksLikeHttpClientFactory(memberAccess.Expression, scan))
+            !ReceiverLooksLikeHttpClientFactory(memberAccess.Expression, scan))
         {
             return;
         }
@@ -351,13 +346,76 @@ internal sealed class UnsafeHttpCallIndex
         InvocationExpressionSyntax invocation,
         UnsafeCallScan scan)
     {
-        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
-            !SyntacticReceiverLooksLikeHttpClient(memberAccess.Expression, scan))
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
         {
             return false;
         }
 
-        return IsUnsafeHttpCall(memberAccess.Name.Identifier.ValueText, invocation, scan);
+        var methodName = memberAccess.Name.Identifier.ValueText;
+        if (!HttpMethodSafety.MethodNameStartsWithUnsafePrefix(methodName) &&
+            methodName is not ("Send" or "SendAsync"))
+        {
+            return false;
+        }
+
+        return ReceiverLooksLikeHttpClient(memberAccess.Expression, scan) &&
+            IsUnsafeHttpCall(methodName, invocation, scan);
+    }
+
+    private static bool ReceiverLooksLikeHttpClient(ExpressionSyntax expression, UnsafeCallScan scan)
+    {
+        expression = SyntaxTransparency.Unwrap(expression);
+
+        // Resolve the receiver's symbol first so a custom type that happens to be named
+        // HttpClient is never treated as System.Net.Http.HttpClient.
+        var semanticModel = scan.GetSemanticModel(expression.SyntaxTree);
+        var symbol = semanticModel.GetSymbolInfo(expression, scan.CancellationToken).Symbol;
+        var type = symbol switch
+        {
+            ILocalSymbol local => local.Type,
+            IParameterSymbol parameter => parameter.Type,
+            IFieldSymbol field => field.Type,
+            IPropertySymbol property => property.Type,
+            _ => null
+        };
+
+        if (type is not null && type is not IErrorTypeSymbol)
+        {
+            return KnownSymbols.HttpClientSymbols.IsHttpClient(type);
+        }
+
+        return SyntacticReceiverLooksLikeHttpClient(expression, scan);
+    }
+
+    private static bool ReceiverLooksLikeHttpClientFactory(ExpressionSyntax expression, UnsafeCallScan scan)
+    {
+        expression = SyntaxTransparency.Unwrap(expression);
+
+        var semanticModel = scan.GetSemanticModel(expression.SyntaxTree);
+        var symbol = semanticModel.GetSymbolInfo(expression, scan.CancellationToken).Symbol;
+        var type = symbol switch
+        {
+            ILocalSymbol local => local.Type,
+            IParameterSymbol parameter => parameter.Type,
+            IFieldSymbol field => field.Type,
+            IPropertySymbol property => property.Type,
+            _ => null
+        };
+
+        if (type is not null && type is not IErrorTypeSymbol)
+        {
+            return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
+                    "global::System.Net.Http.IHttpClientFactory" ||
+                type is INamedTypeSymbol
+                {
+                    Name: "IHttpClientFactory",
+                    Arity: 0,
+                    ContainingType: null,
+                    ContainingNamespace.IsGlobalNamespace: true
+                };
+        }
+
+        return SyntacticReceiverLooksLikeHttpClientFactory(expression, scan);
     }
 
     private static bool IsUnsafeHttpCall(
@@ -376,6 +434,8 @@ internal sealed class UnsafeHttpCallIndex
 
     private static bool SyntacticReceiverLooksLikeHttpClient(ExpressionSyntax expression, UnsafeCallScan scan)
     {
+        expression = SyntaxTransparency.Unwrap(expression);
+
         return expression switch
         {
             IdentifierNameSyntax identifier => ParameterLooksLikeHttpClient(identifier) ||
@@ -403,19 +463,39 @@ internal sealed class UnsafeHttpCallIndex
 
     private static bool LocalLooksLikeHttpClient(IdentifierNameSyntax identifier, UnsafeCallScan scan)
     {
-        if (identifier.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
+        var name = identifier.Identifier.ValueText;
+
+        // foreach (var client in clients) declares its iteration variable on the loop.
+        foreach (var forEach in identifier.Ancestors().OfType<ForEachStatementSyntax>())
         {
-            return false;
+            if (forEach.Identifier.ValueText == name &&
+                forEach.Statement.Span.Contains(identifier.Span))
+            {
+                return forEach.Type is not null && IsHttpClientTypeName(forEach.Type);
+            }
         }
 
-        var name = identifier.Identifier.ValueText;
-        return scan.GetOrAddLocalHttpClient(block, name, () => block
-            .DescendantNodes()
-            .OfType<VariableDeclaratorSyntax>()
-            .Any(variable => variable.Identifier.ValueText == name &&
-                variable.Parent is VariableDeclarationSyntax declaration &&
+        // Walk outward through enclosing blocks. A declaration in an outer block is in
+        // scope inside a nested block; the nearest block that declares the name wins.
+        foreach (var block in identifier.Ancestors().OfType<BlockSyntax>())
+        {
+            var variable = block
+                .DescendantNodes(node => node is not BlockSyntax)
+                .OfType<VariableDeclaratorSyntax>()
+                .Where(candidate => candidate.Identifier.ValueText == name &&
+                    candidate.SpanStart < identifier.SpanStart)
+                .LastOrDefault();
+            if (variable is null)
+            {
+                continue;
+            }
+
+            return variable.Parent is VariableDeclarationSyntax declaration &&
                 (IsHttpClientTypeName(declaration.Type) ||
-                    LocalVariableResolvesToHttpClient(variable, scan))));
+                    LocalVariableResolvesToHttpClient(variable, scan));
+        }
+
+        return false;
     }
 
     private static bool LocalVariableResolvesToHttpClient(
@@ -574,18 +654,35 @@ internal sealed class UnsafeHttpCallIndex
 
     private static bool LocalLooksLikeHttpClientFactory(IdentifierNameSyntax identifier, UnsafeCallScan scan)
     {
-        if (identifier.FirstAncestorOrSelf<BlockSyntax>() is not { } block)
+        var name = identifier.Identifier.ValueText;
+
+        foreach (var forEach in identifier.Ancestors().OfType<ForEachStatementSyntax>())
         {
-            return false;
+            if (forEach.Identifier.ValueText == name &&
+                forEach.Statement.Span.Contains(identifier.Span))
+            {
+                return forEach.Type is not null && IsHttpClientFactoryTypeName(forEach.Type);
+            }
         }
 
-        var name = identifier.Identifier.ValueText;
-        return scan.GetOrAddLocalFactory(block, name, () => block
-            .DescendantNodes()
-            .OfType<VariableDeclaratorSyntax>()
-            .Any(variable => variable.Identifier.ValueText == name &&
-                variable.Parent is VariableDeclarationSyntax declaration &&
-                IsHttpClientFactoryTypeName(declaration.Type)));
+        foreach (var block in identifier.Ancestors().OfType<BlockSyntax>())
+        {
+            var variable = block
+                .DescendantNodes(node => node is not BlockSyntax)
+                .OfType<VariableDeclaratorSyntax>()
+                .Where(candidate => candidate.Identifier.ValueText == name &&
+                    candidate.SpanStart < identifier.SpanStart)
+                .LastOrDefault();
+            if (variable is null)
+            {
+                continue;
+            }
+
+            return variable.Parent is VariableDeclarationSyntax declaration &&
+                IsHttpClientFactoryTypeName(declaration.Type);
+        }
+
+        return false;
     }
 
     private static bool FieldOrPropertyLooksLikeHttpClientFactory(IdentifierNameSyntax identifier, UnsafeCallScan scan)

@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.KnownSymbols;
+using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -40,12 +41,33 @@ public sealed class HCR088_TypedClientMissingHttpClientConstructorAnalyzer : Dia
             return;
         }
 
-        // A factory/configure argument supplies the instance itself — no constructor
-        // requirement applies.
-        if (invocation.ArgumentList.Arguments.Any(argument =>
-                argument.Expression is LambdaExpressionSyntax or AnonymousMethodExpressionSyntax))
+        // Only a factory delegate supplies the instance itself. A configure lambda
+        // (Action<HttpClient>) still relies on the typed client constructor to receive
+        // the configured HttpClient.
+        var symbolInfo = context.SemanticModel.GetSymbolInfo(invocation, context.CancellationToken);
+        if (symbolInfo.Symbol is IMethodSymbol method)
         {
-            return;
+            if (HasFactoryArgument(invocation, method))
+            {
+                return;
+            }
+        }
+        else
+        {
+            var candidates = symbolInfo.CandidateSymbols.OfType<IMethodSymbol>().ToArray();
+            if (candidates.Length == 0)
+            {
+                // Unresolved: a lambda may be a factory, so stay conservative.
+                if (invocation.ArgumentList.Arguments.Any(argument =>
+                        argument.Expression is LambdaExpressionSyntax or AnonymousMethodExpressionSyntax))
+                {
+                    return;
+                }
+            }
+            else if (candidates.Any(candidate => HasFactoryArgument(invocation, candidate)))
+            {
+                return;
+            }
         }
 
         // For AddHttpClient<TClient, TImplementation> the constructed type is the
@@ -79,6 +101,35 @@ public sealed class HCR088_TypedClientMissingHttpClientConstructorAnalyzer : Dia
             implementationType.Name));
     }
 
+    private static bool HasFactoryArgument(
+        InvocationExpressionSyntax invocation,
+        IMethodSymbol method)
+    {
+        var parameters = method.Parameters;
+        for (var index = 0; index < invocation.ArgumentList.Arguments.Count; index++)
+        {
+            var argument = invocation.ArgumentList.Arguments[index];
+            IParameterSymbol? parameter;
+            if (argument.NameColon is { } nameColon)
+            {
+                parameter = parameters.FirstOrDefault(candidate =>
+                    candidate.Name == nameColon.Name.Identifier.ValueText);
+            }
+            else
+            {
+                parameter = index < parameters.Length ? parameters[index] : null;
+            }
+
+            if (parameter?.Type is INamedTypeSymbol { TypeKind: TypeKind.Delegate } delegateType &&
+                delegateType.DelegateInvokeMethod is { ReturnsVoid: false })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static bool IsFrameworkAddHttpClient(
         InvocationExpressionSyntax invocation,
         SemanticModel semanticModel,
@@ -104,8 +155,6 @@ public sealed class HCR088_TypedClientMissingHttpClientConstructorAnalyzer : Dia
 
     private static bool IsDependencyInjectionExtension(IMethodSymbol method)
     {
-        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
-        return containingNamespace.IsGlobalNamespace ||
-            containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
+        return FrameworkRegistrationMethods.IsDependencyInjectionExtension(method);
     }
 }

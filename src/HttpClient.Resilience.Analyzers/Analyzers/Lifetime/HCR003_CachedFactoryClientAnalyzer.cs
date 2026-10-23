@@ -26,9 +26,6 @@ public sealed class HCR003_CachedFactoryClientAnalyzer : DiagnosticAnalyzer
 
     private static void AnalyzeCompilation(CompilationStartAnalysisContext context)
     {
-        var roots = context.Compilation.SyntaxTrees
-            .Select(tree => tree.GetRoot(context.CancellationToken))
-            .ToArray();
         var singletonTypes = GetKnownSingletonTypes(
             context.Compilation,
             context.CancellationToken);

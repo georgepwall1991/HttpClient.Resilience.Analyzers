@@ -69,7 +69,12 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzer : DiagnosticAnalyze
             invocation,
             context.SemanticModel,
             context.CancellationToken);
-        if (typedClient is null && namedClient is null)
+        var appliesToAllClients = typedClient is null && namedClient is null &&
+            HttpClientRegistrationChain.IsWithinConfigureHttpClientDefaults(
+                invocation,
+                context.SemanticModel,
+                context.CancellationToken);
+        if (typedClient is null && namedClient is null && !appliesToAllClients)
         {
             return;
         }
@@ -78,9 +83,10 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzer : DiagnosticAnalyze
             context.CancellationToken,
             () => System.Threading.Interlocked.Increment(ref _unsafeCallIndexBuilds));
 
-        var sendsUnsafe =
-            (typedClient is not null && snapshot.TypedClientSendsUnsafeHttpMethod(typedClient)) ||
-            (namedClient is not null && snapshot.NamedClientSendsUnsafeHttpMethod(namedClient));
+        var sendsUnsafe = appliesToAllClients
+            ? snapshot.AnyClientSendsUnsafeHttpMethod
+            : (typedClient is not null && snapshot.TypedClientSendsUnsafeHttpMethod(typedClient)) ||
+                (namedClient is not null && snapshot.NamedClientSendsUnsafeHttpMethod(namedClient));
         if (!sendsUnsafe)
         {
             return;

@@ -1983,4 +1983,48 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzerTests
 
         Assert.Empty(titles);
     }
+    [Fact]
+    public async Task DoesNotThrow_WhenHostedServiceTypeArgumentIsAnArray()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddHostedService<PaymentWorker[]>();
+                    services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentWorker
+            {
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddHostedService<THostedService>(this IServiceCollection services) => services;
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR004_TypedClientInjectedIntoSingletonAnalyzer>
+            .GetDiagnosticsAllowingCompilerErrorsAsync(source);
+
+        Assert.DoesNotContain(diagnostics, diagnostic => diagnostic.Id == "AD0001");
+    }
+
 }

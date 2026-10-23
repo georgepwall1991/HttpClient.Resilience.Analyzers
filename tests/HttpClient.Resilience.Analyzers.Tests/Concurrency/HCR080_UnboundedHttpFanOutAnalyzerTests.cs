@@ -1422,4 +1422,50 @@ public sealed class HCR080_UnboundedHttpFanOutAnalyzerTests
 
         Assert.Empty(diagnostics);
     }
+    [Fact]
+    public async Task ReportsDiagnostic_WhenWhenAllIsImportedWithUsingStatic()
+    {
+        const string source = """
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+            using static System.Threading.Tasks.Task;
+
+            public sealed class FanOutService
+            {
+                public Task SendAsync(HttpClient client, string[] urls) =>
+                    WhenAll(urls.Select(url => client.GetAsync(url)));
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.DoesNotContain(diagnostics, diagnostic => diagnostic.Id == "AD0001");
+        Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR080, diagnostics[0].Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenLocalSequenceIsPassedAsArray()
+    {
+        const string source = """
+            using System.Linq;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class FanOutService
+            {
+                public async Task SendAsync(HttpClient client, string[] urls)
+                {
+                    var tasks = urls.Select(url => client.GetAsync(url));
+                    await Task.WhenAll(tasks.ToArray());
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR080_UnboundedHttpFanOutAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Single(diagnostics);
+    }
+
 }

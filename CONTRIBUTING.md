@@ -67,12 +67,15 @@ Code fixes should be conservative and limited to transformations that are obviou
 ## Mutation Testing
 
 New analyzer logic should keep a Stryker mutation score at or above the break threshold in
-`stryker-config.json` (currently 80%). Expand the `mutate` glob when a change introduces a
-new rule or shared helper, and add explicit mutant-killer tests for boolean gates, namespace
-checks, and method-name filters.
+`stryker-config.json` (currently 80%). The committed gate covers the new diagnostics and
+shared helpers; `stryker-legacy-config.json` preserves the broader historical scope, whose
+baseline is still below 80%. Add explicit mutant-killer tests for boolean gates, namespace
+checks, and method-name filters, and expand the gate when a change introduces a new rule or
+shared helper.
 
 ```powershell
 ./scripts/Invoke-MutationTests.ps1
+./scripts/Invoke-MutationTests.ps1 -ConfigFile stryker-legacy-config.json
 ```
 
 ## Documentation Site

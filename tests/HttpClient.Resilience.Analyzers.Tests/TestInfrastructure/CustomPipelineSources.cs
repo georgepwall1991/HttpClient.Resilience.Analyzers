@@ -62,12 +62,20 @@ internal static class CustomPipelineSources
                 this IServiceCollection services,
                 System.Func<HttpClient, TClient> factory) => null!;
 
+            public static IHttpClientBuilder AddHttpClient<TClient>(
+                this IServiceCollection services,
+                System.Action<HttpClient> configureClient) => null!;
+
             public static IHttpClientBuilder AddHttpClient(this IServiceCollection services, string name) => null!;
 
             public static IHttpClientBuilder AddHttpClient(
                 this IServiceCollection services,
                 string name,
                 System.Action<HttpClient> configureClient) => null!;
+
+            public static IServiceCollection ConfigureHttpClientDefaults(
+                this IServiceCollection services,
+                System.Action<IHttpClientBuilder> configure) => services;
 
             public static IHttpClientBuilder ConfigureHttpClient(
                 this IHttpClientBuilder builder,

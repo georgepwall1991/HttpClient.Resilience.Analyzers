@@ -8,7 +8,7 @@ The package catches outbound HTTP reliability bugs at build time, including sock
 
 - [Home](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/): Product overview and install
 - [Getting started](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/getting-started/): 30-second path and solution-wide Directory.Build.props install
-- [Rule catalog](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/): All HCR001–HCR085 diagnostics
+- [Rule catalog](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/): All HCR001–HCR088 diagnostics
 - [Configuration](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/configuration/): .editorconfig severity and adoption profiles
 - [Adoption](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/adoption/): Brownfield rollout
 - [FAQ](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/faq/): Resilience libraries, CA2000, runtime impact
@@ -21,7 +21,10 @@ The package catches outbound HTTP reliability bugs at build time, including sock
 - [HCR003](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR003/): Do not cache IHttpClientFactory.CreateClient() results
 - [HCR004](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR004/): Do not inject typed HttpClient clients into singletons
 - [HCR005](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR005/): Duplicate typed-client registrations
+- [HCR006](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR006/): Invalid HttpClient.Timeout
 - [HCR020](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR020/): DelegatingHandler capturing scoped request data
+- [HCR021](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR021/): DelegatingHandler not forwarding the cancellation token
+- [HCR022](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR022/): Disabled server certificate validation
 - [HCR040](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR040/): Duplicate resilience handlers
 - [HCR041](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR041/): AddStandardResilienceHandler retrying unsafe HTTP methods
 - [HCR042](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR042/): AddStandardHedgingHandler replaying unsafe HTTP methods
@@ -31,16 +34,19 @@ The package catches outbound HTTP reliability bugs at build time, including sock
 - [HCR062](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR062/): Per-request DefaultRequestHeaders mutation
 - [HCR063](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR063/): Sync-over-async around outbound HTTP
 - [HCR064](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR064/): Missing CancellationToken on HttpClient calls
+- [HCR065](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR065/): Reusing an HttpRequestMessage instance
 - [HCR080](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR080/): Unbounded HTTP fan-out
 - [HCR081](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR081/): Undisposed HTTP content streams
 - [HCR082](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR082/): Per-request resilience pipeline construction
 - [HCR083](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR083/): Relative URLs without BaseAddress
 - [HCR084](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR084/): Duplicated named-client string literals
 - [HCR085](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR085/): Implicit typed-client name collisions
+- [HCR087](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR087/): BaseAddress missing a trailing slash
+- [HCR088](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/HCR088/): Typed client without an HttpClient constructor
 
 ## Code fixes
 
-Automatic fixes ship for HCR002, HCR004, HCR005, HCR040, HCR041, HCR042, HCR043, HCR060, and HCR064, with partial-shape fixes for HCR001, HCR061, HCR063, and HCR081, and HCR085 (partial — adds kebab-case names derived from the fully qualified implementation type). This matches the support column in the README rule catalog. All fixes support Fix All via BatchFixer. Rules without automatic fixes (HCR003, HCR020, HCR062, HCR080, HCR082, HCR083, HCR084) include manual guidance in their rule pages.
+Automatic fixes ship for HCR002, HCR004, HCR005, HCR040, HCR041, HCR042, HCR043, HCR060, and HCR064, with partial-shape fixes for HCR001, HCR061, HCR063, HCR081, and HCR085 (adds kebab-case names derived from the fully qualified implementation type). This matches the support column in the README rule catalog. All fixes support Fix All via BatchFixer. Rules without automatic fixes (HCR003, HCR020, HCR021, HCR062, HCR065, HCR080, HCR082, HCR083, HCR084, HCR087, HCR088) include manual guidance in their rule pages.
 
 ## Optional
 

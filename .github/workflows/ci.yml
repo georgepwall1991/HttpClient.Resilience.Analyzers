@@ -12,10 +12,57 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  linux:
+    name: Linux build, test, and coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore HttpClient.Resilience.Analyzers.slnx
+
+      - name: Verify formatting
+        run: dotnet format HttpClient.Resilience.Analyzers.slnx --verify-no-changes --no-restore --exclude samples
+
+      - name: Build
+        run: dotnet build HttpClient.Resilience.Analyzers.slnx --configuration Release --no-restore
+
+      - name: Test with coverage
+        run: dotnet test HttpClient.Resilience.Analyzers.slnx --configuration Release --no-build --collect:"XPlat Code Coverage" --logger trx --results-directory artifacts/test-results
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-linux
+          path: artifacts/test-results/*
+          if-no-files-found: ignore
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-linux
+          path: artifacts/test-results/**/coverage.cobertura.xml
+          if-no-files-found: ignore
+
   build:
-    name: Build, test, and pack
+    name: Windows build, test, and pack
     runs-on: windows-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout

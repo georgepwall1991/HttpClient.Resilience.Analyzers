@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.KnownSymbols;
+using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -95,22 +96,42 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         System.Threading.CancellationToken cancellationToken)
     {
         expression = UnwrapTransparentExpressions(expression);
+
+        // For an awaited call the materialized value is the await result, not the
+        // Task<T> returned by the nested invocation.
         if (expression is AwaitExpressionSyntax)
         {
-            return true;
+            var awaitedType = semanticModel.GetTypeInfo(expression, cancellationToken).Type;
+            if (awaitedType is not null && awaitedType is not IErrorTypeSymbol)
+            {
+                return IsHttpResponseMessage(awaitedType);
+            }
         }
 
+        if (expression is AwaitExpressionSyntax awaitExpression)
+        {
+            expression = UnwrapTransparentExpressions(awaitExpression.Expression);
+        }
+
+        expression = UnwrapConfigureAwaitInvocation(expression);
+
         var expressionType = semanticModel.GetTypeInfo(expression, cancellationToken).Type;
-        return expressionType is not null &&
-                expressionType is not IErrorTypeSymbol &&
-                IsHttpResponseMessage(expressionType) ||
-            expression is InvocationExpressionSyntax
+        if (expressionType is not null && expressionType is not IErrorTypeSymbol)
+        {
+            // Storing the Task<HttpResponseMessage> is not ownership of a response;
+            // only a materialized (or synchronous Send) value is.
+            return IsHttpResponseMessage(expressionType);
+        }
+
+        // Unresolved code: Send is synchronous and returns the response directly. The
+        // ResponseHeadersRead check still has to match the same invocation.
+        return expression is InvocationExpressionSyntax
+        {
+            Expression: MemberAccessExpressionSyntax
             {
-                Expression: MemberAccessExpressionSyntax
-                {
-                    Name.Identifier.ValueText: "Send"
-                }
-            };
+                Name.Identifier.ValueText: "Send"
+            }
+        };
     }
 
     private static bool IsResponseHeadersReadHttpCall(
@@ -118,10 +139,19 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        return expression
-            .DescendantNodesAndSelf()
-            .OfType<InvocationExpressionSyntax>()
-            .Any(invocation => IsResponseHeadersReadHttpCall(invocation, semanticModel, cancellationToken));
+        expression = UnwrapTransparentExpressions(expression);
+        if (expression is AwaitExpressionSyntax awaitExpression)
+        {
+            expression = UnwrapTransparentExpressions(awaitExpression.Expression);
+        }
+
+        expression = UnwrapConfigureAwaitInvocation(expression);
+
+        // Inspect only the invocation that produces the assigned value. Searching
+        // descendants would blame an unrelated nested call for the outer value's
+        // ownership.
+        return expression is InvocationExpressionSyntax invocation &&
+            IsResponseHeadersReadHttpCall(invocation, semanticModel, cancellationToken);
     }
 
     private static bool IsResponseHeadersReadHttpCall(
@@ -391,9 +421,8 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
 
     private static bool IsReturned(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
-        return containingBlock
-            .DescendantNodes()
-            .OfType<ReturnStatementSyntax>()
+        return BlockSyntaxIndex.Get(containingBlock)
+            .Returns
             .Any(returnStatement => returnStatement.Expression is not null &&
                 TransfersResponseOwnership(
                     returnStatement.Expression,
@@ -513,12 +542,10 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         string aliasName,
         int aliasStart)
     {
-        return containingBlock
-            .DescendantNodes()
-            .OfType<FinallyClauseSyntax>()
-            .Any(finallyClause => finallyClause.Block
-                .DescendantNodes()
-                .OfType<InvocationExpressionSyntax>()
+        return BlockSyntaxIndex.Get(containingBlock)
+            .FinallyClauses
+            .Any(finallyClause => BlockSyntaxIndex.Get(finallyClause.Block)
+                .Invocations
                 .Any(invocation => invocation.SpanStart > aliasStart &&
                     IsDisposeInvocation(invocation, aliasName) &&
                     !IsVariableReassignedBetween(containingBlock, aliasName, aliasStart, invocation.SpanStart))) ||
@@ -532,10 +559,22 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
 
     private static bool IsDisposeInvocation(ExpressionSyntax expression, string variableName)
     {
-        expression = UnwrapTransparentExpressions(expression);
-        if (expression is AwaitExpressionSyntax awaitExpression)
+        expression = UnwrapAwaitAndConfigureAwait(expression);
+
+        // response?.Dispose() disposes conditionally, but it is still evidence that
+        // the response is owned and released by this block.
+        if (expression is ConditionalAccessExpressionSyntax
+            {
+                WhenNotNull: InvocationExpressionSyntax
+                {
+                    Expression: MemberBindingExpressionSyntax
+                    {
+                        Name.Identifier.ValueText: "Dispose" or "DisposeAsync"
+                    }
+                }
+            } conditionalAccess)
         {
-            expression = UnwrapTransparentExpressions(awaitExpression.Expression);
+            return IsDirectVariableReference(conditionalAccess.Expression, variableName);
         }
 
         // HttpResponseMessage.DisposeAsync disposes synchronously, so an unawaited
@@ -550,6 +589,34 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         } && IsDirectVariableReference(disposedExpression, variableName);
     }
 
+    private static ExpressionSyntax UnwrapAwaitAndConfigureAwait(ExpressionSyntax expression)
+    {
+        expression = UnwrapTransparentExpressions(expression);
+        if (expression is AwaitExpressionSyntax awaitExpression)
+        {
+            expression = UnwrapTransparentExpressions(awaitExpression.Expression);
+        }
+
+        return UnwrapConfigureAwaitInvocation(expression);
+    }
+
+    private static ExpressionSyntax UnwrapConfigureAwaitInvocation(ExpressionSyntax expression)
+    {
+        while (expression is InvocationExpressionSyntax
+            {
+                Expression: MemberAccessExpressionSyntax
+                {
+                    Name.Identifier.ValueText: "ConfigureAwait",
+                    Expression: { } receiver
+                }
+            })
+        {
+            expression = UnwrapTransparentExpressions(receiver);
+        }
+
+        return expression;
+    }
+
     private static bool IsOwnedByUsingStatement(BlockSyntax containingBlock, string variableName, int declarationStart)
     {
         return AliasIsOwnedByUsingStatement(containingBlock, variableName, declarationStart);
@@ -560,9 +627,8 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         string aliasName,
         int aliasStart)
     {
-        return containingBlock
-            .DescendantNodes()
-            .OfType<UsingStatementSyntax>()
+        return BlockSyntaxIndex.Get(containingBlock)
+            .UsingStatements
             .Any(usingStatement => usingStatement.SpanStart > aliasStart &&
                 UsingStatementOwnsAlias(usingStatement, aliasName) &&
                 !IsVariableReassignedBetween(containingBlock, aliasName, aliasStart, usingStatement.SpanStart)) ||
@@ -644,9 +710,8 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         string responseVariableName,
         int responseDeclarationStart)
     {
-        return containingBlock
-            .DescendantNodes()
-            .OfType<VariableDeclaratorSyntax>()
+        return BlockSyntaxIndex.Get(containingBlock)
+            .Variables
             .Any(variable => variable.Identifier.ValueText == localName &&
                 variable.Initializer?.Value is { } initializer &&
                 variable.SpanStart > responseDeclarationStart &&
@@ -703,9 +768,8 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         int start,
         int end)
     {
-        return containingBlock
-            .DescendantNodes()
-            .OfType<AssignmentExpressionSyntax>()
+        return BlockSyntaxIndex.Get(containingBlock)
+            .Assignments
             .Any(assignment => assignment.SpanStart > start &&
                 assignment.SpanStart < end &&
                 assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&

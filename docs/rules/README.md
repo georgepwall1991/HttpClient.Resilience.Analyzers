@@ -1,5 +1,5 @@
 ---
-title: HttpClient analyzer rule catalog (HCR001–HCR085)
+title: HttpClient analyzer rule catalog (HCR001–HCR088)
 description: All HttpClient.Resilience.Analyzers diagnostics for IHttpClientFactory, typed clients, Polly retries, hedging, and response ownership.
 ---
 
@@ -32,7 +32,7 @@ Each rule page includes:
 |---|---|---:|---|
 | [`HCR004`](HCR004.md) | Do not inject typed `HttpClient` clients into singleton services | Warning | Yes |
 | [`HCR005`](HCR005.md) | Do not separately register a typed client already registered by `AddHttpClient<T>()` | Warning | Yes |
-| [`HCR006`](HCR006.md) | `HttpClient.Timeout` must be a positive `TimeSpan` | Warning | Fix |
+| [`HCR006`](HCR006.md) | `HttpClient.Timeout` must be a positive `TimeSpan` | Warning | No fix |
 | [`HCR083`](HCR083.md) | Configure `BaseAddress` for typed clients that use relative URLs | Warning | Guide |
 | [`HCR084`](HCR084.md) | Avoid duplicated string literals for named `HttpClient` names | Warning | Guide |
 | [`HCR085`](HCR085.md) | Multiple typed clients on one interface should use explicit names | Warning | Partial |
@@ -45,7 +45,7 @@ Each rule page includes:
 |---|---|---:|---|
 | [`HCR020`](HCR020.md) | `DelegatingHandler` should not capture scoped request data | Warning | Guide |
 | [`HCR021`](HCR021.md) | `DelegatingHandler.SendAsync` should forward the cancellation token | Warning | Guide |
-| [`HCR022`](HCR022.md) | Disabled server certificate validation | Warning | Fix |
+| [`HCR022`](HCR022.md) | Disabled server certificate validation | Warning | No fix |
 
 ### Resilience
 

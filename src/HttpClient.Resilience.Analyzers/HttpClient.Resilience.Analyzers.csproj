@@ -14,9 +14,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Build against the lowest supported Roslyn so the analyzer stays usable from
+         older SDKs. Tests override these versions to the current toolchain. -->
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="4.8.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" VersionOverride="4.8.0" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

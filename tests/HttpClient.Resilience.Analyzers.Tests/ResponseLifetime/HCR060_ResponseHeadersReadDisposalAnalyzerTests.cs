@@ -2053,4 +2053,82 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
     {
         return value.Replace("\r\n", "\n");
     }
+    [Fact]
+    public async Task DoesNotReport_WhenResponseIsDisposedWithConditionalAccess()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task SendAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    response?.Dispose();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenOuterAwaitConsumesTheResponse()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<int> SendAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var statusCode = await ReadStatusAsync(
+                        await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken));
+                    return statusCode;
+                }
+
+                private static async Task<int> ReadStatusAsync(HttpResponseMessage response)
+                {
+                    using (response)
+                    {
+                        return (int)response.StatusCode;
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenResponseIsDisposedAfterConfigureAwait()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task SendAsync(HttpClient client, HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                    response.Dispose();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
 }

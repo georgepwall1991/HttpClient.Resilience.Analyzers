@@ -292,6 +292,146 @@ public sealed class AnalyzerRobustnessTests
                     }
                 }
                 """);
+
+            yield return ("using-static-when-all", """
+                using System.Linq;
+                using System.Net.Http;
+                using System.Threading.Tasks;
+                using static System.Threading.Tasks.Task;
+
+                public sealed class FanOut
+                {
+                    public Task SendAsync(HttpClient client, string[] urls) =>
+                        WhenAll(urls.Select(url => client.GetAsync(url)));
+                }
+                """);
+
+            yield return ("hosted-service-array-type-argument", """
+                using System.Net.Http;
+                using System.Threading.Tasks;
+
+                public static class Registrations
+                {
+                    public static void Configure(IServiceCollection services)
+                    {
+                        services.AddHostedService<Worker[]>();
+                        services.AddHttpClient<PaymentsClient>();
+                    }
+                }
+
+                public sealed class Worker
+                {
+                }
+
+                public sealed class PaymentsClient(HttpClient client)
+                {
+                }
+
+                public interface IServiceCollection
+                {
+                }
+
+                public interface IHttpClientBuilder
+                {
+                }
+
+                public static class ServiceCollectionExtensions
+                {
+                    public static IServiceCollection AddHostedService<T>(this IServiceCollection services) => services;
+                    public static IHttpClientBuilder AddHttpClient<T>(this IServiceCollection services) => null!;
+                }
+                """);
+
+            yield return ("object-initializers-and-target-typed-new", """
+                using System;
+                using System.Net.Http;
+
+                public sealed class Factory
+                {
+                    public HttpClient Create()
+                    {
+                        HttpClient client = new()
+                        {
+                            BaseAddress = new Uri("https://api.example.com/v1"),
+                            Timeout = TimeSpan.FromSeconds(30)
+                        };
+                        return client;
+                    }
+                }
+                """);
+
+            yield return ("conditional-access-and-await-using", """
+                using System.IO;
+                using System.Net.Http;
+                using System.Threading.Tasks;
+
+                public sealed class Lifetime
+                {
+                    public async Task RunAsync(HttpResponseMessage response)
+                    {
+                        var stream = await response.Content.ReadAsStreamAsync();
+                        await using (var alias = stream.ConfigureAwait(false))
+                        {
+                            await alias.CopyToAsync(Stream.Null);
+                        }
+
+                        response?.Dispose();
+                    }
+                }
+                """);
+
+            yield return ("configure-client-defaults", """
+                using System.Net.Http;
+                using System.Threading.Tasks;
+
+                public static class Registrations
+                {
+                    public static void Configure(IServiceCollection services)
+                    {
+                        services.ConfigureHttpClientDefaults(builder =>
+                            builder.AddStandardResilienceHandler());
+                    }
+                }
+
+                public sealed class Client(HttpClient client)
+                {
+                    public Task<HttpResponseMessage> PostAsync() => client.PostAsync("/x", null);
+                }
+
+                public interface IServiceCollection
+                {
+                }
+
+                public interface IHttpClientBuilder
+                {
+                }
+
+                public static class ServiceCollectionExtensions
+                {
+                    public static IServiceCollection ConfigureHttpClientDefaults(
+                        this IServiceCollection services,
+                        System.Action<IHttpClientBuilder> configure) => services;
+                    public static IHttpClientBuilder AddStandardResilienceHandler(this IHttpClientBuilder builder) => builder;
+                }
+                """);
+
+            yield return ("foreach-request-send", """
+                using System.Net.Http;
+                using System.Threading;
+                using System.Threading.Tasks;
+
+                public sealed class Batch
+                {
+                    public async Task SendAsync(HttpClient client, HttpRequestMessage[] requests, CancellationToken token)
+                    {
+                        foreach (var request in requests)
+                        {
+                            using var owned = new HttpRequestMessage(HttpMethod.Get, request.RequestUri);
+                            await client.SendAsync(owned, token);
+                        }
+                    }
+                }
+                """);
         }
     }
 }

@@ -25,6 +25,44 @@ internal static class HttpClientRegistrationChain
             FindNamedClientForBuilderLocal(invocation, semanticModel, cancellationToken);
     }
 
+    /// <summary>
+    /// True when the invocation runs inside a lambda passed to
+    /// <c>IServiceCollection.ConfigureHttpClientDefaults</c>, which applies the handler to
+    /// every client in the container.
+    /// </summary>
+    public static bool IsWithinConfigureHttpClientDefaults(
+        InvocationExpressionSyntax invocation,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        foreach (var lambda in invocation.Ancestors().OfType<AnonymousFunctionExpressionSyntax>())
+        {
+            if (lambda.Parent is not ArgumentSyntax
+                {
+                    Parent.Parent: InvocationExpressionSyntax configureInvocation
+                } ||
+                configureInvocation.Expression is not MemberAccessExpressionSyntax
+                {
+                    Name.Identifier.ValueText: "ConfigureHttpClientDefaults"
+                } memberAccess ||
+                !FrameworkRegistrationMethods.IsFrameworkCall(
+                    configureInvocation,
+                    semanticModel,
+                    cancellationToken) ||
+                !IsServiceCollectionReceiver(
+                    memberAccess.Expression,
+                    semanticModel,
+                    cancellationToken))
+            {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
     private static TypedClientRegistration? FindTypedClientImplementationInChain(
         InvocationExpressionSyntax invocation,
         SemanticModel semanticModel,

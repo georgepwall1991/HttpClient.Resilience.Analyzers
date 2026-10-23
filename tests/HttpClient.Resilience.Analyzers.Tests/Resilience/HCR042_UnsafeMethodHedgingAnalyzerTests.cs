@@ -1557,4 +1557,54 @@ public sealed class HCR042_UnsafeMethodHedgingAnalyzerTests
 
         Assert.Equal(DiagnosticIds.HCR042, Assert.Single(diagnostics).Id);
     }
+    [Fact]
+    public async Task ReportsDiagnostic_WhenConfigureHttpClientDefaultsRegistersHedgingHandler()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.ConfigureHttpClientDefaults(builder =>
+                        builder.AddStandardHedgingHandler());
+                    services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public interface IHttpClientBuilder
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection ConfigureHttpClientDefaults(
+                    this IServiceCollection services,
+                    System.Action<IHttpClientBuilder> configure) => services;
+                public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services) => null!;
+                public static IHttpClientBuilder AddStandardHedgingHandler(this IHttpClientBuilder builder) => builder;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR042_UnsafeMethodHedgingAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR042, diagnostic.Id);
+    }
+
 }

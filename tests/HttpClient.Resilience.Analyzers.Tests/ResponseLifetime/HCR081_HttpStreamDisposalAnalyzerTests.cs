@@ -1286,4 +1286,109 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
     {
         return value.Replace("\r\n", "\n");
     }
+    [Fact]
+    public async Task DoesNotReport_WhenAwaitUsingStatementOwnsStreamAfterConfigureAwait()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                    await using (stream.ConfigureAwait(false))
+                    {
+                        await stream.CopyToAsync(Stream.Null);
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenUsingStatementDeclaresStreamAlias()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync();
+                    using (var alias = stream)
+                    {
+                        await alias.CopyToAsync(Stream.Null);
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenStreamIsDisposedWithConditionalAccess()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(HttpResponseMessage response)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync();
+                    stream?.Dispose();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenOuterAwaitConsumesTheStream()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<long> ReadLengthAsync(HttpResponseMessage response)
+                {
+                    return await MeasureAsync(await response.Content.ReadAsStreamAsync());
+                }
+
+                private static async Task<long> MeasureAsync(Stream stream)
+                {
+                    using (stream)
+                    {
+                        return stream.Length;
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
 }

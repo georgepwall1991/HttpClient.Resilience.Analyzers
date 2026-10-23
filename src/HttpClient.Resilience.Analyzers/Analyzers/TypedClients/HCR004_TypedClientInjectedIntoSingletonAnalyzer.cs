@@ -25,6 +25,9 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
     private static void AnalyzeCompilation(CompilationAnalysisContext context)
     {
         var roots = CompilationSyntaxIndex.GetRoots(context.Compilation, context.CancellationToken);
+        var classes = roots
+            .SelectMany(root => root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+            .ToArray();
         var registrations = ServiceRegistrationCollector
             .CollectFrameworkRegistrations(context.Compilation, context.CancellationToken)
             .ToArray();
@@ -43,7 +46,7 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
         foreach (var singleton in singletonRegistrations)
         {
             if (!ConstructorConsumesTypedClient(
-                    roots,
+                    classes,
                     singleton.ImplementationTypeName ?? singleton.ServiceTypeName,
                     typedClients,
                     context.Compilation,
@@ -72,7 +75,7 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
                     out var hostedTypeNames,
                     out var reportLocation) &&
                 hostedTypeNames.Any(hostedTypeName => ConstructorConsumesTypedClient(
-                    roots,
+                    classes,
                     hostedTypeName,
                     typedClients,
                     context.Compilation,
@@ -140,10 +143,17 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
 
     private static string GetGenericDefinitionName(ITypeSymbol type)
     {
-        var definition = (type as INamedTypeSymbol)?.OriginalDefinition ?? type;
-        var qualifiedName = definition.ContainingNamespace.IsGlobalNamespace
+        // Array, pointer, dynamic, and other non-named type arguments can reach this
+        // point while the user is still typing; they have no containing namespace.
+        if (type is not INamedTypeSymbol named || named.OriginalDefinition is not { } definition)
+        {
+            return NormalizeTypeName(type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        }
+
+        var containingNamespace = definition.ContainingNamespace;
+        var qualifiedName = containingNamespace is null || containingNamespace.IsGlobalNamespace
             ? definition.Name
-            : definition.ContainingNamespace.ToDisplayString() + "." + definition.Name;
+            : containingNamespace.ToDisplayString() + "." + definition.Name;
         return NormalizeTypeName(qualifiedName);
     }
 
@@ -451,14 +461,13 @@ public sealed class HCR004_TypedClientInjectedIntoSingletonAnalyzer : Diagnostic
     }
 
     private static bool ConstructorConsumesTypedClient(
-        IEnumerable<SyntaxNode> roots,
+        IReadOnlyList<ClassDeclarationSyntax> classes,
         string singletonTypeName,
         ISet<string> typedClients,
         Compilation compilation,
         System.Threading.CancellationToken cancellationToken)
     {
-        var singletonClasses = roots
-            .SelectMany(root => root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+        var singletonClasses = classes
             .Where(type => DeclaredTypeMatchesRegistration(type, singletonTypeName))
             .ToArray();
 

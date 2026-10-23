@@ -26,38 +26,22 @@ public sealed class HCR087_BaseAddressMissingTrailingSlashAnalyzer : DiagnosticA
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context)
     {
         var assignment = (AssignmentExpressionSyntax)context.Node;
-        if (assignment.Left is not MemberAccessExpressionSyntax
-            {
-                Name.Identifier.ValueText: "BaseAddress"
-            } memberAccess)
+        if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) ||
+            !IsHttpClientBaseAddressAssignment(
+                assignment,
+                context.SemanticModel,
+                context.CancellationToken))
         {
             return;
         }
 
-        if (!IsHttpClientReceiver(memberAccess.Expression, context.SemanticModel, context.CancellationToken))
+        if (!TryGetUriText(
+                assignment.Right,
+                context.SemanticModel,
+                context.CancellationToken,
+                out var uriText))
         {
             return;
-        }
-
-        var constantValue = context.SemanticModel
-            .GetConstantValue(assignment.Right, context.CancellationToken);
-        if (!constantValue.HasValue || constantValue.Value is not string uriText)
-        {
-            // new Uri("literal") — extract the literal argument.
-            if (assignment.Right is ObjectCreationExpressionSyntax creation &&
-                creation.ArgumentList is { Arguments.Count: 1 } argumentList &&
-                argumentList.Arguments[0].Expression is LiteralExpressionSyntax literal &&
-                context.SemanticModel.GetTypeInfo(creation, context.CancellationToken).Type is
-                { Name: "Uri", ContainingNamespace.Name: "System" } &&
-                context.SemanticModel.GetConstantValue(literal, context.CancellationToken) is
-                { HasValue: true, Value: string literalText })
-            {
-                uriText = literalText;
-            }
-            else
-            {
-                return;
-            }
         }
 
         if (!Uri.TryCreate(uriText, UriKind.Absolute, out var uri) ||
@@ -74,13 +58,101 @@ public sealed class HCR087_BaseAddressMissingTrailingSlashAnalyzer : DiagnosticA
             uriText));
     }
 
+    private static bool IsHttpClientBaseAddressAssignment(
+        AssignmentExpressionSyntax assignment,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (assignment.Left is MemberAccessExpressionSyntax
+            {
+                Name.Identifier.ValueText: "BaseAddress"
+            } memberAccess)
+        {
+            return IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken);
+        }
+
+        // new HttpClient { BaseAddress = new Uri("...") }
+        if (assignment.Left is IdentifierNameSyntax { Identifier.ValueText: "BaseAddress" } &&
+            assignment.Parent is InitializerExpressionSyntax
+            {
+                Parent: BaseObjectCreationExpressionSyntax objectCreation
+            } initializer &&
+            initializer.IsKind(SyntaxKind.ObjectInitializerExpression))
+        {
+            var createdType = semanticModel.GetTypeInfo(objectCreation, cancellationToken).Type;
+            return createdType is not null && HttpClientSymbols.IsHttpClient(createdType);
+        }
+
+        return false;
+    }
+
+    private static bool TryGetUriText(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken,
+        out string uriText)
+    {
+        expression = UnwrapTransparentExpressions(expression);
+
+        var constantValue = semanticModel.GetConstantValue(expression, cancellationToken);
+        if (constantValue is { HasValue: true, Value: string text })
+        {
+            uriText = text;
+            return true;
+        }
+
+        // new Uri("literal") or new Uri(BaseAddressConstant). Both explicit and
+        // target-typed `new(...)` creations are accepted.
+        if (expression is BaseObjectCreationExpressionSyntax creation &&
+            creation.ArgumentList is { Arguments.Count: >= 1 and <= 2 } arguments &&
+            IsSystemUri(semanticModel.GetTypeInfo(creation, cancellationToken).Type))
+        {
+            var argumentValue = semanticModel.GetConstantValue(
+                arguments.Arguments[0].Expression,
+                cancellationToken);
+            if (argumentValue is { HasValue: true, Value: string argumentText })
+            {
+                uriText = argumentText;
+                return true;
+            }
+        }
+
+        uriText = string.Empty;
+        return false;
+    }
+
+    private static bool IsSystemUri(ITypeSymbol? type)
+    {
+        return type is not null &&
+            type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == "global::System.Uri";
+    }
+
+    private static ExpressionSyntax UnwrapTransparentExpressions(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix
+                    when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
+        }
+    }
+
     private static bool IsHttpClientReceiver(
         ExpressionSyntax expression,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
         var type = semanticModel.GetTypeInfo(expression, cancellationToken).Type;
-        if (type is not null)
+        if (type is not null && type is not IErrorTypeSymbol)
         {
             return HttpClientSymbols.IsHttpClient(type);
         }

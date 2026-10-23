@@ -140,9 +140,7 @@ internal static class ServiceRegistrationCollector
 
     private static bool IsFrameworkServiceCollectionRegistration(IMethodSymbol method)
     {
-        var containingNamespace = (method.ReducedFrom ?? method).ContainingNamespace;
-        return containingNamespace.IsGlobalNamespace ||
-            containingNamespace.ToDisplayString() == "Microsoft.Extensions.DependencyInjection";
+        return FrameworkRegistrationMethods.IsDependencyInjectionExtension(method);
     }
 
     private static ServiceRegistrationModel? TryCreate(

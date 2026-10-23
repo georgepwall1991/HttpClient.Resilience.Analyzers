@@ -124,6 +124,33 @@ foreach ($diagnosticId in $diagnosticIds) {
     }
 }
 
+# Release-note titles are the public changelog text. They must match the descriptor title
+# exactly so a copy/paste mistake cannot advertise the wrong rule.
+$descriptorText = Get-Text 'src\HttpClient.Resilience.Analyzers\Diagnostics\DiagnosticDescriptors.cs'
+$descriptorTitles = @{}
+$descriptorPattern = '(?s)public static readonly DiagnosticDescriptor (?<id>HCR\d{3}) = Create\(\s*DiagnosticIds\.\k<id>,\s*"(?<title>[^"]*)"'
+foreach ($match in [regex]::Matches($descriptorText, $descriptorPattern)) {
+    $descriptorTitles[$match.Groups['id'].Value] = $match.Groups['title'].Value
+}
+
+foreach ($diagnosticId in $diagnosticIds) {
+    $releaseMatch = [regex]::Match(
+        $releaseNotesText,
+        "(?m)^$diagnosticId\s*\|\s*[^|]*\|\s*[^|]*\|\s*(?<title>[^|]+?)\s*$")
+    if (-not $releaseMatch.Success) {
+        continue
+    }
+
+    if (-not $descriptorTitles.ContainsKey($diagnosticId)) {
+        throw "DiagnosticDescriptors.cs does not expose a title for $diagnosticId."
+    }
+
+    $releaseTitle = $releaseMatch.Groups['title'].Value.Trim()
+    if ($releaseTitle -ne $descriptorTitles[$diagnosticId]) {
+        throw "AnalyzerReleases note for $diagnosticId ('$releaseTitle') does not match the descriptor title ('$($descriptorTitles[$diagnosticId])')."
+    }
+}
+
 $requiredTopLevelDocs = @(
     'CODE_OF_CONDUCT.md',
     'CONTRIBUTING.md',

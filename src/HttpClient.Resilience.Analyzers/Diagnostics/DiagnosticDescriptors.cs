@@ -120,7 +120,6 @@ public static class DiagnosticDescriptors
         "Do not send the same HttpRequestMessage more than once",
         DiagnosticCategories.ResponseLifetime);
 
-
     public static readonly DiagnosticDescriptor HCR080 = Create(
         DiagnosticIds.HCR080,
         "High-concurrency HTTP fan-out should use bounded concurrency or connection limits",
@@ -158,6 +157,18 @@ public static class DiagnosticDescriptors
         "Typed clients '{0}' and '{1}' share the implicit HttpClient name for '{2}'; specify distinct names or link them to an explicit named client",
         DiagnosticCategories.TypedClients);
 
+    public static readonly DiagnosticDescriptor HCR087 = Create(
+        DiagnosticIds.HCR087,
+        "BaseAddress should end with a trailing slash",
+        "BaseAddress '{0}' has a path that does not end with '/'; relative URIs resolve against the parent segment and drop the last path component",
+        DiagnosticCategories.Lifetime);
+
+    public static readonly DiagnosticDescriptor HCR088 = Create(
+        DiagnosticIds.HCR088,
+        "Typed client has no HttpClient-accepting constructor",
+        "Typed client '{0}' has no constructor that accepts HttpClient; the factory cannot inject the configured client",
+        DiagnosticCategories.TypedClients);
+
     private static DiagnosticDescriptor Create(
         string id,
         string title,
@@ -174,16 +185,4 @@ public static class DiagnosticDescriptors
             isEnabledByDefault: true,
             helpLinkUri: $"{DocsSiteUrl}rules/{id}/");
     }
-
-    public static readonly DiagnosticDescriptor HCR087 = Create(
-        DiagnosticIds.HCR087,
-        "BaseAddress should end with a trailing slash",
-        "BaseAddress '{0}' has a path that does not end with '/'; relative URIs resolve against the parent segment and drop the last path component",
-        DiagnosticCategories.Lifetime);
-
-    public static readonly DiagnosticDescriptor HCR088 = Create(
-        DiagnosticIds.HCR088,
-        "Typed client has no HttpClient-accepting constructor",
-        "Typed client '{0}' has no constructor that accepts HttpClient; the factory cannot inject the configured client",
-        DiagnosticCategories.TypedClients);
 }

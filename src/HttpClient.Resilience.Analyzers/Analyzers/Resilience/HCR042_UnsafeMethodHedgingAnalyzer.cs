@@ -56,6 +56,22 @@ public sealed class HCR042_UnsafeMethodHedgingAnalyzer : DiagnosticAnalyzer
             return;
         }
 
+        if (HttpClientRegistrationChain.IsWithinConfigureHttpClientDefaults(
+                invocation,
+                context.SemanticModel,
+                context.CancellationToken))
+        {
+            var snapshot = unsafeCallIndex.GetOrBuild(
+                context.CancellationToken,
+                () => System.Threading.Interlocked.Increment(ref _unsafeCallIndexBuilds));
+            if (snapshot.AnyClientSendsUnsafeHttpMethod)
+            {
+                ReportDiagnostic(context, invocation);
+            }
+
+            return;
+        }
+
         var typedClient = HttpClientRegistrationChain.TryGetTypedClient(
             invocation,
             context.SemanticModel,

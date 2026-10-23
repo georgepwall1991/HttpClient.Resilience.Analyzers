@@ -60,6 +60,7 @@ public sealed class HCR065_RequestMessageResendAnalyzer : DiagnosticAnalyzer
                     ForEachVariableStatementSyntax or WhileStatementSyntax or DoStatementSyntax);
             if (loop is not null &&
                 ReferenceEquals(loop.Parent, block) &&
+                !LocalIsDeclaredInsideLoop(loop, requestSymbol) &&
                 !SyntaxTransparency.LocalIsReassignedBetween(
                     loop,
                     requestSymbol.Name,
@@ -92,6 +93,40 @@ public sealed class HCR065_RequestMessageResendAnalyzer : DiagnosticAnalyzer
                 DiagnosticDescriptors.HCR065,
                 requestArgument.GetLocation()));
         }
+    }
+
+    private static bool LocalIsDeclaredInsideLoop(StatementSyntax loop, ISymbol symbol)
+    {
+        if (symbol is not ILocalSymbol)
+        {
+            return false;
+        }
+
+        foreach (var reference in symbol.DeclaringSyntaxReferences)
+        {
+            var declaration = reference.GetSyntax();
+            if (declaration is ForEachStatementSyntax or ForEachVariableStatementSyntax)
+            {
+                // The iteration variable is declared by the loop statement itself and
+                // receives a new value on every iteration.
+                return ReferenceEquals(declaration, loop);
+            }
+
+            // A for-loop initializer runs once, so the declared request is reused by
+            // every iteration and must still be reported.
+            if (loop is ForStatementSyntax { Declaration: { } forDeclaration } &&
+                forDeclaration.Span.Contains(declaration.Span))
+            {
+                return false;
+            }
+
+            if (loop.Span.Contains(declaration.Span))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsSendInvocation(

@@ -1257,4 +1257,38 @@ public sealed class HCR043_CustomPipelineUnsafeRetryAnalyzerTests
             "AddRetry",
             source.Substring(diagnostic.Location.SourceSpan.Start, diagnostic.Location.SourceSpan.Length));
     }
+    [Fact]
+    public async Task ReportsDiagnostic_WhenConfigureHttpClientDefaultsRegistersRetryingPipeline()
+    {
+        var source = "using System.Net.Http;\nusing System.Threading;\nusing System.Threading.Tasks;\nusing Polly;\n" +
+            CustomPipelineSources.FrameworkStubs + """
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.ConfigureHttpClientDefaults(builder =>
+                        builder.AddResilienceHandler("payments", pipeline =>
+                        {
+                            pipeline.AddRetry(new HttpRetryStrategyOptions());
+                        }));
+                    services.AddHttpClient<PaymentsClient>();
+                }
+            }
+
+            public sealed class PaymentsClient(HttpClient httpClient)
+            {
+                public Task<HttpResponseMessage> CreateAsync(CancellationToken cancellationToken)
+                {
+                    return httpClient.PostAsync("/payments", null, cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR043_CustomPipelineUnsafeRetryAnalyzer>
+            .GetDiagnosticsAsync(source);
+
+        AssertHcr043OnAddRetry(Assert.Single(diagnostics), source);
+    }
+
 }

@@ -5,20 +5,15 @@
       "tests/HttpClient.Resilience.Analyzers.Tests/HttpClient.Resilience.Analyzers.Tests.csproj"
     ],
     "mutate": [
-      "**/HCR002_AddPooledConnectionLifetimeCodeFixProvider.cs",
-      "**/HCR004_TypedClientInjectedIntoSingletonAnalyzer.cs",
-      "**/HCR005_RemoveDuplicateTypedClientRegistrationCodeFixProvider.cs",
-      "**/HCR042*.cs",
-      "**/HCR043*.cs",
-      "**/HCR060_DisposeResponseCodeFixProvider.cs",
-      "**/HCR081_DisposeStreamCodeFixProvider.cs",
-      "**/HCR083_TypedClientRelativeUrlWithoutBaseAddressAnalyzer.cs",
-      "**/HttpMethodSafety.cs",
-      "**/ResilienceHandlerInvocation.cs",
-      "**/ResilienceRetryInvocation.cs",
-      "**/RetryUnsafeMethodGuard.cs",
-      "**/SafeHttpMethodPredicate.cs",
-      "**/TopLevelUsingDeclarationMerge.cs"
+      "**/HCR006_InvalidHttpClientTimeoutAnalyzer.cs",
+      "**/HCR041_UnsafeMethodRetryAnalyzer.cs",
+      "**/HCR042_UnsafeMethodHedgingAnalyzer.cs",
+      "**/HCR043_CustomPipelineUnsafeRetryAnalyzer.cs",
+      "**/HCR065_RequestMessageResendAnalyzer.cs",
+      "**/HCR087_BaseAddressMissingTrailingSlashAnalyzer.cs",
+      "**/HCR088_TypedClientMissingHttpClientConstructorAnalyzer.cs",
+      "**/BlockSyntaxIndex.cs",
+      "**/FrameworkRegistrationMethods.cs"
     ],
     "thresholds": {
       "high": 80,

@@ -17,7 +17,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Add HCR087: flag HttpClient.BaseAddress assigned a constant URI whose non-root path lacks a trailing slash.</PackageReleaseNotes>
+    <PackageReleaseNotes>Add HCR087 (BaseAddress missing a trailing slash) and HCR088 (typed client without an HttpClient constructor). Extend HCR041-HCR043 to ConfigureHttpClientDefaults registrations, and harden the response, stream, request-reuse, timeout, and base-address analyses against false positives.</PackageReleaseNotes>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>

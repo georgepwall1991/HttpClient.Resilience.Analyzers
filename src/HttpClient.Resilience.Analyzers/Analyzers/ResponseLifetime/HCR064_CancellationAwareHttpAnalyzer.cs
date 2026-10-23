@@ -60,8 +60,22 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
             !IsKnownCancellationAwareMethodName(memberAccess.Name.Identifier.ValueText) ||
             InvocationAlreadyPassesCancellationToken(invocation, context.SemanticModel, context.CancellationToken) ||
-            !VisibleCancellationTokenExists(invocation, context.SemanticModel, context.CancellationToken) ||
-            !IsCancellationAwareHttpCall(invocation, memberAccess, context.SemanticModel, context.CancellationToken))
+            !VisibleCancellationTokenExists(invocation, context.SemanticModel, context.CancellationToken))
+        {
+            return;
+        }
+
+        // Bind the invocation once and share the result across the HTTP API, receiver,
+        // and overload checks.
+        var method = context.SemanticModel
+            .GetSymbolInfo(invocation, context.CancellationToken)
+            .Symbol as IMethodSymbol;
+        if (!IsCancellationAwareHttpCall(
+                invocation,
+                memberAccess,
+                method,
+                context.SemanticModel,
+                context.CancellationToken))
         {
             return;
         }
@@ -80,24 +94,22 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
     private static bool IsCancellationAwareHttpCall(
         InvocationExpressionSyntax invocation,
         MemberAccessExpressionSyntax memberAccess,
+        IMethodSymbol? method,
         SemanticModel semanticModel,
         System.Threading.CancellationToken cancellationToken)
     {
-        return InvocationTargetsKnownHttpApi(invocation, semanticModel, cancellationToken) &&
+        return InvocationTargetsKnownHttpApi(method) &&
             ((HttpClientMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
                 IsHttpClientReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
-                MethodHasCancellationTokenOverload(invocation, semanticModel, cancellationToken)) ||
+                MethodHasCancellationTokenOverload(method)) ||
             (HttpContentMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) &&
                 IsHttpContentReceiver(memberAccess.Expression, semanticModel, cancellationToken) &&
-                MethodHasCancellationTokenOverload(invocation, semanticModel, cancellationToken)));
+                MethodHasCancellationTokenOverload(method)));
     }
 
-    private static bool InvocationTargetsKnownHttpApi(
-        InvocationExpressionSyntax invocation,
-        SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
+    private static bool InvocationTargetsKnownHttpApi(IMethodSymbol? method)
     {
-        if (semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is not IMethodSymbol method)
+        if (method is null)
         {
             return true;
         }
@@ -112,12 +124,9 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
             "global::System.Net.Http.Json.HttpContentJsonExtensions";
     }
 
-    private static bool MethodHasCancellationTokenOverload(
-        InvocationExpressionSyntax invocation,
-        SemanticModel semanticModel,
-        System.Threading.CancellationToken cancellationToken)
+    private static bool MethodHasCancellationTokenOverload(IMethodSymbol? method)
     {
-        if (semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is not IMethodSymbol method)
+        if (method is null)
         {
             return true;
         }
