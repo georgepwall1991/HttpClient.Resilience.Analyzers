@@ -5,7 +5,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageId>HttpClient.Resilience.Analyzers</PackageId>
-    <Version>0.1.215</Version>
+    <Version>0.1.216</Version>
     <Title>HttpClient Resilience Analyzers — IHttpClientFactory, Polly, and Http.Resilience</Title>
     <Authors>George Wall</Authors>
     <Copyright>Copyright (c) George Wall and contributors 2026</Copyright>
@@ -17,7 +17,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Reduce false positives with fixes found by scanning public .NET repositories. HCR001 and HCR062 now recognize retained clients and freshly configured factory helpers, HCR060/HCR081 follow branch-owned and wrapped response/stream transfers, HCR061 accepts fatal success guards before a read result is observed, HCR065 understands mutually exclusive request sends, and test-context detection covers test attributes, base types, namespaces, and test directories.</PackageReleaseNotes>
+    <PackageReleaseNotes>Detect per-probe HttpClient creation in health-check implementations (HCR001), including inherited IHealthCheck interfaces, without treating custom lookalikes as framework evidence. Add a pinned public-repository scan regression corpus to keep analyzer precision honest across real clients, libraries, and framework components.</PackageReleaseNotes>
     <DevelopmentDependency>true</DevelopmentDependency>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
