@@ -103,11 +103,13 @@ public sealed class HCR062_DefaultRequestHeadersMutationAnalyzer : DiagnosticAna
         System.Threading.CancellationToken cancellationToken)
     {
         // Mutating DefaultRequestHeaders on the client handed to an AddHttpClient /
-        // ConfigureHttpClient delegate, or on the client injected into a registered
-        // typed client's constructor, runs once per client construction — that is the
-        // documented configuration pattern, not a per-request leak.
+        // ConfigureHttpClient delegate, on the client injected into a registered
+        // typed client's constructor, or on a client the containing type constructs
+        // and retains in an instance member, runs once during client construction —
+        // that is the documented configuration pattern, not a per-request leak.
         return IsConfigureDelegateReceiver(headersAccess, semanticModel, cancellationToken) ||
-            IsRegisteredTypedClientConstructorReceiver(headersAccess, semanticModel, compilation, cancellationToken);
+            IsRegisteredTypedClientConstructorReceiver(headersAccess, semanticModel, compilation, cancellationToken) ||
+            IsOwnedClientConstructorConfiguration(headersAccess, semanticModel, cancellationToken);
     }
 
     private static bool IsConfigureDelegateReceiver(
@@ -185,6 +187,109 @@ public sealed class HCR062_DefaultRequestHeadersMutationAnalyzer : DiagnosticAna
         }
 
         return IsRegisteredTypedClient(containingType, compilation, cancellationToken);
+    }
+
+    private static bool IsOwnedClientConstructorConfiguration(
+        MemberAccessExpressionSyntax headersAccess,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (headersAccess.FirstAncestorOrSelf<ConstructorDeclarationSyntax>() is not { } constructor ||
+            semanticModel.GetDeclaredSymbol(constructor, cancellationToken) is not
+            {
+                ContainingType: { } containingType
+            } constructorSymbol)
+        {
+            return false;
+        }
+
+        var receiverSymbol = semanticModel.GetSymbolInfo(headersAccess.Expression, cancellationToken).Symbol;
+        ISymbol? member = receiverSymbol switch
+        {
+            IFieldSymbol field => field,
+            IPropertySymbol property => property,
+            _ => null
+        };
+
+        if (member is null ||
+            !SymbolEqualityComparer.Default.Equals(member.ContainingType, containingType) ||
+            member.IsStatic != constructorSymbol.IsStatic)
+        {
+            return false;
+        }
+
+        return MemberReceivesNewHttpClient(member, constructor, semanticModel, cancellationToken);
+    }
+
+    private static bool MemberReceivesNewHttpClient(
+        ISymbol member,
+        ConstructorDeclarationSyntax constructor,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        foreach (var reference in member.DeclaringSyntaxReferences)
+        {
+            var initializer = reference.GetSyntax(cancellationToken) switch
+            {
+                VariableDeclaratorSyntax variable => variable.Initializer,
+                PropertyDeclarationSyntax property => property.Initializer,
+                _ => null
+            };
+
+            if (initializer?.Value is { } value &&
+                ContainsHttpClientCreation(value, semanticModel, cancellationToken))
+            {
+                return true;
+            }
+        }
+
+        foreach (var assignment in constructor.DescendantNodes().OfType<AssignmentExpressionSyntax>())
+        {
+            if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) ||
+                assignment.FirstAncestorOrSelf<AnonymousFunctionExpressionSyntax>() is not null ||
+                assignment.FirstAncestorOrSelf<LocalFunctionStatementSyntax>() is not null ||
+                !SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetSymbolInfo(assignment.Left, cancellationToken).Symbol,
+                    member))
+            {
+                continue;
+            }
+
+            if (ContainsHttpClientCreation(assignment.Right, semanticModel, cancellationToken))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsHttpClientCreation(
+        SyntaxNode node,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        foreach (var creation in node.DescendantNodesAndSelf().OfType<BaseObjectCreationExpressionSyntax>())
+        {
+            var createdType = semanticModel.GetTypeInfo(creation, cancellationToken).Type;
+            if (createdType is not null && createdType is not IErrorTypeSymbol)
+            {
+                if (HttpClientSymbols.IsHttpClient(createdType))
+                {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if (creation is ObjectCreationExpressionSyntax objectCreation &&
+                HttpClientSymbols.IsHttpClientName(objectCreation.Type))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsRegisteredTypedClient(

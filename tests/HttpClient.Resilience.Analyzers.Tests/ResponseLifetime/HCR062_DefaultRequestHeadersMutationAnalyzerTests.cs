@@ -321,4 +321,141 @@ public sealed class HCR062_DefaultRequestHeadersMutationAnalyzerTests
         Assert.Equal(DiagnosticIds.HCR062, diagnostic.Id);
     }
 
+    [Fact]
+    public async Task DoesNotReport_WhenConstructorConfiguresClientItCreates()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class NuGetVersionLookupService
+            {
+                private readonly HttpClient _httpClient;
+
+                public NuGetVersionLookupService(HttpClient? httpClient = null)
+                {
+                    _httpClient = httpClient ?? new HttpClient();
+                    _httpClient.DefaultRequestHeaders.Add("User-Agent", "CPMigrate-CLI");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenConstructorConfiguresClientCreatedInFieldInitializer()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class NuGetVersionLookupService
+            {
+                private readonly HttpClient _httpClient = new HttpClient();
+
+                public NuGetVersionLookupService()
+                {
+                    _httpClient.DefaultRequestHeaders.Add("User-Agent", "CPMigrate-CLI");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenMethodConfiguresClientConstructedInConstructor()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class NuGetVersionLookupService
+            {
+                private readonly HttpClient _httpClient = new HttpClient();
+
+                public void Configure()
+                {
+                    _httpClient.DefaultRequestHeaders.Add("User-Agent", "CPMigrate-CLI");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR062, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenConstructorConfiguresStaticClient()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class NuGetVersionLookupService
+            {
+                private static readonly HttpClient Shared = new HttpClient();
+
+                public NuGetVersionLookupService()
+                {
+                    Shared.DefaultRequestHeaders.Add("User-Agent", "CPMigrate-CLI");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR062, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenConstructorConfiguresInjectedClientRetainedInField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class NuGetVersionLookupService
+            {
+                private readonly HttpClient _httpClient;
+
+                public NuGetVersionLookupService(HttpClient httpClient)
+                {
+                    _httpClient = httpClient;
+                    _httpClient.DefaultRequestHeaders.Add("User-Agent", "CPMigrate-CLI");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR062, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenStaticConstructorConfiguresClientItCreates()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ApiClient
+            {
+                private static readonly HttpClient Shared;
+
+                static ApiClient()
+                {
+                    Shared = new HttpClient();
+                    Shared.DefaultRequestHeaders.Add("User-Agent", "HCR-Tests");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
 }
