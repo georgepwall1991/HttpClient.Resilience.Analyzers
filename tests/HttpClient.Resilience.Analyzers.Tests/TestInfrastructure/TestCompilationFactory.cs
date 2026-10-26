@@ -15,16 +15,26 @@ internal static class TestCompilationFactory
 
     public static CSharpCompilation Create(string assemblyName, params string[] sources)
     {
-        if (sources.Length == 0)
+        return Create(
+            assemblyName,
+            sources.Select((source, index) => (source, index == 0 ? "Test.cs" : $"Test{index}.cs")));
+    }
+
+    public static CSharpCompilation Create(
+        string assemblyName,
+        IEnumerable<(string Source, string Path)> sources)
+    {
+        var sourceArray = sources.ToArray();
+        if (sourceArray.Length == 0)
         {
             throw new ArgumentException("At least one source file is required.", nameof(sources));
         }
 
-        var syntaxTrees = sources
-            .Select((source, index) => CSharpSyntaxTree.ParseText(
-                SourceText.From(source, Encoding.UTF8),
+        var syntaxTrees = sourceArray
+            .Select(source => CSharpSyntaxTree.ParseText(
+                SourceText.From(source.Source, Encoding.UTF8),
                 CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview),
-                path: index == 0 ? "Test.cs" : $"Test{index}.cs"))
+                path: source.Path))
             .ToArray();
         var outputKind = syntaxTrees.Any(ContainsGlobalStatements)
             ? OutputKind.ConsoleApplication

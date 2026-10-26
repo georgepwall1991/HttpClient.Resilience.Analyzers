@@ -7,6 +7,32 @@ namespace HttpClient.Resilience.Analyzers.Tests.Lifetime;
 public sealed class HCR087_BaseAddressMissingTrailingSlashAnalyzerTests
 {
     [Fact]
+    public async Task DoesNotReport_InTestsNamespace()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            namespace Payments.Tests
+            {
+                public sealed class Factory
+                {
+                    public HttpClient Create()
+                    {
+                        var client = new HttpClient();
+                        client.BaseAddress = new Uri("https://api.example.com/v1");
+                        return client;
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR087_BaseAddressMissingTrailingSlashAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenBaseAddressPathLacksTrailingSlash()
     {
         const string source = """

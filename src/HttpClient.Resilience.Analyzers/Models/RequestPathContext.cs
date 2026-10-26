@@ -24,6 +24,15 @@ internal static class RequestPathContext
         "Job"
     };
 
+    private static readonly string[] TestPathSegments =
+    {
+        "acceptance",
+        "test",
+        "testapps",
+        "testassets",
+        "tests"
+    };
+
     private static readonly string[] TestAttributeNames =
     {
         "Fact",
@@ -116,9 +125,22 @@ internal static class RequestPathContext
 
     public static bool IsInTestContext(SyntaxNode node)
     {
+        if (IsTestFilePath(node.SyntaxTree.FilePath))
+        {
+            return true;
+        }
+
         var type = node.FirstAncestorOrSelf<TypeDeclarationSyntax>();
         if (type is not null &&
-            (IsTestTypeName(type.Identifier.ValueText) || HasTestAttribute(type.AttributeLists)))
+            (IsTestTypeName(type.Identifier.ValueText) ||
+                HasTestAttribute(type.AttributeLists) ||
+                type.BaseList?.Types.Any(baseType => IsTestTypeName(SimpleTypeName(baseType.Type))) == true))
+        {
+            return true;
+        }
+
+        var namespaceDeclaration = node.FirstAncestorOrSelf<BaseNamespaceDeclarationSyntax>();
+        if (namespaceDeclaration is not null && NameLooksLikeTestNamespace(namespaceDeclaration.Name))
         {
             return true;
         }
@@ -294,10 +316,57 @@ internal static class RequestPathContext
         };
     }
 
+    private static bool IsTestFilePath(string path)
+    {
+        if (path.Length == 0 ||
+            (path.IndexOf("test", System.StringComparison.OrdinalIgnoreCase) < 0 &&
+                path.IndexOf("acceptance", System.StringComparison.OrdinalIgnoreCase) < 0))
+        {
+            return false;
+        }
+
+        var segments = path.Split(
+            new[] { '/', '\\' },
+            System.StringSplitOptions.RemoveEmptyEntries);
+        return segments.Any(segment => TestPathSegments.Any(testSegment =>
+            segment.Equals(testSegment, System.StringComparison.OrdinalIgnoreCase)));
+    }
+
     private static bool IsTestTypeName(string name)
     {
         return name.EndsWith("Test", System.StringComparison.Ordinal) ||
             name.EndsWith("Tests", System.StringComparison.Ordinal);
+    }
+
+    private static string SimpleTypeName(TypeSyntax type)
+    {
+        return type switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+            QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText,
+            AliasQualifiedNameSyntax aliasQualified => aliasQualified.Name.Identifier.ValueText,
+            _ => type.ToString()
+        };
+    }
+
+    private static bool NameLooksLikeTestNamespace(NameSyntax name)
+    {
+        return name switch
+        {
+            IdentifierNameSyntax identifier => IsTestNamespaceSegment(identifier.Identifier.ValueText),
+            QualifiedNameSyntax qualified =>
+                NameLooksLikeTestNamespace(qualified.Left) ||
+                NameLooksLikeTestNamespace(qualified.Right),
+            AliasQualifiedNameSyntax aliasQualified => NameLooksLikeTestNamespace(aliasQualified.Name),
+            _ => false
+        };
+    }
+
+    private static bool IsTestNamespaceSegment(string segment)
+    {
+        return segment is "Test" or "Tests" or "Testing" ||
+            segment.EndsWith("Test", System.StringComparison.Ordinal) ||
+            segment.EndsWith("Tests", System.StringComparison.Ordinal);
     }
 
     private static bool HasTestAttribute(SyntaxList<AttributeListSyntax> attributeLists)

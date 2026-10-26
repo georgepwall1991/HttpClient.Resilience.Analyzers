@@ -13,6 +13,7 @@
       "**/HCR087_BaseAddressMissingTrailingSlashAnalyzer.cs",
       "**/HCR088_TypedClientMissingHttpClientConstructorAnalyzer.cs",
       "**/BlockSyntaxIndex.cs",
+      "**/SyntaxTransparency.cs",
       "**/FrameworkRegistrationMethods.cs"
     ],
     "thresholds": {

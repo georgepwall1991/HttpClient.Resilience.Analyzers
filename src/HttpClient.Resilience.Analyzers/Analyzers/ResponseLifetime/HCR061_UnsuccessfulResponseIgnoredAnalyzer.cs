@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.KnownSymbols;
+using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -49,6 +50,11 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
     private static void AnalyzeLocalDeclaration(SyntaxNodeAnalysisContext context)
     {
         var declaration = (LocalDeclarationStatementSyntax)context.Node;
+        if (RequestPathContext.IsInTestContext(declaration))
+        {
+            return;
+        }
+
         foreach (var variable in declaration.Declaration.Variables)
         {
             if (variable.Initializer?.Value is not { } initializer ||
@@ -63,7 +69,13 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
                 continue;
             }
 
-            if (HasSuccessCheckBefore(variable, responseLocal, contentRead, context.SemanticModel, context.CancellationToken))
+            if (HasSuccessCheckBefore(variable, responseLocal, contentRead, context.SemanticModel, context.CancellationToken) ||
+                SuccessCheckGuardsReadResult(
+                    variable,
+                    responseLocal,
+                    contentRead,
+                    context.SemanticModel,
+                    context.CancellationToken))
             {
                 continue;
             }
@@ -77,7 +89,8 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context)
     {
         var assignment = (AssignmentExpressionSyntax)context.Node;
-        if (assignment.Parent is not ExpressionStatementSyntax ||
+        if (RequestPathContext.IsInTestContext(assignment) ||
+            assignment.Parent is not ExpressionStatementSyntax ||
             assignment.Left is not IdentifierNameSyntax responseIdentifier ||
             !InitializerMaterializesHttpResponse(assignment.Right, context.SemanticModel, context.CancellationToken) ||
             context.SemanticModel.GetSymbolInfo(responseIdentifier, context.CancellationToken).Symbol is not ILocalSymbol responseLocal)
@@ -86,7 +99,13 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
         }
 
         if (FindFirstContentRead(assignment, responseLocal, context.SemanticModel, context.CancellationToken) is not { } contentRead ||
-            HasSuccessCheckBefore(assignment, responseLocal, contentRead, context.SemanticModel, context.CancellationToken))
+            HasSuccessCheckBefore(assignment, responseLocal, contentRead, context.SemanticModel, context.CancellationToken) ||
+            SuccessCheckGuardsReadResult(
+                assignment,
+                responseLocal,
+                contentRead,
+                context.SemanticModel,
+                context.CancellationToken))
         {
             return;
         }
@@ -513,6 +532,162 @@ public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzer : DiagnosticAnaly
                     cancellationToken),
                 _ => false
             });
+    }
+
+    /// <summary>
+    /// Reading a failed response body into a local is harmless when the result is not
+    /// observed until after a success guard has run. The guard must dominate the first
+    /// use: either <c>EnsureSuccessStatusCode()</c>, or an if-condition that treats a
+    /// failed status as fatal and whose branch always exits.
+    /// </summary>
+    private static bool SuccessCheckGuardsReadResult(
+        SyntaxNode origin,
+        ILocalSymbol responseLocal,
+        InvocationExpressionSyntax contentRead,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (origin.FirstAncestorOrSelf<BlockSyntax>() is not { } block ||
+            GetContentReadResultLocal(contentRead, semanticModel, cancellationToken) is not { } readLocal)
+        {
+            return false;
+        }
+
+        var firstUse = block
+            .DescendantNodes()
+            .OfType<IdentifierNameSyntax>()
+            .Where(identifier => identifier.SpanStart > contentRead.Span.End &&
+                SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol,
+                    readLocal))
+            .OrderBy(identifier => identifier.SpanStart)
+            .FirstOrDefault();
+
+        if (firstUse is null)
+        {
+            return false;
+        }
+
+        return block
+            .DescendantNodes()
+            .Where(node => node.SpanStart > contentRead.Span.End && node.SpanStart < firstUse.SpanStart)
+            .Any(node => node switch
+            {
+                InvocationExpressionSyntax invocation =>
+                    IsEnsureSuccessStatusCodeCall(
+                        invocation,
+                        responseLocal,
+                        origin.SpanStart,
+                        semanticModel,
+                        cancellationToken) &&
+                    InvocationDominatesUse(invocation, firstUse),
+                MemberAccessExpressionSyntax memberAccess =>
+                    IsSuccessStatusCheck(
+                        memberAccess,
+                        responseLocal,
+                        origin.SpanStart,
+                        semanticModel,
+                        cancellationToken) &&
+                    FailureGuardDominatesUse(memberAccess, firstUse),
+                _ => false
+            });
+    }
+
+    private static ILocalSymbol? GetContentReadResultLocal(
+        InvocationExpressionSyntax contentRead,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        foreach (var ancestor in contentRead.Ancestors())
+        {
+            if (ancestor is VariableDeclaratorSyntax { Initializer: { } initializer } variable &&
+                initializer.Value.Span.Contains(contentRead.Span))
+            {
+                return semanticModel.GetDeclaredSymbol(variable, cancellationToken) as ILocalSymbol;
+            }
+
+            if (ancestor is AssignmentExpressionSyntax { Left: IdentifierNameSyntax target } assignment &&
+                assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                assignment.Right.Span.Contains(contentRead.Span))
+            {
+                return semanticModel.GetSymbolInfo(target, cancellationToken).Symbol as ILocalSymbol;
+            }
+
+            if (ancestor is StatementSyntax)
+            {
+                break;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool InvocationDominatesUse(InvocationExpressionSyntax invocation, SyntaxNode use)
+    {
+        if (invocation.FirstAncestorOrSelf<ExpressionStatementSyntax>() is not { } statement ||
+            statement.Parent is not BlockSyntax statementBlock)
+        {
+            return false;
+        }
+
+        var useBlock = use.FirstAncestorOrSelf<BlockSyntax>();
+        return useBlock is not null &&
+            (statementBlock == useBlock || useBlock.Ancestors().OfType<BlockSyntax>().Contains(statementBlock));
+    }
+
+    private static bool FailureGuardDominatesUse(MemberAccessExpressionSyntax memberAccess, SyntaxNode use)
+    {
+        var ifStatement = memberAccess.FirstAncestorOrSelf<IfStatementSyntax>();
+        if (ifStatement is null ||
+            !ifStatement.Condition.Span.Contains(memberAccess.Span) ||
+            !ConditionTreatsSuccessAsFailure(ifStatement.Condition, memberAccess) ||
+            !SyntaxTransparency.StatementAlwaysExits(ifStatement.Statement))
+        {
+            return false;
+        }
+
+        var guardBlock = ifStatement.Parent as BlockSyntax;
+        var useBlock = use.FirstAncestorOrSelf<BlockSyntax>();
+        return guardBlock is not null &&
+            useBlock is not null &&
+            (guardBlock == useBlock || useBlock.Ancestors().OfType<BlockSyntax>().Contains(guardBlock));
+    }
+
+    private static bool ConditionTreatsSuccessAsFailure(ExpressionSyntax condition, SyntaxNode memberAccess)
+    {
+        condition = UnwrapParentheses(condition);
+        return condition switch
+        {
+            PrefixUnaryExpressionSyntax prefix when prefix.IsKind(SyntaxKind.LogicalNotExpression) =>
+                prefix.Operand.Span.Contains(memberAccess.Span),
+            BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.EqualsExpression) =>
+                (IsBooleanLiteral(binary.Right, SyntaxKind.FalseLiteralExpression) &&
+                    binary.Left.Span.Contains(memberAccess.Span)) ||
+                (IsBooleanLiteral(binary.Left, SyntaxKind.FalseLiteralExpression) &&
+                    binary.Right.Span.Contains(memberAccess.Span)),
+            BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.NotEqualsExpression) =>
+                (IsBooleanLiteral(binary.Right, SyntaxKind.TrueLiteralExpression) &&
+                    binary.Left.Span.Contains(memberAccess.Span)) ||
+                (IsBooleanLiteral(binary.Left, SyntaxKind.TrueLiteralExpression) &&
+                    binary.Right.Span.Contains(memberAccess.Span)),
+            _ => false
+        };
+    }
+
+    private static bool IsBooleanLiteral(ExpressionSyntax expression, SyntaxKind kind)
+    {
+        return UnwrapParentheses(expression) is LiteralExpressionSyntax literal &&
+            literal.IsKind(kind);
+    }
+
+    private static ExpressionSyntax UnwrapParentheses(ExpressionSyntax expression)
+    {
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
+        return expression;
     }
 
     private static bool IsInContentReadScope(SyntaxNode candidate, InvocationExpressionSyntax contentRead)

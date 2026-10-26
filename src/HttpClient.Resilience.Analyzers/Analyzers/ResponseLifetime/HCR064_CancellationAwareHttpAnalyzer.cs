@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.KnownSymbols;
+using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -57,7 +58,8 @@ public sealed class HCR064_CancellationAwareHttpAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
-        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+        if (RequestPathContext.IsInTestContext(invocation) ||
+            invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
             !IsKnownCancellationAwareMethodName(memberAccess.Name.Identifier.ValueText) ||
             InvocationAlreadyPassesCancellationToken(invocation, context.SemanticModel, context.CancellationToken) ||
             !VisibleCancellationTokenExists(invocation, context.SemanticModel, context.CancellationToken))

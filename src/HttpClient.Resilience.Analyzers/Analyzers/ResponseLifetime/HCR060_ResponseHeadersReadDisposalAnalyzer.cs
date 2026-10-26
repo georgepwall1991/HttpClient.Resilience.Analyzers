@@ -28,7 +28,8 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
     {
         var declaration = (LocalDeclarationStatementSyntax)context.Node;
 
-        if (declaration.UsingKeyword != default)
+        if (RequestPathContext.IsInTestContext(declaration) ||
+            declaration.UsingKeyword != default)
         {
             return;
         }
@@ -66,8 +67,9 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context)
     {
         var assignment = (AssignmentExpressionSyntax)context.Node;
-        if (assignment.Left is not IdentifierNameSyntax identifier ||
-            context.SemanticModel.GetSymbolInfo(identifier, context.CancellationToken).Symbol is not ILocalSymbol ||
+        if (RequestPathContext.IsInTestContext(assignment) ||
+            assignment.Left is not IdentifierNameSyntax identifier ||
+            context.SemanticModel.GetSymbolInfo(identifier, context.CancellationToken).Symbol is not ILocalSymbol local ||
             !InitializerMaterializesResponse(
                 assignment.Right,
                 context.SemanticModel,
@@ -80,7 +82,7 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
             return;
         }
 
-        if (OwnershipIsTransferredOrDisposed(identifier.Identifier.ValueText, assignment))
+        if (OwnershipIsTransferredOrDisposed(local, assignment))
         {
             return;
         }
@@ -405,12 +407,20 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         return OwnershipIsTransferredOrDisposed(containingBlock, variableName, variable.SpanStart);
     }
 
-    private static bool OwnershipIsTransferredOrDisposed(string variableName, AssignmentExpressionSyntax assignment)
+    private static bool OwnershipIsTransferredOrDisposed(ILocalSymbol local, AssignmentExpressionSyntax assignment)
     {
-        var containingBlock = assignment.FirstAncestorOrSelf<BlockSyntax>();
+        // The assigned value can escape from the local's declaration scope even when the
+        // assignment sits in a nested branch, so ownership evidence has to be searched in
+        // the block that declares the local.
+        var declarationBlock = local.DeclaringSyntaxReferences
+            .Select(reference => reference.GetSyntax())
+            .OfType<VariableDeclaratorSyntax>()
+            .Select(variable => variable.FirstAncestorOrSelf<BlockSyntax>())
+            .FirstOrDefault(block => block is not null);
+        var containingBlock = declarationBlock ?? assignment.FirstAncestorOrSelf<BlockSyntax>();
 
         return containingBlock is not null &&
-            OwnershipIsTransferredOrDisposed(containingBlock, variableName, assignment.SpanStart);
+            OwnershipIsTransferredOrDisposed(containingBlock, local.Name, assignment.SpanStart);
     }
 
     private static bool OwnershipIsTransferredOrDisposed(BlockSyntax containingBlock, string variableName, int ownershipStart)
@@ -768,12 +778,18 @@ public sealed class HCR060_ResponseHeadersReadDisposalAnalyzer : DiagnosticAnaly
         int start,
         int end)
     {
+        var origin = BlockSyntaxIndex.Get(containingBlock)
+            .Assignments
+            .FirstOrDefault(assignment => assignment.SpanStart == start);
+
         return BlockSyntaxIndex.Get(containingBlock)
             .Assignments
             .Any(assignment => assignment.SpanStart > start &&
                 assignment.SpanStart < end &&
                 assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
                 assignment.Left is IdentifierNameSyntax identifier &&
-                identifier.Identifier.ValueText == variableName);
+                identifier.Identifier.ValueText == variableName &&
+                !SyntaxTransparency.IsSelfWrappingAssignment(assignment) &&
+                (origin is null || !SyntaxTransparency.AreInMutuallyExclusiveBranches(origin, assignment)));
     }
 }

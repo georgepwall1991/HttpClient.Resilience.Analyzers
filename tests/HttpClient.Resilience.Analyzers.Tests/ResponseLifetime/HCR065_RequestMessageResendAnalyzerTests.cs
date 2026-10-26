@@ -7,6 +7,234 @@ namespace HttpClient.Resilience.Analyzers.Tests.ResponseLifetime;
 public sealed class HCR065_RequestMessageResendAnalyzerTests
 {
     [Fact]
+    public async Task DoesNotReport_InTestsNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            namespace Payments.Tests
+            {
+                public sealed class Client
+                {
+                    public async Task SendAsync(HttpClient client, CancellationToken cancellationToken)
+                    {
+                        var request = new HttpRequestMessage(HttpMethod.Post, "/orders");
+                        await client.SendAsync(request, cancellationToken);
+                        await client.SendAsync(request, cancellationToken);
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR065_RequestMessageResendAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenRequestIsSentInMutuallyExclusiveBranches()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task SendAsync(
+                    HttpClient client,
+                    HttpRequestMessage request,
+                    bool primary,
+                    CancellationToken cancellationToken)
+                {
+                    if (primary)
+                    {
+                        await client.SendAsync(request, cancellationToken);
+                    }
+                    else
+                    {
+                        await client.SendAsync(request, cancellationToken);
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR065_RequestMessageResendAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenRequestIsSentInDifferentSwitchSections()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task SendAsync(
+                    HttpClient client,
+                    HttpRequestMessage request,
+                    int mode,
+                    CancellationToken cancellationToken)
+                {
+                    switch (mode)
+                    {
+                        case 1:
+                            await client.SendAsync(request, cancellationToken);
+                            break;
+                        case 2:
+                            await client.SendAsync(request, cancellationToken);
+                            break;
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR065_RequestMessageResendAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenSameRequestIsSentTwiceInOneSwitchSection()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task SendAsync(
+                    HttpClient client,
+                    HttpRequestMessage request,
+                    int mode,
+                    CancellationToken cancellationToken)
+                {
+                    switch (mode)
+                    {
+                        case 1:
+                            await client.SendAsync(request, cancellationToken);
+                            await client.SendAsync(request, cancellationToken);
+                            break;
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR065_RequestMessageResendAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR065, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenRequestIsSentFromConditionalExpressionBranches()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task SendAsync(
+                    HttpClient client,
+                    HttpRequestMessage request,
+                    bool useClient,
+                    CancellationToken cancellationToken)
+                {
+                    var task = useClient
+                        ? client.SendAsync(request, cancellationToken)
+                        : new HttpMessageInvoker(new HttpClientHandler()).SendAsync(request, cancellationToken);
+
+                    await task;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR065_RequestMessageResendAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenFirstSendIsInExitingGuard()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<HttpResponseMessage> SendAsync(
+                    HttpClient client,
+                    HttpRequestMessage request,
+                    bool shortcut,
+                    CancellationToken cancellationToken)
+                {
+                    if (shortcut)
+                    {
+                        return await client.SendAsync(request, cancellationToken);
+                    }
+
+                    return await client.SendAsync(request, cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR065_RequestMessageResendAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenSendCanFollowEitherBranchOfAnEarlierChoice()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task SendAsync(
+                    HttpClient client,
+                    HttpRequestMessage request,
+                    bool primary,
+                    bool retry,
+                    CancellationToken cancellationToken)
+                {
+                    if (primary)
+                    {
+                        await client.SendAsync(request, cancellationToken);
+                    }
+                    else
+                    {
+                        await client.SendAsync(request, cancellationToken);
+                    }
+
+                    if (retry)
+                    {
+                        await client.SendAsync(request, cancellationToken);
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR065_RequestMessageResendAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR065, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenSameRequestIsSentTwice()
     {
         const string source = """

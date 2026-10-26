@@ -26,6 +26,11 @@ public sealed class HCR065_RequestMessageResendAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeBlock(SyntaxNodeAnalysisContext context)
     {
         var block = (BlockSyntax)context.Node;
+        if (RequestPathContext.IsInTestContext(block))
+        {
+            return;
+        }
+
         var sends = block.Statements
             .SelectMany(statement => statement.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>())
             .Where(invocation => IsSendInvocation(invocation, context.SemanticModel, context.CancellationToken))
@@ -36,7 +41,7 @@ public sealed class HCR065_RequestMessageResendAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        var sentSymbols = new Dictionary<ISymbol, InvocationExpressionSyntax>(SymbolEqualityComparer.Default);
+        var sentSymbols = new Dictionary<ISymbol, List<InvocationExpressionSyntax>>(SymbolEqualityComparer.Default);
         foreach (var send in sends)
         {
             var requestArgument = send.ArgumentList.Arguments.FirstOrDefault();
@@ -73,25 +78,35 @@ public sealed class HCR065_RequestMessageResendAnalyzer : DiagnosticAnalyzer
                 continue;
             }
 
-            if (!sentSymbols.TryGetValue(requestSymbol, out var firstSend))
+            if (!sentSymbols.TryGetValue(requestSymbol, out var previousSends))
             {
-                sentSymbols[requestSymbol] = send;
+                sentSymbols[requestSymbol] = new List<InvocationExpressionSyntax> { send };
                 continue;
             }
 
+            var lastSend = previousSends[previousSends.Count - 1];
             if (SyntaxTransparency.LocalIsReassignedBetween(
                     block,
                     requestSymbol.Name,
-                    firstSend.SpanStart,
+                    lastSend.SpanStart,
                     send.SpanStart))
             {
-                sentSymbols[requestSymbol] = send;
+                previousSends.Clear();
+                previousSends.Add(send);
                 continue;
             }
 
-            context.ReportDiagnostic(Diagnostic.Create(
-                DiagnosticDescriptors.HCR065,
-                requestArgument.GetLocation()));
+            // Keep earlier sends so a later send is compared against every path that
+            // could have reached it, not only the most recent branch.
+            if (previousSends.Any(previous => !SyntaxTransparency.AreInMutuallyExclusiveBranches(previous, send)))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.HCR065,
+                    requestArgument.GetLocation()));
+                continue;
+            }
+
+            previousSends.Add(send);
         }
     }
 

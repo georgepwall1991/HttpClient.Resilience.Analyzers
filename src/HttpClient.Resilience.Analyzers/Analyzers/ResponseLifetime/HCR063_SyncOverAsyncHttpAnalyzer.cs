@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using HttpClient.Resilience.Analyzers.Diagnostics;
 using HttpClient.Resilience.Analyzers.KnownSymbols;
+using HttpClient.Resilience.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -50,7 +51,8 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeMemberAccess(SyntaxNodeAnalysisContext context)
     {
         var memberAccess = (MemberAccessExpressionSyntax)context.Node;
-        if (memberAccess.Name.Identifier.ValueText != "Result" ||
+        if (RequestPathContext.IsInTestContext(memberAccess) ||
+            memberAccess.Name.Identifier.ValueText != "Result" ||
             !ExpressionIsHttpAsyncOperation(memberAccess.Expression, context.SemanticModel, context.CancellationToken))
         {
             return;
@@ -64,6 +66,11 @@ public sealed class HCR063_SyncOverAsyncHttpAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
+        if (RequestPathContext.IsInTestContext(invocation))
+        {
+            return;
+        }
+
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
         {
             return;

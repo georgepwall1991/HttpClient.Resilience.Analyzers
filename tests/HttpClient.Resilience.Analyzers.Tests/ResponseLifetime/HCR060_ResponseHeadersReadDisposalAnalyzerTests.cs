@@ -8,6 +8,107 @@ namespace HttpClient.Resilience.Analyzers.Tests.ResponseLifetime;
 public sealed class HCR060_ResponseHeadersReadDisposalAnalyzerTests
 {
     [Fact]
+    public async Task DoesNotReport_WhenBranchAssignedResponseIsTransferredToReturnedWrapper()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<ResponseOwner> UseAsync(
+                    HttpClient client,
+                    HttpRequestMessage request,
+                    bool stream,
+                    CancellationToken cancellationToken)
+                {
+                    HttpResponseMessage? response = null;
+                    if (stream)
+                    {
+                        response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    }
+                    else
+                    {
+                        response = new HttpResponseMessage();
+                    }
+
+                    return new ResponseOwner(response);
+                }
+            }
+
+            public sealed class ResponseOwner(HttpResponseMessage? response)
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenBranchAssignedResponseIsNotObservedAfterAssignment()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task UseAsync(
+                    HttpClient client,
+                    HttpRequestMessage request,
+                    bool stream,
+                    CancellationToken cancellationToken)
+                {
+                    HttpResponseMessage? response = null;
+                    if (stream)
+                    {
+                        response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                    }
+
+                    await Task.Yield();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR060, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_InTestsNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            namespace Payments.Tests
+            {
+                public sealed class Client
+                {
+                    public async Task UseAsync(HttpClient client, CancellationToken cancellationToken)
+                    {
+                        var response = await client.GetAsync(
+                            "https://example.com",
+                            HttpCompletionOption.ResponseHeadersRead,
+                            cancellationToken);
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR060_ResponseHeadersReadDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenResponseHeadersReadResultIsLocalVariable()
     {
         const string source = """

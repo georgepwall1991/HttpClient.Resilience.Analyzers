@@ -8,6 +8,117 @@ namespace HttpClient.Resilience.Analyzers.Tests.Lifetime;
 public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 {
     [Fact]
+    public async Task DoesNotReport_WhenTestTypeDerivesFromTestBase()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public abstract class HttpProxyCookieTests
+            {
+            }
+
+            public sealed class HttpProxyCookieTests_Http1 : HttpProxyCookieTests
+            {
+                public void Create()
+                {
+                    using var client = new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenTypeIsInsideTestsNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            namespace Payments.Tests
+            {
+                public sealed class ClientFactory
+                {
+                    public void Create()
+                    {
+                        using var client = new HttpClient();
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenFilePathIsUnderTestsDirectory()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ClientFactory
+            {
+                public void Create()
+                {
+                    using var client = new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsWithPathsAsync(
+            (source, "/repo/tests/Payments.Tests/ClientFactory.cs"));
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenFilePathIsUnderAcceptanceDirectory()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ClientFactory
+            {
+                public void Create()
+                {
+                    using var client = new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsWithPathsAsync(
+            (source, "/repo/acceptance/Payments/ClientFactory.cs"));
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenOnlyFileNameMentionsTest()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ClientFactory
+            {
+                public void Create()
+                {
+                    using var client = new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsWithPathsAsync(
+            (source, "/repo/src/Payments/TestClientFactory.cs"));
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenServiceCreatesHttpClientInMethod()
     {
         const string source = """

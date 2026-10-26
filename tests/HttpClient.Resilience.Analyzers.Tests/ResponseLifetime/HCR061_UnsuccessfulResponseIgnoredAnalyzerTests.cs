@@ -8,6 +8,181 @@ namespace HttpClient.Resilience.Analyzers.Tests.ResponseLifetime;
 public sealed class HCR061_UnsuccessfulResponseIgnoredAnalyzerTests
 {
     [Fact]
+    public async Task DoesNotReport_WhenContentIsReadBeforeFatalSuccessGuard()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Text.Json;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<TokenResponse?> ReadAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    using var response = await client.PostAsync("https://example.com/token", null, cancellationToken);
+                    var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw new HttpRequestException($"Token request failed with status {response.StatusCode}: {body}");
+                    }
+
+                    return JsonSerializer.Deserialize<TokenResponse>(body);
+                }
+            }
+
+            public sealed class TokenResponse
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenContentIsReadBeforeNegatedEqualityGuard()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> ReadAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                    if (response.IsSuccessStatusCode == false)
+                    {
+                        return string.Empty;
+                    }
+
+                    return body;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenEnsureSuccessStatusCodeFollowsContentRead()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> ReadAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                    response.EnsureSuccessStatusCode();
+                    return body;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenReadContentIsUsedBeforeFatalSuccessGuard()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> ReadAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                    var length = body.Length;
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        throw new HttpRequestException(body);
+                    }
+
+                    return body;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR061, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenSuccessCheckAfterReadDoesNotExit()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<string> ReadAsync(HttpClient client, CancellationToken cancellationToken)
+                {
+                    var response = await client.GetAsync("https://example.com", cancellationToken);
+                    var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        body = string.Empty;
+                    }
+
+                    return body;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR061, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_InTestsNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            namespace Payments.Tests
+            {
+                public sealed class Client
+                {
+                    public async Task<string> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                    {
+                        var response = await client.GetAsync("https://example.com", cancellationToken);
+                        return await response.Content.ReadAsStringAsync(cancellationToken);
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR061_UnsuccessfulResponseIgnoredAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenContentIsReadBeforeSuccessIsChecked()
     {
         const string source = """

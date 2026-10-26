@@ -26,7 +26,8 @@ public sealed class HCR087_BaseAddressMissingTrailingSlashAnalyzer : DiagnosticA
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context)
     {
         var assignment = (AssignmentExpressionSyntax)context.Node;
-        if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) ||
+        if (RequestPathContext.IsInTestContext(assignment) ||
+            !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) ||
             !IsHttpClientBaseAddressAssignment(
                 assignment,
                 context.SemanticModel,

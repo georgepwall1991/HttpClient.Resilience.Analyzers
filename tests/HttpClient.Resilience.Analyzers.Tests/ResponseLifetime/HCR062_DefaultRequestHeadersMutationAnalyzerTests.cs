@@ -7,6 +7,29 @@ namespace HttpClient.Resilience.Analyzers.Tests.ResponseLifetime;
 public sealed class HCR062_DefaultRequestHeadersMutationAnalyzerTests
 {
     [Fact]
+    public async Task DoesNotReport_InTestsNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            namespace Payments.Tests
+            {
+                public sealed class Client
+                {
+                    public void Configure(HttpClient client)
+                    {
+                        client.DefaultRequestHeaders.Add("X-Test", "true");
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenDefaultRequestHeadersAddIsCalled()
     {
         const string source = """
@@ -364,6 +387,313 @@ public sealed class HCR062_DefaultRequestHeadersMutationAnalyzerTests
         var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
 
         Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenFreshClientIsConfiguredBeforeReturn()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class ClientFactory
+            {
+                public static HttpClient Create()
+                {
+                    var client = new HttpClient();
+                    client.DefaultRequestHeaders.Add("X-Api-Version", "2026-01-01");
+                    return client;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenFactoryCreatedClientIsConfiguredBeforeReturn()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class ClientFactory
+            {
+                public static HttpClient Create(IHttpClientFactory factory)
+                {
+                    var client = factory.CreateClient();
+                    client.DefaultRequestHeaders.Add("X-Api-Version", "2026-01-01");
+                    return client;
+                }
+            }
+
+            namespace System.Net.Http
+            {
+                public interface IHttpClientFactory
+                {
+                    HttpClient CreateClient(string name);
+                }
+
+                public static class HttpClientFactoryExtensions
+                {
+                    public static HttpClient CreateClient(this IHttpClientFactory factory) =>
+                        factory.CreateClient(string.Empty);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenFactoryCreatedClientIsConfiguredInBranchBeforeReturn()
+    {
+        const string source = """
+            using System;
+            using System.Collections.Generic;
+            using System.Net.Http;
+
+            public static class DaprDefaults
+            {
+                public static HttpClient CreateDefaultHttpClient(IHttpClientFactory httpClientFactory, bool hasToken)
+                {
+                    var httpClient = httpClientFactory.CreateClient();
+                    httpClient.BaseAddress = new Uri("https://localhost:3500");
+
+                    KeyValuePair<string, string>? apiTokenHeader = hasToken
+                        ? new KeyValuePair<string, string>("dapr-api-token", "secret")
+                        : null;
+                    if (apiTokenHeader is not null)
+                    {
+                        httpClient.DefaultRequestHeaders.Add(apiTokenHeader.Value.Key, apiTokenHeader.Value.Value);
+                    }
+
+                    return httpClient;
+                }
+            }
+
+            namespace System.Net.Http
+            {
+                public interface IHttpClientFactory
+                {
+                    HttpClient CreateClient(string name);
+                }
+
+                public static class HttpClientFactoryExtensions
+                {
+                    public static HttpClient CreateClient(this IHttpClientFactory factory) =>
+                        factory.CreateClient(string.Empty);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenNamedFactoryClientIsConfiguredBeforeReturn()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class ClientFactory
+            {
+                public static HttpClient Create(IHttpClientFactory factory)
+                {
+                    var client = factory.CreateClient("payments");
+                    client.DefaultRequestHeaders.Add("X-Api-Version", "2026-01-01");
+                    return client;
+                }
+            }
+
+            namespace System.Net.Http
+            {
+                public interface IHttpClientFactory
+                {
+                    HttpClient CreateClient(string name);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenFreshLocalClientIsConfiguredAndUsed()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Net.Http.Headers;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class PaymentsClient
+            {
+                private readonly IHttpClientFactory _factory;
+
+                public PaymentsClient(IHttpClientFactory factory)
+                {
+                    _factory = factory;
+                }
+
+                public async Task SendAsync(CancellationToken cancellationToken)
+                {
+                    var client = _factory.CreateClient();
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "token");
+                    await client.GetAsync("https://example.com", cancellationToken);
+                }
+            }
+
+            namespace System.Net.Http
+            {
+                public interface IHttpClientFactory
+                {
+                    HttpClient CreateClient(string name);
+                }
+
+                public static class HttpClientFactoryExtensions
+                {
+                    public static HttpClient CreateClient(this IHttpClientFactory factory) =>
+                        factory.CreateClient(string.Empty);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenFreshLocalClientIsConstructedAndUsed()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class PaymentsClient
+            {
+                public Task SendAsync()
+                {
+                    var client = new HttpClient();
+                    client.DefaultRequestHeaders.Add("X-Tenant", "northwind");
+                    return client.GetAsync("https://example.com");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenFreshLocalClientIsPassedToAnotherMethod()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class PaymentsClient
+            {
+                public async Task SendAsync()
+                {
+                    var client = new HttpClient();
+                    Configure(client);
+                    client.DefaultRequestHeaders.Add("X-Tenant", "northwind");
+                    await client.GetAsync("https://example.com");
+                }
+
+                private static void Configure(HttpClient client)
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR062, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenFreshLocalClientIsStoredInField()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading.Tasks;
+
+            public sealed class PaymentsClient
+            {
+                private HttpClient? _client;
+
+                public async Task SendAsync()
+                {
+                    var client = new HttpClient();
+                    _client = client;
+                    client.DefaultRequestHeaders.Add("X-Tenant", "northwind");
+                    await client.GetAsync("https://example.com");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR062, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenFreshLocalClientIsReassignedBeforeConfiguration()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsClient
+            {
+                private readonly HttpClient _shared = new HttpClient();
+
+                public void Configure()
+                {
+                    var client = new HttpClient();
+                    client = _shared;
+                    client.DefaultRequestHeaders.Add("X-Tenant", "northwind");
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR062, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenInjectedClientIsConfiguredAndReturned()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class ClientFactory
+            {
+                public static HttpClient Configure(HttpClient client)
+                {
+                    client.DefaultRequestHeaders.Add("X-Api-Version", "2026-01-01");
+                    return client;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR062_DefaultRequestHeadersMutationAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR062, diagnostic.Id);
     }
 
     [Fact]

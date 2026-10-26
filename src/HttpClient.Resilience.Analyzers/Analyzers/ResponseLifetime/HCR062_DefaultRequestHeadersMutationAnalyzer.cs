@@ -36,7 +36,8 @@ public sealed class HCR062_DefaultRequestHeadersMutationAnalyzer : DiagnosticAna
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
-        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
+        if (RequestPathContext.IsInTestContext(invocation) ||
+            invocation.Expression is not MemberAccessExpressionSyntax memberAccess ||
             !MutatingHeaderMethodNames.Contains(memberAccess.Name.Identifier.ValueText, System.StringComparer.Ordinal) ||
             !InvocationTargetsSystemNetHttpHeaders(invocation, context.SemanticModel, context.CancellationToken) ||
             FindDefaultRequestHeadersAccess(memberAccess.Expression, context.SemanticModel, context.CancellationToken) is not { } headersAccess ||
@@ -74,7 +75,8 @@ public sealed class HCR062_DefaultRequestHeadersMutationAnalyzer : DiagnosticAna
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context)
     {
         var assignment = (AssignmentExpressionSyntax)context.Node;
-        if (FindDefaultRequestHeadersAccess(assignment.Left, context.SemanticModel, context.CancellationToken) is not { } headersAccess ||
+        if (RequestPathContext.IsInTestContext(assignment) ||
+            FindDefaultRequestHeadersAccess(assignment.Left, context.SemanticModel, context.CancellationToken) is not { } headersAccess ||
             IsOneTimeClientConfiguration(headersAccess, context.SemanticModel, context.Compilation, context.CancellationToken))
         {
             return;
@@ -109,7 +111,196 @@ public sealed class HCR062_DefaultRequestHeadersMutationAnalyzer : DiagnosticAna
         // that is the documented configuration pattern, not a per-request leak.
         return IsConfigureDelegateReceiver(headersAccess, semanticModel, cancellationToken) ||
             IsRegisteredTypedClientConstructorReceiver(headersAccess, semanticModel, compilation, cancellationToken) ||
-            IsOwnedClientConstructorConfiguration(headersAccess, semanticModel, cancellationToken);
+            IsOwnedClientConstructorConfiguration(headersAccess, semanticModel, cancellationToken) ||
+            IsFreshClientReturnedFromMethod(headersAccess, semanticModel, cancellationToken) ||
+            IsUnpublishedLocalClientConfiguration(headersAccess, semanticModel, cancellationToken);
+    }
+
+    private static bool IsUnpublishedLocalClientConfiguration(
+        MemberAccessExpressionSyntax headersAccess,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        // A client created in this method and only used through member access never
+        // reaches another request, so header mutation cannot leak across requests.
+        if (headersAccess.Expression is not IdentifierNameSyntax identifier ||
+            semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is not ILocalSymbol local ||
+            local.DeclaringSyntaxReferences.Length != 1 ||
+            local.DeclaringSyntaxReferences[0].GetSyntax(cancellationToken) is not VariableDeclaratorSyntax variable ||
+            variable.Initializer is not { } initializer ||
+            !CreatesFreshHttpClient(initializer.Value, semanticModel, cancellationToken) ||
+            variable.FirstAncestorOrSelf<MethodDeclarationSyntax>() is not { } method ||
+            IsReassignedBefore(method, local, headersAccess.SpanStart, semanticModel, cancellationToken))
+        {
+            return false;
+        }
+
+        foreach (var reference in method.DescendantNodes().OfType<IdentifierNameSyntax>())
+        {
+            if (reference.SpanStart >= headersAccess.SpanStart && reference == identifier)
+            {
+                // The mutation receiver itself.
+                continue;
+            }
+
+            if (reference.Identifier.ValueText != local.Name ||
+                semanticModel.GetSymbolInfo(reference, cancellationToken).Symbol is not ILocalSymbol referencedLocal ||
+                !SymbolEqualityComparer.Default.Equals(referencedLocal, local))
+            {
+                continue;
+            }
+
+            if (reference.Parent is MemberAccessExpressionSyntax memberAccess &&
+                memberAccess.Expression == reference)
+            {
+                continue;
+            }
+
+            if (reference.Parent is ConditionalAccessExpressionSyntax conditionalAccess &&
+                conditionalAccess.Expression == reference)
+            {
+                continue;
+            }
+
+            if (reference.Parent is AssignmentExpressionSyntax assignment &&
+                assignment.Left == reference &&
+                assignment.SpanStart > headersAccess.SpanStart)
+            {
+                continue;
+            }
+
+            // Passing, storing, or returning the client lets another request observe it.
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsReassignedBefore(
+        MethodDeclarationSyntax method,
+        ILocalSymbol local,
+        int mutationStart,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        return method.DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment =>
+                assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) &&
+                assignment.SpanStart < mutationStart &&
+                assignment.Left is IdentifierNameSyntax left &&
+                left.Identifier.ValueText == local.Name &&
+                semanticModel.GetSymbolInfo(left, cancellationToken).Symbol is ILocalSymbol assignedLocal &&
+                SymbolEqualityComparer.Default.Equals(assignedLocal, local));
+    }
+
+    private static bool IsFreshClientReturnedFromMethod(
+        MemberAccessExpressionSyntax headersAccess,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        // A helper that creates a new client, configures it before publication, and
+        // returns it has not exposed the client to concurrent requests yet.
+        if (headersAccess.Expression is not IdentifierNameSyntax identifier ||
+            semanticModel.GetSymbolInfo(identifier, cancellationToken).Symbol is not ILocalSymbol local ||
+            local.DeclaringSyntaxReferences.Length != 1 ||
+            local.DeclaringSyntaxReferences[0].GetSyntax(cancellationToken) is not VariableDeclaratorSyntax variable ||
+            variable.Initializer is not { } initializer ||
+            !CreatesFreshHttpClient(initializer.Value, semanticModel, cancellationToken) ||
+            variable.FirstAncestorOrSelf<MethodDeclarationSyntax>() is not { } method)
+        {
+            return false;
+        }
+
+        return method.DescendantNodes()
+            .OfType<ReturnStatementSyntax>()
+            .Any(statement => IsDirectReturnOf(statement.Expression, local.Name, method));
+    }
+
+    private static bool IsDirectReturnOf(
+        ExpressionSyntax? expression,
+        string localName,
+        MethodDeclarationSyntax method)
+    {
+        return expression is IdentifierNameSyntax identifier &&
+            identifier.Identifier.ValueText == localName &&
+            ReferenceEquals(identifier.FirstAncestorOrSelf<MethodDeclarationSyntax>(), method) &&
+            identifier.FirstAncestorOrSelf<AnonymousFunctionExpressionSyntax>() is null &&
+            identifier.FirstAncestorOrSelf<LocalFunctionStatementSyntax>() is null;
+    }
+
+    private static bool CreatesFreshHttpClient(
+        ExpressionSyntax expression,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        expression = UnwrapTransparentExpression(expression);
+
+        if (expression is BaseObjectCreationExpressionSyntax creation)
+        {
+            var createdType = semanticModel.GetTypeInfo(creation, cancellationToken).Type;
+            if (createdType is not null && createdType is not IErrorTypeSymbol)
+            {
+                return HttpClientSymbols.IsHttpClient(createdType);
+            }
+
+            return creation is ObjectCreationExpressionSyntax objectCreation &&
+                HttpClientSymbols.IsHttpClientName(objectCreation.Type);
+        }
+
+        if (expression is InvocationExpressionSyntax invocation &&
+            semanticModel.GetSymbolInfo(invocation, cancellationToken).Symbol is IMethodSymbol method)
+        {
+            return IsHttpClientFactoryCreateClient(method);
+        }
+
+        return false;
+    }
+
+    private static bool IsHttpClientFactoryCreateClient(IMethodSymbol method)
+    {
+        // IHttpClientFactory.CreateClient always returns a new HttpClient instance. A
+        // parameterless call binds to the HttpClientFactoryExtensions.CreateClient(this
+        // IHttpClientFactory) convenience overload, so the receiver parameter is checked
+        // as well as the interface member itself.
+        var originalMethod = method.ReducedFrom ?? method;
+        if (originalMethod.Name != "CreateClient")
+        {
+            return false;
+        }
+
+        return IsFrameworkHttpClientFactory(originalMethod.ContainingType) ||
+            (originalMethod.IsExtensionMethod &&
+                originalMethod.Parameters.Length == 1 &&
+                IsFrameworkHttpClientFactory(originalMethod.Parameters[0].Type));
+    }
+
+    private static bool IsFrameworkHttpClientFactory(ITypeSymbol? type)
+    {
+        return type is { Name: "IHttpClientFactory" } &&
+            type.ContainingNamespace?.ToDisplayString() == "System.Net.Http";
+    }
+
+    private static ExpressionSyntax UnwrapTransparentExpression(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case CastExpressionSyntax cast:
+                    expression = cast.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix
+                    when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
+        }
     }
 
     private static bool IsConfigureDelegateReceiver(

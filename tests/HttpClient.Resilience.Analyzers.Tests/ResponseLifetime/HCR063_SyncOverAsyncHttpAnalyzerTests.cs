@@ -8,6 +8,29 @@ namespace HttpClient.Resilience.Analyzers.Tests.ResponseLifetime;
 public sealed class HCR063_SyncOverAsyncHttpAnalyzerTests
 {
     [Fact]
+    public async Task DoesNotReport_InTestsNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            namespace Payments.Tests
+            {
+                public sealed class Client
+                {
+                    public HttpResponseMessage Get(HttpClient client)
+                    {
+                        return client.GetAsync("https://example.com").Result;
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR063_SyncOverAsyncHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenHttpClientAsyncResultIsRead()
     {
         const string source = """

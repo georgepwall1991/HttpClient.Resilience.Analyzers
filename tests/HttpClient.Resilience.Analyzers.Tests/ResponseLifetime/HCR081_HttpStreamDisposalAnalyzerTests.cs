@@ -593,6 +593,231 @@ public sealed class HCR081_HttpStreamDisposalAnalyzerTests
     }
 
     [Fact]
+    public async Task DoesNotReport_WhenStreamIsRewrappedBeforeTransferToReturnedOwner()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<WrappedResponseStream> GetAsync(
+                    HttpResponseMessage response,
+                    bool text,
+                    CancellationToken cancellationToken)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    if (text)
+                    {
+                        stream = new TextResponseStream(stream);
+                    }
+
+                    return new WrappedResponseStream(stream);
+                }
+            }
+
+            public sealed class TextResponseStream(Stream inner) : Stream
+            {
+                public override bool CanRead => inner.CanRead;
+                public override bool CanSeek => inner.CanSeek;
+                public override bool CanWrite => inner.CanWrite;
+                public override long Length => inner.Length;
+                public override long Position { get => inner.Position; set => inner.Position = value; }
+                public override void Flush() => inner.Flush();
+                public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+                public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
+                public override void SetLength(long value) => inner.SetLength(value);
+                public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
+            }
+
+            public sealed class WrappedResponseStream(Stream inner) : Stream
+            {
+                public override bool CanRead => inner.CanRead;
+                public override bool CanSeek => inner.CanSeek;
+                public override bool CanWrite => inner.CanWrite;
+                public override long Length => inner.Length;
+                public override long Position { get => inner.Position; set => inner.Position = value; }
+                public override void Flush() => inner.Flush();
+                public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+                public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
+                public override void SetLength(long value) => inner.SetLength(value);
+                public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenStreamIsForwardedToTransformerBeforeReturn()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<Stream> GetAsync(
+                    HttpResponseMessage response,
+                    CancellationToken cancellationToken)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    stream = Transform(stream);
+                    return stream;
+                }
+
+                private static Stream Transform(Stream stream) => stream;
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenStreamIsReplacedBeforeReturn()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<Stream> GetAsync(
+                    HttpResponseMessage response,
+                    bool reset,
+                    CancellationToken cancellationToken)
+                {
+                    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    if (reset)
+                    {
+                        stream = new MemoryStream();
+                    }
+
+                    return stream;
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR081, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenBranchAssignedStreamIsTransferredToReturnedOwner()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task<Payload> GetAsync(
+                    HttpResponseMessage response,
+                    bool binary,
+                    CancellationToken cancellationToken)
+                {
+                    object body = null;
+                    if (binary)
+                    {
+                        body = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    }
+                    else
+                    {
+                        body = await response.Content.ReadAsStringAsync(cancellationToken);
+                    }
+
+                    return new Payload(body);
+                }
+            }
+
+            public sealed class Payload(object body)
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenBranchAssignedStreamIsNotObservedAfterAssignment()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            public sealed class Client
+            {
+                public async Task CopyAsync(
+                    HttpResponseMessage response,
+                    bool binary,
+                    Stream destination,
+                    CancellationToken cancellationToken)
+                {
+                    object body = null;
+                    if (binary)
+                    {
+                        body = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    }
+
+                    await destination.FlushAsync(cancellationToken);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR081, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_InTestsNamespace()
+    {
+        const string source = """
+            using System.IO;
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            namespace Payments.Tests
+            {
+                public sealed class Client
+                {
+                    public async Task CopyAsync(
+                        HttpResponseMessage response,
+                        Stream destination,
+                        CancellationToken cancellationToken)
+                    {
+                        var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                        await stream.CopyToAsync(destination, cancellationToken);
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR081_HttpStreamDisposalAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task DoesNotReport_WhenNullForgivingStreamIsTransferredToReturnedOwner()
     {
         const string source = """

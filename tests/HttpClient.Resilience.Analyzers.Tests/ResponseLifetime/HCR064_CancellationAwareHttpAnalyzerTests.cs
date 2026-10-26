@@ -8,6 +8,31 @@ namespace HttpClient.Resilience.Analyzers.Tests.ResponseLifetime;
 public sealed class HCR064_CancellationAwareHttpAnalyzerTests
 {
     [Fact]
+    public async Task DoesNotReport_InTestsNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            namespace Payments.Tests
+            {
+                public sealed class Client
+                {
+                    public Task<HttpResponseMessage> GetAsync(HttpClient client, CancellationToken cancellationToken)
+                    {
+                        return client.GetAsync("https://example.com");
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR064_CancellationAwareHttpAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
     public async Task ReportsDiagnostic_WhenHttpClientAsyncCallOmitsAvailableCancellationToken()
     {
         const string source = """
