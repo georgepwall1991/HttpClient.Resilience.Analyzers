@@ -1,0 +1,12 @@
+# HCR scan regression baseline. Regenerate with scripts/Invoke-ScanRegression.ps1 -UpdateBaselines.
+# repository: elastic/elastic-transport-net
+# commit: bc983eab5296ff61cfe265e06b6234953e6686b2
+# target: Elastic.Transport.slnx
+# exit: 0
+HCR060 src/Elastic.Transport/Components/TransportClient/HttpRequestInvoker.cs:132:6
+HCR060 src/Elastic.Transport/Components/TransportClient/HttpRequestInvoker.cs:137:6
+HCR063 src/Elastic.Transport/Components/TransportClient/HttpRequestInvoker.cs:139:132
+HCR063 src/Elastic.Transport/Components/TransportClient/HttpRequestInvoker.cs:161:80
+HCR081 src/Elastic.Transport/Components/TransportClient/HttpRequestInvoker.cs:153:6
+HCR081 src/Elastic.Transport/Components/TransportClient/HttpRequestInvoker.cs:155:6
+HCR081 src/Elastic.Transport/Components/TransportClient/HttpRequestInvoker.cs:159:6

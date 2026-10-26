@@ -1,0 +1,11 @@
+# HCR scan regression baseline. Regenerate with scripts/Invoke-ScanRegression.ps1 -UpdateBaselines.
+# repository: dapr/dotnet-sdk
+# commit: e08c18b6cdacc50fb70b52a3e81ec6d578b4db04
+# target: src/Dapr.Actors/Dapr.Actors.csproj
+# exit: 0
+HCR062 src/Dapr.Client/DaprClientGrpc.cs:76:57
+HCR062 src/Dapr.Common/DaprGenericClientBuilder.cs:234:42
+HCR062 src/Dapr.Common/DaprGenericClientBuilder.cs:240:46
+HCR081 src/Dapr.Actors/DaprHttpInteractor.cs:169:17
+HCR081 src/Dapr.Actors/DaprHttpInteractor.cs:428:21
+HCR081 src/Dapr.Actors/Runtime/DefaultActorTimerManager.cs:55:13

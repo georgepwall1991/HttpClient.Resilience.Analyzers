@@ -1,0 +1,5 @@
+# HCR scan regression baseline. Regenerate with scripts/Invoke-ScanRegression.ps1 -UpdateBaselines.
+# repository: octokit/octokit.net
+# commit: 7fa5b0fe4a18c9b981b21290c3ca9320b2d6415b
+# target: Octokit.sln
+# exit: 0

@@ -1,0 +1,141 @@
+{
+  "description": "Pinned public repositories scanned by scripts/Invoke-ScanRegression.ps1. Every entry is checked out at an exact commit so analyzer changes, not upstream drift, move the baseline. Regenerate a baseline with -UpdateBaselines and review the diff.",
+  "repositories": [
+    {
+      "name": "App-vNext_Polly",
+      "repository": "App-vNext/Polly",
+      "url": "https://github.com/App-vNext/Polly.git",
+      "commit": "4c58a76cbcae3d43d2cf2198246335d8c4313c7e",
+      "target": "Polly.slnx",
+      "expectedExitCode": 0
+    },
+    {
+      "name": "DuendeSoftware_IdentityServer",
+      "repository": "DuendeSoftware/IdentityServer",
+      "url": "https://github.com/DuendeSoftware/IdentityServer.git",
+      "commit": "222118c7a0563a3cb4727fae5233f7ee98676e40",
+      "target": "bff/src/Bff/Bff.csproj",
+      "expectedExitCode": 0
+    },
+    {
+      "name": "IdentityModel_IdentityModel",
+      "repository": "IdentityModel/IdentityModel",
+      "url": "https://github.com/IdentityModel/IdentityModel.git",
+      "commit": "5f76150f8ee305b3a5d51ca1af692f8475a2d745",
+      "target": "IdentityModel.sln",
+      "expectedExitCode": 0
+    },
+    {
+      "name": "RestSharp_RestSharp",
+      "repository": "RestSharp/RestSharp",
+      "url": "https://github.com/RestSharp/RestSharp.git",
+      "commit": "466e5f8782bd52f98df829f63a83b45fdb8472ae",
+      "target": "RestSharp.slnx",
+      "expectedExitCode": 0
+    },
+    {
+      "name": "ThreeMammals_Ocelot",
+      "repository": "ThreeMammals/Ocelot",
+      "url": "https://github.com/ThreeMammals/Ocelot.git",
+      "commit": "80268bc9a950cd4544e70d9582374ca55fc6029f",
+      "target": "Ocelot.slnx",
+      "expectedExitCode": 0
+    },
+    {
+      "name": "Xabaril_AspNetCore.Diagnostics.HealthChecks",
+      "repository": "Xabaril/AspNetCore.Diagnostics.HealthChecks",
+      "url": "https://github.com/Xabaril/AspNetCore.Diagnostics.HealthChecks.git",
+      "commit": "3b6abbd374a5d7bc8d209ff48bc38df947266054",
+      "target": "AspNetCore.Diagnostics.HealthChecks.sln",
+      "expectedExitCode": 0
+    },
+    {
+      "name": "dapr_dotnet-sdk",
+      "repository": "dapr/dotnet-sdk",
+      "url": "https://github.com/dapr/dotnet-sdk.git",
+      "commit": "e08c18b6cdacc50fb70b52a3e81ec6d578b4db04",
+      "target": "src/Dapr.Actors/Dapr.Actors.csproj",
+      "expectedExitCode": 0,
+      "notes": "Targets the actor project so the solution's test projects, which build unreliably under the scanner, stay out of the baseline. The project graph also covers Dapr.Client and Dapr.Common."
+    },
+    {
+      "name": "dotnet-architecture_eShopOnWeb",
+      "repository": "dotnet-architecture/eShopOnWeb",
+      "url": "https://github.com/dotnet-architecture/eShopOnWeb.git",
+      "commit": "4da8212117e87d808d4bbc7da6286fd2147ce606",
+      "target": "eShopOnWeb.sln",
+      "expectedExitCode": 0
+    },
+    {
+      "name": "elastic_elastic-transport-net",
+      "repository": "elastic/elastic-transport-net",
+      "url": "https://github.com/elastic/elastic-transport-net.git",
+      "commit": "bc983eab5296ff61cfe265e06b6234953e6686b2",
+      "target": "Elastic.Transport.slnx",
+      "expectedExitCode": 0
+    },
+    {
+      "name": "grpc_grpc-dotnet",
+      "repository": "grpc/grpc-dotnet",
+      "url": "https://github.com/grpc/grpc-dotnet.git",
+      "commit": "7db6c142a2dd5e0fefb0681e67766e339a15dc47",
+      "target": "Grpc.DotNet.slnx",
+      "expectedExitCode": 0
+    },
+    {
+      "name": "microsoft_dotnet-podcasts",
+      "repository": "microsoft/dotnet-podcasts",
+      "url": "https://github.com/microsoft/dotnet-podcasts.git",
+      "commit": "5ee8be2990b81eb681bbd100875c263aaa5ab68a",
+      "target": "NetPodcast.Services.sln",
+      "expectedExitCode": 0
+    },
+    {
+      "name": "octokit_octokit.net",
+      "repository": "octokit/octokit.net",
+      "url": "https://github.com/octokit/octokit.net.git",
+      "commit": "7fa5b0fe4a18c9b981b21290c3ca9320b2d6415b",
+      "target": "Octokit.sln",
+      "expectedExitCode": 0
+    },
+    {
+      "name": "openiddict_openiddict-core",
+      "repository": "openiddict/openiddict-core",
+      "url": "https://github.com/openiddict/openiddict-core.git",
+      "commit": "5fab56d4b39f94c14a21917f81ed4fcf18d5d072",
+      "target": "src/OpenIddict.Client/OpenIddict.Client.csproj",
+      "framework": "net10.0",
+      "expectedExitCode": 0
+    },
+    {
+      "name": "tmenier_Flurl",
+      "repository": "tmenier/Flurl",
+      "url": "https://github.com/tmenier/Flurl.git",
+      "commit": "36a3fa2b7e29ba1e44a39edfd0d4ae36284a6c75",
+      "target": "Flurl.sln",
+      "expectedExitCode": 0
+    }
+  ],
+  "excluded": [
+    {
+      "repository": "getsentry/sentry-dotnet",
+      "commit": "b41b96c2402f985bffd4c484b8fd0cdfa43449ac",
+      "reason": "The solution does not build under the scanner on this machine, with either 0.1.214 or 0.1.215, so there is no stable baseline to compare."
+    },
+    {
+      "repository": "microsoft/reverse-proxy",
+      "commit": "2aa3d83550a9b7a719e347ef6a0363e5ea9505a9",
+      "reason": "The pinned main branch requires the .NET 11 RC SDK, which is not part of the repository toolchain. Earlier commits require different exact SDK builds, so the findings cannot be reproduced with the documented SDK."
+    },
+    {
+      "repository": "reactiveui/refit",
+      "commit": "92ae878250798dc103a01304704a99bb8033ed77",
+      "reason": "The project does not build under the scanner on this machine, so there is no stable baseline to compare."
+    },
+    {
+      "repository": "simplcommerce/SimplCommerce",
+      "commit": "3472ba02a6f2d9b6bdca7f7fb84957176aa799dc",
+      "reason": "The project requires a .NET 8 SDK, which is not part of the repository toolchain, and its solution already fails partway through a build. There is no stable baseline to compare."
+    }
+  ]
+}

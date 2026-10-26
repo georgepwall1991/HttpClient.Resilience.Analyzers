@@ -308,4 +308,78 @@ Assert-Contains 'CONTRIBUTING.md' 'Diagnostic Quality Bar' 'CONTRIBUTING.md must
 Assert-Contains 'CONTRIBUTING.md' 'mkdocs serve' 'CONTRIBUTING.md must document local docs site preview.'
 Assert-Contains 'SUPPORT.md' 'False positives' 'SUPPORT.md must document support paths for false positives.'
 
+# The scan regression gate is local because it needs network access and a large clone cache, but
+# the manifest and its baselines must stay in sync in every commit.
+$corpusManifestPath = Get-RepositoryPath 'tests\scan-corpus\corpus.json'
+if (-not (Test-Path -LiteralPath $corpusManifestPath)) {
+    throw 'Missing tests/scan-corpus/corpus.json.'
+}
+
+$corpus = Get-Content -LiteralPath $corpusManifestPath -Raw | ConvertFrom-Json
+$corpusRepositories = @($corpus.repositories)
+if ($corpusRepositories.Count -eq 0) {
+    throw 'tests/scan-corpus/corpus.json has no repositories.'
+}
+
+$corpusNames = @{}
+foreach ($repository in $corpusRepositories) {
+    $name = [string]$repository.name
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        throw 'A scan corpus entry is missing its name.'
+    }
+
+    if ($corpusNames.ContainsKey($name)) {
+        throw "Duplicate scan corpus entry: $name."
+    }
+
+    $corpusNames[$name] = $true
+
+    if ([string]$repository.commit -notmatch '^[0-9a-f]{40}$') {
+        throw "Scan corpus entry '$name' must pin a full lowercase commit SHA."
+    }
+
+    $baselinePath = Get-RepositoryPath "tests\scan-corpus\baselines\$name.txt"
+    if (-not (Test-Path -LiteralPath $baselinePath)) {
+        throw "Missing scan corpus baseline for '$name'. Run scripts/Invoke-ScanRegression.ps1 -UpdateBaselines -Name $name."
+    }
+
+    $baselineHeader = @{}
+    foreach ($line in Get-Content -LiteralPath $baselinePath) {
+        $match = [regex]::Match($line, '^#\s*(?<key>[^:]+):\s*(?<value>.*)$')
+        if ($match.Success) {
+            $baselineHeader[$match.Groups['key'].Value.Trim()] = $match.Groups['value'].Value.Trim()
+        }
+    }
+
+    foreach ($field in @('repository', 'commit', 'target', 'exit')) {
+        if (-not $baselineHeader.ContainsKey($field)) {
+            throw "Scan corpus baseline '$name.txt' is missing its '$field' header."
+        }
+    }
+
+    if ($baselineHeader['repository'] -ne [string]$repository.repository) {
+        throw "Scan corpus baseline '$name.txt' is for '$($baselineHeader['repository'])', not '$($repository.repository)'."
+    }
+
+    if ($baselineHeader['commit'] -ne [string]$repository.commit) {
+        throw "Scan corpus baseline '$name.txt' pins $($baselineHeader['commit']), but corpus.json pins $($repository.commit)."
+    }
+
+    if ($baselineHeader['target'] -ne [string]$repository.target) {
+        throw "Scan corpus baseline '$name.txt' targets '$($baselineHeader['target'])', but corpus.json targets '$($repository.target)'."
+    }
+
+    $expectedExitCode = if ($null -eq $repository.expectedExitCode) { 0 } else { [int]$repository.expectedExitCode }
+    if ([int]$baselineHeader['exit'] -ne $expectedExitCode) {
+        throw "Scan corpus baseline '$name.txt' records exit $($baselineHeader['exit']), but corpus.json expects $expectedExitCode."
+    }
+}
+
+foreach ($baselineFile in Get-ChildItem -LiteralPath (Get-RepositoryPath 'tests\scan-corpus\baselines') -Filter '*.txt' -File) {
+    $baselineName = [IO.Path]::GetFileNameWithoutExtension($baselineFile.Name)
+    if (-not $corpusNames.ContainsKey($baselineName)) {
+        throw "Scan corpus baseline '$($baselineFile.Name)' has no entry in corpus.json."
+    }
+}
+
 "repository validation ok: $($diagnosticIds -join ', ')"

@@ -1,0 +1,6 @@
+# HCR scan regression baseline. Regenerate with scripts/Invoke-ScanRegression.ps1 -UpdateBaselines.
+# repository: grpc/grpc-dotnet
+# commit: 7db6c142a2dd5e0fefb0681e67766e339a15dc47
+# target: Grpc.DotNet.slnx
+# exit: 0
+HCR081 src/Grpc.Net.Client/Internal/GrpcCall.cs:564:29

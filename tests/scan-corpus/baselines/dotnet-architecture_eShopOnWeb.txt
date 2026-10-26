@@ -1,0 +1,12 @@
+# HCR scan regression baseline. Regenerate with scripts/Invoke-ScanRegression.ps1 -UpdateBaselines.
+# repository: dotnet-architecture/eShopOnWeb
+# commit: 4da8212117e87d808d4bbc7da6286fd2147ce606
+# target: eShopOnWeb.sln
+# exit: 0
+HCR061 src/Web/HealthChecks/ApiHealthCheck.cs:25:13
+HCR061 src/Web/HealthChecks/HomePageHealthCheck.cs:26:13
+HCR062 src/BlazorAdmin/CustomAuthStateProvider.cs:82:9
+HCR064 src/Web/HealthChecks/ApiHealthCheck.cs:25:37
+HCR064 src/Web/HealthChecks/ApiHealthCheck.cs:26:51
+HCR064 src/Web/HealthChecks/HomePageHealthCheck.cs:26:37
+HCR064 src/Web/HealthChecks/HomePageHealthCheck.cs:27:51

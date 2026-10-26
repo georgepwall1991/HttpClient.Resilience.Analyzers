@@ -1,0 +1,5 @@
+# HCR scan regression baseline. Regenerate with scripts/Invoke-ScanRegression.ps1 -UpdateBaselines.
+# repository: tmenier/Flurl
+# commit: 36a3fa2b7e29ba1e44a39edfd0d4ae36284a6c75
+# target: Flurl.sln
+# exit: 0

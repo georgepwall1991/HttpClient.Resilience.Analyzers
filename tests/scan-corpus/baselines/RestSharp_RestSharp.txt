@@ -1,0 +1,6 @@
+# HCR scan regression baseline. Regenerate with scripts/Invoke-ScanRegression.ps1 -UpdateBaselines.
+# repository: RestSharp/RestSharp
+# commit: 466e5f8782bd52f98df829f63a83b45fdb8472ae
+# target: RestSharp.slnx
+# exit: 0
+HCR064 src/RestSharp/Authenticators/OAuth2/OAuth2EndpointAuthenticatorBase.cs:88:47

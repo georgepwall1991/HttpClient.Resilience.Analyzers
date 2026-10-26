@@ -107,4 +107,5 @@ nav:
       - False-positive policy: false-positive-policy.md
       - Implementation status: implementation-status.md
       - Analyzer health: analyzer-health.md
+      - Scan regression corpus: scan-regression.md
       - Releasing: releasing.md

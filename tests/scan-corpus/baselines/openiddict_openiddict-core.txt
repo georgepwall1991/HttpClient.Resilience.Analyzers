@@ -1,0 +1,5 @@
+# HCR scan regression baseline. Regenerate with scripts/Invoke-ScanRegression.ps1 -UpdateBaselines.
+# repository: openiddict/openiddict-core
+# commit: 5fab56d4b39f94c14a21917f81ed4fcf18d5d072
+# target: src/OpenIddict.Client/OpenIddict.Client.csproj
+# exit: 0

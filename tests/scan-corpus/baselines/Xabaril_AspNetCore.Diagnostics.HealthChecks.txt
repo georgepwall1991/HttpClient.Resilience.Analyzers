@@ -1,0 +1,9 @@
+# HCR scan regression baseline. Regenerate with scripts/Invoke-ScanRegression.ps1 -UpdateBaselines.
+# repository: Xabaril/AspNetCore.Diagnostics.HealthChecks
+# commit: 3b6abbd374a5d7bc8d209ff48bc38df947266054
+# target: AspNetCore.Diagnostics.HealthChecks.sln
+# exit: 0
+HCR062 src/HealthChecks.Consul/ConsulHealthCheck.cs:29:17
+HCR064 src/HealthChecks.OpenIdConnectServer/OpenIdConnectServerHealthCheck.cs:35:230
+HCR064 src/HealthChecks.OpenIdConnectServer/OpenIdConnectServerHealthCheck.cs:40:21
+HCR064 src/HealthChecks.Uris/UriHealthCheck.cs:63:70

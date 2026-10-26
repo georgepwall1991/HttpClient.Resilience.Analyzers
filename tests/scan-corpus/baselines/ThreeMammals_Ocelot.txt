@@ -1,0 +1,5 @@
+# HCR scan regression baseline. Regenerate with scripts/Invoke-ScanRegression.ps1 -UpdateBaselines.
+# repository: ThreeMammals/Ocelot
+# commit: 80268bc9a950cd4544e70d9582374ca55fc6029f
+# target: Ocelot.slnx
+# exit: 0

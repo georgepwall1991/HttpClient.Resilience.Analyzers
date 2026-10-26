@@ -1,0 +1,8 @@
+# HCR scan regression baseline. Regenerate with scripts/Invoke-ScanRegression.ps1 -UpdateBaselines.
+# repository: IdentityModel/IdentityModel
+# commit: 5f76150f8ee305b3a5d51ca1af692f8475a2d745
+# target: IdentityModel.sln
+# exit: 0
+HCR062 src/Client/Extensions/AuthorizationHeaderExtensions.cs:23:9
+HCR062 src/Client/Extensions/AuthorizationHeaderExtensions.cs:34:9
+HCR062 src/Client/Extensions/AuthorizationHeaderExtensions.cs:45:9

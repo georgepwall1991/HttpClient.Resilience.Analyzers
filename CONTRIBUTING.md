@@ -64,6 +64,38 @@ Remove-Item env:HCR_UPDATE_SNAPSHOTS
 The corpus must keep triggering every shipped rule; a dedicated test fails if one stops
 appearing.
 
+## Scan Regression Corpus
+
+`scripts/Invoke-ScanRegression.ps1` scans a pinned set of public .NET repositories in
+`tests/scan-corpus/` and fails when a finding appears, disappears, or a repository stops
+building the same way. It is the real-world counterpart to the snippet snapshots: the unit
+tests say which shapes a rule should catch, and the scan baselines say how the rule behaves
+across actual clients, libraries, and framework components.
+
+Run the full gate before a release, or the affected entries while changing a rule:
+
+```powershell
+pwsh ./scripts/Invoke-ScanRegression.ps1
+pwsh ./scripts/Invoke-ScanRegression.ps1 -Name grpc_grpc-dotnet -Name elastic_elastic-transport-net
+```
+
+The first run is slow: it clones the corpus into `artifacts/scan-corpus/repos`, restores
+packages, and builds the scanner. Later runs reuse the cache. The full gate is not part of
+pull-request CI because it needs network access and a large clone cache.
+
+When analyzer behavior intentionally changes, regenerate only the affected baselines and
+review the diff as part of the pull request:
+
+```powershell
+pwsh ./scripts/Invoke-ScanRegression.ps1 -UpdateBaselines -Name <name>
+git diff tests/scan-corpus/baselines
+```
+
+Do not hand-edit a baseline, and do not update one to make a failing run pass without
+explaining which shape moved and why the new result is correct. See
+[docs/scan-regression.md](docs/scan-regression.md) for the manifest format, drift triage, and
+known coverage limits.
+
 ## Diagnostic Quality Bar
 
 For a new or expanded diagnostic, include:

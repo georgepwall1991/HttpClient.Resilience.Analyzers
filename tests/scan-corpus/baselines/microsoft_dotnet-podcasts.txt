@@ -1,0 +1,6 @@
+# HCR scan regression baseline. Regenerate with scripts/Invoke-ScanRegression.ps1 -UpdateBaselines.
+# repository: microsoft/dotnet-podcasts
+# commit: 5ee8be2990b81eb681bbd100875c263aaa5ab68a
+# target: NetPodcast.Services.sln
+# exit: 0
+HCR060 src/Services/Podcasts/Podcast.Infrastructure/Http/ShowClient.cs:20:13

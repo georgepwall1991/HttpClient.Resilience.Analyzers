@@ -43,6 +43,17 @@ Use the explicit package paths shown above rather than `Get-ChildItem *.nupkg`; 
 produces both the analyzer package and the scanner tool, and wildcard selection can validate or
 publish the wrong one.
 
+When analyzer behavior changed since the last release, also run the scan regression gate and
+review any baseline diff before tagging:
+
+```powershell
+./scripts/Invoke-ScanRegression.ps1
+```
+
+The tag workflow does not run it because the gate needs network access, package restores, and a
+large clone cache. See [Scan regression corpus](scan-regression.md) for the corpus and baseline
+policy.
+
 CI and release workflows also pass `-ExpectedRepositoryCommit` so each package's repository commit
 metadata must match the exact checked-out Git SHA before publishing. Tag-triggered releases run
 `Validate-ReleaseVersion.ps1` and stop before building when the tag does not exactly match the

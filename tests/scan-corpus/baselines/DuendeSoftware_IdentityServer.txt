@@ -1,0 +1,6 @@
+# HCR scan regression baseline. Regenerate with scripts/Invoke-ScanRegression.ps1 -UpdateBaselines.
+# repository: DuendeSoftware/IdentityServer
+# commit: 222118c7a0563a3cb4727fae5233f7ee98676e40
+# target: bff/src/Bff/Bff.csproj
+# exit: 0
+HCR081 bff/src/Bff/DynamicFrontends/Internal/StaticFilesHttpClient.cs:115:13
