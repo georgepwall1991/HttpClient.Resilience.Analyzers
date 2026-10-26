@@ -1102,4 +1102,168 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
         Assert.Empty(diagnostics);
     }
 
+    [Fact]
+    public async Task DoesNotReport_WhenServiceConstructorRetainsOwnedHttpClient()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class NuGetVersionLookupService
+            {
+                private readonly HttpClient _httpClient;
+
+                public NuGetVersionLookupService(HttpClient? httpClient = null)
+                {
+                    _httpClient = httpClient ?? new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenServiceConstructorRetainsHttpClientInProperty()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class UpdateService
+            {
+                private HttpClient Client { get; }
+
+                public UpdateService()
+                {
+                    Client = new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenServiceConstructorStoresHttpClientCreatedPerCall()
+    {
+        const string source = """
+            using System;
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private readonly Func<HttpClient> _factory;
+
+                public PaymentsService()
+                {
+                    _factory = () => new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenServiceConstructorAssignsAnotherObjectsHttpClient()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ClientFactory
+            {
+                public HttpClient Client { get; set; } = new HttpClient();
+            }
+
+            public sealed class PaymentsService
+            {
+                public PaymentsService(ClientFactory factory)
+                {
+                    factory.Client = new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenServiceConstructorAssignsHttpClientInsideLoop()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private HttpClient _client = null!;
+
+                public PaymentsService()
+                {
+                    for (var index = 0; index < 2; index++)
+                    {
+                        _client = new HttpClient();
+                    }
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenStaticConstructorRetainsStaticHttpClient()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private static readonly HttpClient Client;
+
+                static PaymentsService()
+                {
+                    Client = new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenInstanceConstructorAssignsStaticHttpClient()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class PaymentsService
+            {
+                private static HttpClient _client = null!;
+
+                public PaymentsService()
+                {
+                    _client = new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
 }
