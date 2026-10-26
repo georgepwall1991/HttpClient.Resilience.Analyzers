@@ -15,7 +15,6 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
 {
     private static readonly string[] RequestScopedTypeNames =
     {
-        "IHttpContextAccessor",
         "HttpContext",
         "ClaimsPrincipal",
         "ISession"
@@ -23,7 +22,6 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzer : Diagnos
 
     private static readonly string[] QualifiedRequestScopedTypeNames =
     {
-        "Microsoft.AspNetCore.Http.IHttpContextAccessor",
         "Microsoft.AspNetCore.Http.HttpContext",
         "Microsoft.AspNetCore.Http.ISession",
         "System.Security.Claims.ClaimsPrincipal"

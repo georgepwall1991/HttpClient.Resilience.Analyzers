@@ -7,16 +7,16 @@ namespace HttpClient.Resilience.Analyzers.Tests.Handlers;
 public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
 {
     [Fact]
-    public async Task ReportsDiagnostic_WhenDelegatingHandlerCapturesHttpContextAccessor()
+    public async Task ReportsDiagnostic_WhenDelegatingHandlerCapturesHttpContext()
     {
         const string source = """
             using System.Net.Http;
 
-            public sealed class UserHeaderHandler(IHttpContextAccessor accessor) : DelegatingHandler
+            public sealed class UserHeaderHandler(HttpContext accessor) : DelegatingHandler
             {
             }
 
-            public interface IHttpContextAccessor
+            public interface HttpContext
             {
             }
             """;
@@ -28,20 +28,103 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
     }
 
     [Fact]
-    public async Task ReportsDiagnostic_WhenDelegatingHandlerCapturesQualifiedHttpContextAccessor()
+    public async Task ReportsDiagnostic_WhenDelegatingHandlerCapturesQualifiedHttpContext()
     {
         const string source = """
             using System.Net.Http;
 
-            public sealed class UserHeaderHandler(Microsoft.AspNetCore.Http.IHttpContextAccessor accessor) : DelegatingHandler
+            public sealed class UserHeaderHandler(Microsoft.AspNetCore.Http.HttpContext accessor) : DelegatingHandler
             {
             }
 
             namespace Microsoft.AspNetCore.Http
             {
-                public interface IHttpContextAccessor
+                public interface HttpContext
                 {
                 }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR020, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenDelegatingHandlerCapturesHttpContextAccessor()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class HttpClientAuthorizationDelegatingHandler(IHttpContextAccessor accessor) : DelegatingHandler
+            {
+            }
+
+            public interface IHttpContextAccessor
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenDelegatingHandlerHasHttpContextAccessorField()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class HttpClientAuthorizationDelegatingHandler : DelegatingHandler
+            {
+                private readonly IHttpContextAccessor _accessor = null!;
+            }
+
+            public interface IHttpContextAccessor
+            {
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR020_DelegatingHandlerCapturesScopedDataAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenHttpContextAccessorIsExplicitlyRegisteredScoped()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public static class Registrations
+            {
+                public static void Configure(IServiceCollection services)
+                {
+                    services.AddScoped<IHttpContextAccessor, HttpContextAccessor>();
+                }
+            }
+
+            public sealed class UserHeaderHandler(IHttpContextAccessor accessor) : DelegatingHandler
+            {
+            }
+
+            public interface IHttpContextAccessor
+            {
+            }
+
+            public sealed class HttpContextAccessor : IHttpContextAccessor
+            {
+            }
+
+            public interface IServiceCollection
+            {
+            }
+
+            public static class ServiceCollectionExtensions
+            {
+                public static IServiceCollection AddScoped<TService, TImplementation>(this IServiceCollection services) => services;
             }
             """;
 
@@ -61,11 +144,11 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
             {
             }
 
-            public sealed class UserHeaderHandler(IHttpContextAccessor accessor) : CorrelationHandlerBase
+            public sealed class UserHeaderHandler(HttpContext accessor) : CorrelationHandlerBase
             {
             }
 
-            public interface IHttpContextAccessor
+            public interface HttpContext
             {
             }
             """;
@@ -104,10 +187,10 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
 
             public sealed class UserHeaderHandler : DelegatingHandler
             {
-                private readonly IHttpContextAccessor _accessor = null!;
+                private readonly HttpContext _accessor = null!;
             }
 
-            public interface IHttpContextAccessor
+            public interface HttpContext
             {
             }
             """;
@@ -210,12 +293,12 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
         const string source = """
             using System.Net.Http;
 
-            public sealed class UserHeaderHandler(IHttpContextAccessor accessor) : DelegatingHandler
+            public sealed class UserHeaderHandler(HttpContext accessor) : DelegatingHandler
             {
-                private readonly IHttpContextAccessor _accessor = accessor;
+                private readonly HttpContext _accessor = accessor;
             }
 
-            public interface IHttpContextAccessor
+            public interface HttpContext
             {
             }
             """;
@@ -447,11 +530,11 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
             using System;
             using System.Net.Http;
 
-            public sealed class UserHeaderHandler(Lazy<IHttpContextAccessor> accessor) : DelegatingHandler
+            public sealed class UserHeaderHandler(Lazy<HttpContext> accessor) : DelegatingHandler
             {
             }
 
-            public interface IHttpContextAccessor
+            public interface HttpContext
             {
             }
             """;
@@ -785,11 +868,11 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
     public async Task DoesNotReport_WhenQualifiedBaseIsLookalikeDelegatingHandler()
     {
         const string source = """
-            public sealed class UserHeaderHandler(IHttpContextAccessor accessor) : Custom.DelegatingHandler
+            public sealed class UserHeaderHandler(HttpContext accessor) : Custom.DelegatingHandler
             {
             }
 
-            public interface IHttpContextAccessor
+            public interface HttpContext
             {
             }
 
@@ -810,7 +893,7 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
     public async Task DoesNotReport_WhenResolvedSimpleBaseIsCustomDelegatingHandlerLookalike()
     {
         const string source = """
-            public sealed class UserHeaderHandler(IHttpContextAccessor accessor) : DelegatingHandler
+            public sealed class UserHeaderHandler(HttpContext accessor) : DelegatingHandler
             {
             }
 
@@ -818,7 +901,7 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
             {
             }
 
-            public interface IHttpContextAccessor
+            public interface HttpContext
             {
             }
             """;
@@ -858,13 +941,13 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
             using Custom;
             using System.Net.Http;
 
-            public sealed class UserHeaderHandler(IHttpContextAccessor context) : DelegatingHandler
+            public sealed class UserHeaderHandler(HttpContext context) : DelegatingHandler
             {
             }
 
             namespace Custom
             {
-                public interface IHttpContextAccessor
+                public interface HttpContext
                 {
                 }
             }
@@ -927,17 +1010,17 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
             {
                 public static void Configure(IServiceCollection services)
                 {
-                    services.AddScoped<Custom.IHttpContextAccessor>();
+                    services.AddScoped<Custom.HttpContext>();
                 }
             }
 
-            public sealed class UserHeaderHandler(IHttpContextAccessor context) : DelegatingHandler
+            public sealed class UserHeaderHandler(HttpContext context) : DelegatingHandler
             {
             }
 
             namespace Custom
             {
-                public interface IHttpContextAccessor
+                public interface HttpContext
                 {
                 }
             }
@@ -978,11 +1061,11 @@ public sealed class HCR020_DelegatingHandlerCapturesScopedDataAnalyzerTests
                 }
             }
 
-            public sealed class UserHeaderHandler(IHttpContextAccessor accessor) : Custom.CorrelationHandlerBase
+            public sealed class UserHeaderHandler(HttpContext accessor) : Custom.CorrelationHandlerBase
             {
             }
 
-            public interface IHttpContextAccessor
+            public interface HttpContext
             {
             }
             """;

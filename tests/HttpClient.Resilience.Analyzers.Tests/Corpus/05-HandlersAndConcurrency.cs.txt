@@ -21,9 +21,9 @@ public sealed class CorpusCatalogClientFactoryUser
     }
 }
 
-public sealed class CorpusTraceHandler(IHttpContextAccessor accessor) : DelegatingHandler
+public sealed class CorpusTraceHandler(HttpContext context) : DelegatingHandler
 {
-    public IHttpContextAccessor Accessor { get; } = accessor;
+    public HttpContext Context { get; } = context;
 }
 
 public sealed class CorpusFanOutService
@@ -52,4 +52,9 @@ public sealed class CorpusTokenDroppingHandler : DelegatingHandler
     {
         return base.SendAsync(request, CancellationToken.None);
     }
+}
+
+public sealed class CorpusAccessorHandler(IHttpContextAccessor accessor) : DelegatingHandler
+{
+    public IHttpContextAccessor Accessor { get; } = accessor;
 }

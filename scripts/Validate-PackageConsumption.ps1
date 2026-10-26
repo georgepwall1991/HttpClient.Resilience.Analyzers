@@ -248,9 +248,9 @@ public sealed class BadNamedPaymentsJob(IHttpClientFactory factory)
     }
 }
 
-public sealed class BadUserHeaderHandler(IHttpContextAccessor accessor) : DelegatingHandler
+public sealed class BadUserHeaderHandler(HttpContext context) : DelegatingHandler
 {
-    public IHttpContextAccessor Accessor { get; } = accessor;
+    public HttpContext Context { get; } = context;
 }
 
 public sealed class BadFanOutService
@@ -434,6 +434,10 @@ public interface IHttpClientFactory
 }
 
 public interface IHttpContextAccessor
+{
+}
+
+public sealed class HttpContext
 {
 }
 

@@ -20,6 +20,10 @@ public interface IHttpContextAccessor
     string? TraceIdentifier { get; }
 }
 
+public sealed class HttpContext
+{
+}
+
 public static class ServiceCollectionExtensions
 {
     public static IHttpClientBuilder AddHttpClient<TClient>(this IServiceCollection services)
