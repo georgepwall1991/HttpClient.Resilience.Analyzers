@@ -7,6 +7,30 @@ namespace HttpClient.Resilience.Analyzers.Tests.Lifetime;
 
 public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 {
+    private const string HealthCheckFramework = """
+        using System.Threading;
+        using System.Threading.Tasks;
+
+        namespace Microsoft.Extensions.Diagnostics.HealthChecks
+        {
+            public sealed class HealthCheckContext
+            {
+            }
+
+            public readonly struct HealthCheckResult
+            {
+                public static HealthCheckResult Healthy() => default;
+            }
+
+            public interface IHealthCheck
+            {
+                Task<HealthCheckResult> CheckHealthAsync(
+                    HealthCheckContext context,
+                    CancellationToken cancellationToken = default);
+            }
+        }
+        """;
+
     [Fact]
     public async Task DoesNotReport_WhenTestTypeDerivesFromTestBase()
     {
@@ -1376,5 +1400,169 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
         var diagnostic = Assert.Single(diagnostics);
         Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenHealthCheckCreatesHttpClient()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using Microsoft.Extensions.Diagnostics.HealthChecks;
+
+            public sealed class ApiHealthCheck : IHealthCheck
+            {
+                public Task<HealthCheckResult> CheckHealthAsync(
+                    HealthCheckContext context,
+                    CancellationToken cancellationToken = default)
+                {
+                    _ = new HttpClient();
+                    return Task.FromResult(HealthCheckResult.Healthy());
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source, HealthCheckFramework);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+        Assert.Equal("Test.cs", diagnostic.Location.SourceTree?.FilePath);
+    }
+
+    [Fact]
+    public async Task ReportsDiagnostic_WhenHealthCheckInheritsInterfaceThroughBaseInterface()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using Microsoft.Extensions.Diagnostics.HealthChecks;
+
+            public interface IProbeHealthCheck : IHealthCheck
+            {
+            }
+
+            public sealed class ReadinessProbe : IProbeHealthCheck
+            {
+                public Task<HealthCheckResult> CheckHealthAsync(
+                    HealthCheckContext context,
+                    CancellationToken cancellationToken = default)
+                {
+                    _ = new HttpClient();
+                    return Task.FromResult(HealthCheckResult.Healthy());
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source, HealthCheckFramework);
+
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Equal(DiagnosticIds.HCR001, diagnostic.Id);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenCustomIHealthCheckComesFromAnotherNamespace()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class ApiHealthCheck : Custom.Health.IHealthCheck
+            {
+                public void Check()
+                {
+                    _ = new HttpClient();
+                }
+            }
+
+            namespace Custom.Health
+            {
+                public interface IHealthCheck
+                {
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenTypeIsNamedHealthCheckWithoutImplementingInterface()
+    {
+        const string source = """
+            using System.Net.Http;
+
+            public sealed class HealthCheck
+            {
+                public void Check()
+                {
+                    _ = new HttpClient();
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHealthCheckConstructorRetainsOwnedHttpClient()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using Microsoft.Extensions.Diagnostics.HealthChecks;
+
+            public sealed class ApiHealthCheck : IHealthCheck
+            {
+                private readonly HttpClient _client;
+
+                public ApiHealthCheck()
+                {
+                    _client = new HttpClient();
+                }
+
+                public Task<HealthCheckResult> CheckHealthAsync(
+                    HealthCheckContext context,
+                    CancellationToken cancellationToken = default)
+                {
+                    return Task.FromResult(HealthCheckResult.Healthy());
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source, HealthCheckFramework);
+
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public async Task DoesNotReport_WhenHealthCheckTypeIsInTestContext()
+    {
+        const string source = """
+            using System.Net.Http;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using Microsoft.Extensions.Diagnostics.HealthChecks;
+
+            public sealed class ApiHealthCheckTests : IHealthCheck
+            {
+                public Task<HealthCheckResult> CheckHealthAsync(
+                    HealthCheckContext context,
+                    CancellationToken cancellationToken = default)
+                {
+                    _ = new HttpClient();
+                    return Task.FromResult(HealthCheckResult.Healthy());
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerVerifier<HCR001_NewHttpClientInRequestPathAnalyzer>.GetDiagnosticsAsync(source, HealthCheckFramework);
+
+        Assert.Empty(diagnostics);
     }
 }

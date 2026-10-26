@@ -66,6 +66,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzer : DiagnosticAnalyz
         return IsInsideLoop(node) ||
             IsDisposedInUsing(node) ||
             RequestPathContext.IsInsideMinimalApiEndpoint(node, semanticModel, cancellationToken) ||
+            HealthCheckTypeContext.IsHealthCheckType(node, semanticModel, cancellationToken) ||
             RequestPathContext.IsInsideLikelyRequestPathType(node);
     }
 

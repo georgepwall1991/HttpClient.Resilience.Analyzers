@@ -3,6 +3,8 @@
 # commit: 4da8212117e87d808d4bbc7da6286fd2147ce606
 # target: eShopOnWeb.sln
 # exit: 0
+HCR001 src/Web/HealthChecks/ApiHealthCheck.cs:24:22
+HCR001 src/Web/HealthChecks/HomePageHealthCheck.cs:25:22
 HCR061 src/Web/HealthChecks/ApiHealthCheck.cs:25:13
 HCR061 src/Web/HealthChecks/HomePageHealthCheck.cs:26:13
 HCR062 src/BlazorAdmin/CustomAuthStateProvider.cs:82:9

@@ -12,6 +12,7 @@
       "**/HCR065_RequestMessageResendAnalyzer.cs",
       "**/HCR087_BaseAddressMissingTrailingSlashAnalyzer.cs",
       "**/HCR088_TypedClientMissingHttpClientConstructorAnalyzer.cs",
+      "**/HealthCheckTypeContext.cs",
       "**/BlockSyntaxIndex.cs",
       "**/SyntaxTransparency.cs",
       "**/FrameworkRegistrationMethods.cs"
