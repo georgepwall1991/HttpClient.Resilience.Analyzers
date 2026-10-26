@@ -88,3 +88,6 @@ services.AddHttpClient<PaymentsClient>()
 1. Follow the [getting started](getting-started.md) path, including solution-wide `Directory.Build.props` install.
 2. Use the [brownfield adoption](adoption.md) profile on an existing service.
 3. Open any `HCR` warning—the IDE “learn more” link goes to that rule’s page.
+
+To evaluate a codebase before changing its project files, run [HCR Scan](scanning.md). It reports
+the same rules with source context and writes SARIF, HTML, and Markdown reports for review and CI.

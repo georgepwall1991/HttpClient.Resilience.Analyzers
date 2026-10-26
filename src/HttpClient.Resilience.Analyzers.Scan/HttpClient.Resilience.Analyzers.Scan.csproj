@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The analyzer package's version is the single source of truth, so the scanner ships under
+       the same version without a second number to bump. -->
+  <PropertyGroup>
+    <_HcrPackageProject>$(MSBuildThisFileDirectory)..\HttpClient.Resilience.Analyzers.Package\HttpClient.Resilience.Analyzers.Package.csproj</_HcrPackageProject>
+    <Version>$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_HcrPackageProject)')), '(?&lt;=&lt;Version&gt;)[^&lt;]+').Value)</Version>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>hcr-scan</ToolCommandName>
+    <PackageId>HttpClient.Resilience.Analyzers.Scan</PackageId>
+    <Title>HCR Scan — scan a .NET solution for HttpClient resilience problems</Title>
+    <Authors>George Wall</Authors>
+    <Copyright>Copyright (c) George Wall and contributors 2026</Copyright>
+    <Description>Scan any .NET solution for HttpClient, IHttpClientFactory, typed-client, Polly, and Microsoft.Extensions.Http.Resilience problems without changing its project files. HCR Scan builds the solution with the HttpClient.Resilience.Analyzers analyzers injected, then reports the rules that fired, where they fired, and the surrounding source, with SARIF, HTML, and Markdown output for false-positive triage and CI.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/georgepwall1991/HttpClient.Resilience.Analyzers</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/scanning/</PackageProjectUrl>
+    <PackageTags>httpclient;ihttpclientfactory;resilience;polly;roslyn;analyzer;dotnet-tool;sarif;code-scanning;static-analysis;false-positives</PackageTags>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <DebugType>embedded</DebugType>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <InternalsVisibleTo Include="HttpClient.Resilience.Analyzers.Tests" />
+  </ItemGroup>
+
+  <!-- Build the analyzer first and ship its assembly inside the tool, so a scan needs no package
+       restore and always runs the analyzers this tool version was released with. -->
+  <ItemGroup>
+    <ProjectReference Include="..\HttpClient.Resilience.Analyzers\HttpClient.Resilience.Analyzers.csproj" ReferenceOutputAssembly="false" OutputItemType="_HcrAnalyzerAssembly" />
+  </ItemGroup>
+
+  <Target Name="_IncludeHcrAnalyzer" AfterTargets="ResolveProjectReferences" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <None Include="@(_HcrAnalyzerAssembly)" Link="analyzer\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Visible="false" />
+    </ItemGroup>
+  </Target>
+
+</Project>

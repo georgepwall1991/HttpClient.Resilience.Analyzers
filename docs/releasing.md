@@ -15,7 +15,7 @@ This repository has a guarded release workflow at `.github/workflows/release.yml
   - Workflow file: `release.yml`
   - Environment: leave empty unless the workflow is changed to use a GitHub Actions environment.
 - Set a repository variable named `NUGET_USER` to the NuGet.org profile name that owns the trusted publishing policy. Use the profile name, not an email address.
-- Keep the package version in `src/HttpClient.Resilience.Analyzers.Package/HttpClient.Resilience.Analyzers.Package.csproj` aligned with the intended NuGet version.
+- Keep the package version in `src/HttpClient.Resilience.Analyzers.Package/HttpClient.Resilience.Analyzers.Package.csproj` aligned with the intended NuGet version. The scanner package reads that same version, so both packages always ship together.
 - Run the local validation stack before tagging:
 
 ```powershell
@@ -25,13 +25,28 @@ dotnet build HttpClient.Resilience.Analyzers.slnx --configuration Release --no-r
 ./scripts/Validate-Repository.ps1
 ./scripts/Validate-SampleDiagnostics.ps1 -NoRestore
 dotnet test HttpClient.Resilience.Analyzers.slnx --configuration Release --no-build --logger trx --results-directory artifacts\test-results
+
 dotnet pack src\HttpClient.Resilience.Analyzers.Package\HttpClient.Resilience.Analyzers.Package.csproj --configuration Release --no-build --output artifacts\packages
-$package = Get-ChildItem artifacts\packages\*.nupkg | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-./scripts/Validate-Package.ps1 -PackagePath $package.FullName
-./scripts/Validate-PackageConsumption.ps1 -PackagePath $package.FullName
+dotnet pack src\HttpClient.Resilience.Analyzers.Scan\HttpClient.Resilience.Analyzers.Scan.csproj --configuration Release --no-build --output artifacts\packages
+
+$version = ([xml](Get-Content src\HttpClient.Resilience.Analyzers.Package\HttpClient.Resilience.Analyzers.Package.csproj)).Project.PropertyGroup.Version
+$analyzerPackage = Join-Path $PWD "artifacts/packages/HttpClient.Resilience.Analyzers.$version.nupkg"
+$scannerPackage = Join-Path $PWD "artifacts/packages/HttpClient.Resilience.Analyzers.Scan.$version.nupkg"
+
+./scripts/Validate-Package.ps1 -PackagePath $analyzerPackage
+./scripts/Validate-PackageConsumption.ps1 -PackagePath $analyzerPackage
+./scripts/Validate-ScannerPackage.ps1 -PackagePath $scannerPackage
+./scripts/Validate-ScannerConsumption.ps1 -PackagePath $scannerPackage
 ```
 
-CI and release workflows also pass `-ExpectedRepositoryCommit` so the package's repository commit metadata must match the exact checked-out Git SHA before publishing. Tag-triggered releases run `Validate-ReleaseVersion.ps1` and stop before building when the tag does not exactly match the package version.
+Use the explicit package paths shown above rather than `Get-ChildItem *.nupkg`; the release now
+produces both the analyzer package and the scanner tool, and wildcard selection can validate or
+publish the wrong one.
+
+CI and release workflows also pass `-ExpectedRepositoryCommit` so each package's repository commit
+metadata must match the exact checked-out Git SHA before publishing. Tag-triggered releases run
+`Validate-ReleaseVersion.ps1` and stop before building when the tag does not exactly match the
+package version.
 
 ## Stable Release
 
@@ -44,7 +59,7 @@ git tag -a "v$version" (git rev-parse origin/main) -m "Release v$version"
 git push origin "v$version"
 ```
 
-The release workflow will restore, format-check, build, test, pack, validate the package, upload artifacts, push the `.nupkg` to NuGet.org, and create a matching GitHub Release with generated release notes and the package attached.
+The release workflow will restore, format-check, build, test, pack both packages, validate each package and its consumption path, upload artifacts, push both `.nupkg` files to NuGet.org, and create a matching GitHub Release with generated release notes and both packages attached.
 Publishing uses NuGet Trusted Publishing through GitHub OIDC and `NuGet/login@v1`; no long-lived NuGet API key is stored in the repository.
 
 ## Dry Run

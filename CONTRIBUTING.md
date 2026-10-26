@@ -27,11 +27,23 @@ dotnet build HttpClient.Resilience.Analyzers.slnx --configuration Release --no-r
 ./scripts/Validate-Repository.ps1
 ./scripts/Validate-SampleDiagnostics.ps1 -NoRestore
 dotnet test HttpClient.Resilience.Analyzers.slnx --configuration Release --no-build --logger trx --results-directory artifacts\test-results
+
 dotnet pack src\HttpClient.Resilience.Analyzers.Package\HttpClient.Resilience.Analyzers.Package.csproj --configuration Release --no-build --output artifacts\packages
-$package = Get-ChildItem artifacts\packages\*.nupkg | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-./scripts/Validate-Package.ps1 -PackagePath $package.FullName
-./scripts/Validate-PackageConsumption.ps1 -PackagePath $package.FullName
+dotnet pack src\HttpClient.Resilience.Analyzers.Scan\HttpClient.Resilience.Analyzers.Scan.csproj --configuration Release --no-build --output artifacts\packages
+
+$version = ([xml](Get-Content src\HttpClient.Resilience.Analyzers.Package\HttpClient.Resilience.Analyzers.Package.csproj)).Project.PropertyGroup.Version
+$analyzerPackage = Join-Path $PWD "artifacts/packages/HttpClient.Resilience.Analyzers.$version.nupkg"
+$scannerPackage = Join-Path $PWD "artifacts/packages/HttpClient.Resilience.Analyzers.Scan.$version.nupkg"
+
+./scripts/Validate-Package.ps1 -PackagePath $analyzerPackage
+./scripts/Validate-PackageConsumption.ps1 -PackagePath $analyzerPackage
+./scripts/Validate-ScannerPackage.ps1 -PackagePath $scannerPackage
+./scripts/Validate-ScannerConsumption.ps1 -PackagePath $scannerPackage
 ```
+
+Name each package explicitly instead of selecting the newest `*.nupkg`: the repository now produces
+both the analyzer package and the `hcr-scan` tool, so a wildcard can validate or publish the wrong
+artifact.
 
 ## Behavior Snapshot
 

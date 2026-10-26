@@ -39,6 +39,19 @@ For a library or shared project, keep the analyzer private to the project:
 
 Build normally with `dotnet build`. Diagnostics appear in supported IDEs, command-line builds, and CI without application configuration.
 
+## Scan without adding the package
+
+To try the rules on a solution before referencing the analyzer, use the separate
+[`HttpClient.Resilience.Analyzers.Scan`](https://www.nuget.org/packages/HttpClient.Resilience.Analyzers.Scan) tool:
+
+```bash
+dnx HttpClient.Resilience.Analyzers.Scan -- MyApp.slnx --html hcr-review.html
+```
+
+It reports the same rules with source context, can emit SARIF for code scanning, and supports a
+baseline while an existing codebase is being cleaned up. See the
+[scanner guide](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/scanning/).
+
 ## See it work
 
 Product-flow diagrams from the real showcase sample (not stock screenshots):

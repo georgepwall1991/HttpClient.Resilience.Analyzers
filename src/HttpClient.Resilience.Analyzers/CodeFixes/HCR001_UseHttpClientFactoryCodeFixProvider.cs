@@ -13,7 +13,10 @@ using Microsoft.CodeAnalysis.Formatting;
 
 namespace HttpClient.Resilience.Analyzers.CodeFixes;
 
-[ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(HCR001_UseHttpClientFactoryCodeFixProvider))]
+[ExportCodeFixProvider(
+    LanguageNames.CSharp,
+    Name = nameof(HCR001_UseHttpClientFactoryCodeFixProvider)
+)]
 [Shared]
 public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
 {
@@ -27,8 +30,11 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
 
     public override async Task RegisterCodeFixesAsync(CodeFixContext context)
     {
-        var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
-        var semanticModel = await context.Document.GetSemanticModelAsync(context.CancellationToken)
+        var root = await context
+            .Document.GetSyntaxRootAsync(context.CancellationToken)
+            .ConfigureAwait(false);
+        var semanticModel = await context
+            .Document.GetSemanticModelAsync(context.CancellationToken)
             .ConfigureAwait(false);
         if (root is null || semanticModel is null)
         {
@@ -38,14 +44,15 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
         foreach (var diagnostic in context.Diagnostics)
         {
             var node = root.FindNode(diagnostic.Location.SourceSpan);
-            var creation = node as BaseObjectCreationExpressionSyntax ??
-                node.FirstAncestorOrSelf<BaseObjectCreationExpressionSyntax>();
+            var creation =
+                node as BaseObjectCreationExpressionSyntax
+                ?? node.FirstAncestorOrSelf<BaseObjectCreationExpressionSyntax>();
             if (creation is null)
             {
                 continue;
             }
 
-            // Replacing the creation with factory.CreateClient() drops any handler
+            // Replacing the creation with factory.CreateClient(string.Empty) drops any handler
             // or initializer configuration (proxy, certificates, cookies, timeouts).
             // Only a bare new HttpClient() converts without losing behavior.
             if (creation.ArgumentList?.Arguments.Count > 0 || creation.Initializer is not null)
@@ -53,8 +60,9 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
                 continue;
             }
 
-            var factoryName = FindFactoryParameterName(creation) ??
-                FindFactoryMemberName(creation, semanticModel, context.CancellationToken);
+            var factoryName =
+                FindFactoryParameterName(creation)
+                ?? FindFactoryMemberName(creation, semanticModel, context.CancellationToken);
             if (factoryName is null)
             {
                 continue;
@@ -63,9 +71,12 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
             context.RegisterCodeFix(
                 CodeAction.Create(
                     "Create client with IHttpClientFactory",
-                    cancellationToken => UseFactoryAsync(context.Document, creation, factoryName, cancellationToken),
-                    nameof(HCR001_UseHttpClientFactoryCodeFixProvider)),
-                diagnostic);
+                    cancellationToken =>
+                        UseFactoryAsync(context.Document, creation, factoryName, cancellationToken),
+                    nameof(HCR001_UseHttpClientFactoryCodeFixProvider)
+                ),
+                diagnostic
+            );
         }
     }
 
@@ -76,7 +87,10 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
             switch (ancestor)
             {
                 case LocalFunctionStatementSyntax localFunction:
-                    if (FindFactoryParameterName(localFunction.ParameterList.Parameters) is { } localFactoryName)
+                    if (
+                        FindFactoryParameterName(localFunction.ParameterList.Parameters) is
+                        { } localFactoryName
+                    )
                     {
                         return localFactoryName;
                     }
@@ -88,7 +102,10 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
 
                     break;
                 case SimpleLambdaExpressionSyntax simpleLambda:
-                    if (simpleLambda.Parameter.Type is not null && IsHttpClientFactoryParameter(simpleLambda.Parameter))
+                    if (
+                        simpleLambda.Parameter.Type is not null
+                        && IsHttpClientFactoryParameter(simpleLambda.Parameter)
+                    )
                     {
                         return simpleLambda.Parameter.Identifier.ValueText;
                     }
@@ -100,7 +117,10 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
 
                     break;
                 case ParenthesizedLambdaExpressionSyntax parenthesizedLambda:
-                    if (FindFactoryParameterName(parenthesizedLambda.ParameterList.Parameters) is { } lambdaFactoryName)
+                    if (
+                        FindFactoryParameterName(parenthesizedLambda.ParameterList.Parameters) is
+                        { } lambdaFactoryName
+                    )
                     {
                         return lambdaFactoryName;
                     }
@@ -112,8 +132,11 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
 
                     break;
                 case AnonymousMethodExpressionSyntax anonymousMethod:
-                    if (anonymousMethod.ParameterList is not null &&
-                        FindFactoryParameterName(anonymousMethod.ParameterList.Parameters) is { } anonymousFactoryName)
+                    if (
+                        anonymousMethod.ParameterList is not null
+                        && FindFactoryParameterName(anonymousMethod.ParameterList.Parameters)
+                            is { } anonymousFactoryName
+                    )
                     {
                         return anonymousFactoryName;
                     }
@@ -125,7 +148,10 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
 
                     break;
                 case MethodDeclarationSyntax method:
-                    if (FindFactoryParameterName(method.ParameterList.Parameters) is { } methodFactoryName)
+                    if (
+                        FindFactoryParameterName(method.ParameterList.Parameters) is
+                        { } methodFactoryName
+                    )
                     {
                         return methodFactoryName;
                     }
@@ -138,7 +164,9 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
 
                     break;
                 case ClassDeclarationSyntax { ParameterList: not null } classDeclaration:
-                    return FindFactoryParameterName(classDeclaration.ParameterList!.Parameters) is { } classFactoryName
+                    return
+                        FindFactoryParameterName(classDeclaration.ParameterList!.Parameters)
+                            is { } classFactoryName
                         ? classFactoryName
                         : null;
             }
@@ -150,7 +178,8 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
     private static string? FindFactoryMemberName(
         SyntaxNode node,
         SemanticModel semanticModel,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var containingType = node.FirstAncestorOrSelf<TypeDeclarationSyntax>();
         if (containingType is null || RequiresStaticContext(node))
@@ -164,24 +193,33 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
             return null;
         }
 
-        var factoryMembers = typeSymbol.GetMembers()
+        var factoryMembers = typeSymbol
+            .GetMembers()
             .Where(member => !member.IsImplicitlyDeclared)
-            .Select(member => member switch
-            {
-                IFieldSymbol field when IsUsableFactoryType(field.Type) => member,
-                IPropertySymbol property when property.GetMethod is not null &&
-                    IsUsableFactoryType(property.Type) => member,
-                _ => null
-            })
+            .Select(member =>
+                member switch
+                {
+                    IFieldSymbol field when IsUsableFactoryType(field.Type) => member,
+                    IPropertySymbol property
+                        when property.GetMethod is not null && IsUsableFactoryType(property.Type) =>
+                        member,
+                    _ => null,
+                }
+            )
             .OfType<ISymbol>()
-            .OrderBy(member => member.Name.IndexOf("Factory", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 0 : 1)
+            .OrderBy(member =>
+                member.Name.IndexOf("Factory", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    ? 0
+                    : 1
+            )
             .ThenBy(member => member.Name, System.StringComparer.Ordinal);
 
         foreach (var member in factoryMembers)
         {
             // A local or parameter with the same name would shadow the member and redirect
             // the fix at the wrong symbol, so only unshadowed members qualify.
-            var lookup = semanticModel.LookupSymbols(node.SpanStart)
+            var lookup = semanticModel
+                .LookupSymbols(node.SpanStart)
                 .Where(symbol => symbol.Name == member.Name);
             if (lookup.All(symbol => SymbolEqualityComparer.Default.Equals(symbol, member)))
             {
@@ -201,15 +239,25 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
                 return false;
             }
 
-            if (ancestor switch
-            {
-                MethodDeclarationSyntax method => HasStaticModifier(method.Modifiers),
-                LocalFunctionStatementSyntax localFunction => HasStaticModifier(localFunction.Modifiers),
-                SimpleLambdaExpressionSyntax simpleLambda => HasStaticModifier(simpleLambda.Modifiers),
-                ParenthesizedLambdaExpressionSyntax parenthesizedLambda => HasStaticModifier(parenthesizedLambda.Modifiers),
-                AnonymousMethodExpressionSyntax anonymousMethod => HasStaticModifier(anonymousMethod.Modifiers),
-                _ => false
-            })
+            if (
+                ancestor switch
+                {
+                    MethodDeclarationSyntax method => HasStaticModifier(method.Modifiers),
+                    LocalFunctionStatementSyntax localFunction => HasStaticModifier(
+                        localFunction.Modifiers
+                    ),
+                    SimpleLambdaExpressionSyntax simpleLambda => HasStaticModifier(
+                        simpleLambda.Modifiers
+                    ),
+                    ParenthesizedLambdaExpressionSyntax parenthesizedLambda => HasStaticModifier(
+                        parenthesizedLambda.Modifiers
+                    ),
+                    AnonymousMethodExpressionSyntax anonymousMethod => HasStaticModifier(
+                        anonymousMethod.Modifiers
+                    ),
+                    _ => false,
+                }
+            )
             {
                 return true;
             }
@@ -222,12 +270,13 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
     {
         return modifiers.Any(SyntaxKind.StaticKeyword);
     }
+
     private static bool IsUsableFactoryType(ITypeSymbol? type)
     {
-        return type?.NullableAnnotation != Microsoft.CodeAnalysis.NullableAnnotation.Annotated &&
-            type?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) is
-                "global::System.Net.Http.IHttpClientFactory" or
-                "global::IHttpClientFactory";
+        return type?.NullableAnnotation != Microsoft.CodeAnalysis.NullableAnnotation.Annotated
+            && type?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                is "global::System.Net.Http.IHttpClientFactory"
+                    or "global::IHttpClientFactory";
     }
 
     private static string? FindFactoryParameterName(SeparatedSyntaxList<ParameterSyntax> parameters)
@@ -241,15 +290,16 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
     private static bool IsHttpClientFactoryParameter(ParameterSyntax parameter)
     {
         var type = parameter.Type?.ToString();
-        return type == "IHttpClientFactory" ||
-            (type?.EndsWith(".IHttpClientFactory", System.StringComparison.Ordinal) ?? false);
+        return type == "IHttpClientFactory"
+            || (type?.EndsWith(".IHttpClientFactory", System.StringComparison.Ordinal) ?? false);
     }
 
     private static async Task<Document> UseFactoryAsync(
         Document document,
         BaseObjectCreationExpressionSyntax creation,
         string factoryName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
         if (root is null)
@@ -257,11 +307,19 @@ public sealed class HCR001_UseHttpClientFactoryCodeFixProvider : CodeFixProvider
             return document;
         }
 
-        var replacement = SyntaxFactory.InvocationExpression(
+        var replacement = SyntaxFactory
+            .InvocationExpression(
                 SyntaxFactory.MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
                     SyntaxFactory.IdentifierName(factoryName),
-                    SyntaxFactory.IdentifierName("CreateClient")))
+                    SyntaxFactory.IdentifierName("CreateClient")
+                ),
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(SyntaxFactory.ParseExpression("string.Empty"))
+                    )
+                )
+            )
             .WithTriviaFrom(creation)
             .WithAdditionalAnnotations(Formatter.Annotation);
 

@@ -585,14 +585,14 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
         var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
             .ApplyFirstCodeFixAsync(source);
 
-        Assert.Contains("return httpClientFactory.CreateClient();", fixedSource);
+        Assert.Contains("return httpClientFactory.CreateClient(string.Empty);", fixedSource);
         Assert.DoesNotContain("new HttpClient()", fixedSource);
     }
 
@@ -617,15 +617,15 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
         var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
             .ApplyFirstCodeFixAsync(source);
 
-        Assert.Contains("return localFactory.CreateClient();", fixedSource);
-        Assert.DoesNotContain("return outerFactory.CreateClient();", fixedSource);
+        Assert.Contains("return localFactory.CreateClient(string.Empty);", fixedSource);
+        Assert.DoesNotContain("return outerFactory.CreateClient(string.Empty);", fixedSource);
         Assert.DoesNotContain("new HttpClient()", fixedSource);
     }
 
@@ -645,14 +645,14 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
         var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
             .ApplyFirstCodeFixAsync(source);
 
-        Assert.Contains("return httpClientFactory.CreateClient();", fixedSource);
+        Assert.Contains("return httpClientFactory.CreateClient(string.Empty);", fixedSource);
         Assert.DoesNotContain("new HttpClient()", fixedSource);
     }
 
@@ -679,14 +679,14 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
         var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
             .ApplyFirstCodeFixAsync(source);
 
-        Assert.Contains("return httpClientFactory.CreateClient();", fixedSource);
+        Assert.Contains("return httpClientFactory.CreateClient(string.Empty);", fixedSource);
         Assert.DoesNotContain("new HttpClient()", fixedSource);
     }
 
@@ -709,14 +709,14 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
         var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
             .ApplyFirstCodeFixAsync(source);
 
-        Assert.Contains("return paymentsClientFactory.CreateClient();", fixedSource);
+        Assert.Contains("return paymentsClientFactory.CreateClient(string.Empty);", fixedSource);
     }
 
     [Fact]
@@ -735,7 +735,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
@@ -763,14 +763,14 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
         var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
             .ApplyFirstCodeFixAsync(source);
 
-        Assert.Contains("return ClientFactory.CreateClient();", fixedSource);
+        Assert.Contains("return ClientFactory.CreateClient(string.Empty);", fixedSource);
     }
 
     [Fact]
@@ -791,7 +791,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
@@ -821,7 +821,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
@@ -847,7 +847,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
@@ -876,7 +876,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
@@ -904,7 +904,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
@@ -932,14 +932,14 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
         var fixedSource = await CodeFixVerifier<HCR001_NewHttpClientInRequestPathAnalyzer, HCR001_UseHttpClientFactoryCodeFixProvider>
             .ApplyFirstCodeFixAsync(source);
 
-        Assert.Contains("return httpClientFactory.CreateClient();", fixedSource);
+        Assert.Contains("return httpClientFactory.CreateClient(string.Empty);", fixedSource);
     }
 
     [Fact]
@@ -960,7 +960,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
@@ -987,7 +987,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
@@ -1014,7 +1014,7 @@ public sealed class HCR001_NewHttpClientInRequestPathAnalyzerTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 

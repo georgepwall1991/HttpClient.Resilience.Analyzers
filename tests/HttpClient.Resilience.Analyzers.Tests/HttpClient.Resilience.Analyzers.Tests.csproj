@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\HttpClient.Resilience.Analyzers\HttpClient.Resilience.Analyzers.csproj" />
+    <ProjectReference Include="..\..\src\HttpClient.Resilience.Analyzers.Scan\HttpClient.Resilience.Analyzers.Scan.csproj" />
   </ItemGroup>
 
   <ItemGroup>

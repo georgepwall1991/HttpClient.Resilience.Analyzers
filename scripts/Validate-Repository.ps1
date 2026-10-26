@@ -166,6 +166,7 @@ $requiredTopLevelDocs = @(
     'docs\releasing.md',
     'docs\index.md',
     'docs\getting-started.md',
+    'docs\scanning.md',
     'docs\faq.md',
     'docs\robots.txt',
     'docs\llms.txt'
@@ -182,7 +183,9 @@ $requiredScripts = @(
     'scripts\Validate-PackageConsumption.ps1',
     'scripts\Validate-ReleaseVersion.ps1',
     'scripts\Validate-Repository.ps1',
-    'scripts\Validate-SampleDiagnostics.ps1'
+    'scripts\Validate-SampleDiagnostics.ps1',
+    'scripts\Validate-ScannerPackage.ps1',
+    'scripts\Validate-ScannerConsumption.ps1'
 )
 
 foreach ($path in $requiredScripts) {
@@ -263,6 +266,13 @@ if ($packageProjectUrl -ne $docsSiteUrl) {
 Assert-Contains 'README.md' '(?m)^## Quick start\r?$' 'README.md must include a Quick start heading.'
 Assert-Contains 'README.md' $escapedDocsSiteUrl 'README.md must link to the GitHub Pages docs site.'
 Assert-Contains 'PACKAGE_README.md' $escapedDocsSiteUrl 'PACKAGE_README.md must link to the GitHub Pages docs site.'
+Assert-Contains 'mkdocs.yml' '(?m)^\s+- Scanner: scanning\.md\r?$' 'mkdocs.yml must include the scanner guide.'
+Assert-Contains 'docs\scanning.md' 'dnx HttpClient\.Resilience\.Analyzers\.Scan' 'docs/scanning.md must document the dnx entry point.'
+Assert-Contains 'docs\scanning.md' '--baseline' 'docs/scanning.md must document baseline scans.'
+Assert-Contains 'README.md' 'HttpClient\.Resilience\.Analyzers\.Scan' 'README.md must mention the scanner package.'
+Assert-Contains 'src\HttpClient.Resilience.Analyzers.Scan\HttpClient.Resilience.Analyzers.Scan.csproj' '<PackAsTool>true</PackAsTool>' 'Scanner project must pack as a .NET tool.'
+Assert-Contains 'src\HttpClient.Resilience.Analyzers.Scan\HttpClient.Resilience.Analyzers.Scan.csproj' '<ToolCommandName>hcr-scan</ToolCommandName>' 'Scanner tool command must be hcr-scan.'
+Assert-Contains 'docs\releasing.md' 'Validate-ScannerPackage\.ps1' 'docs/releasing.md must include scanner package validation.'
 Assert-Contains '.github\ISSUE_TEMPLATE\config.yml' $escapedDocsSiteUrl 'Issue template documentation hub must point at the GitHub Pages docs site.'
 Assert-Contains '.github\workflows\docs.yml' 'mkdocs build --strict' 'Docs workflow must build the site with --strict.'
 Assert-Contains '.github\ISSUE_TEMPLATE\false_positive.yml' '(?m)^\s+-\s+HCR042\s*$' 'False-positive template must include HCR042.'

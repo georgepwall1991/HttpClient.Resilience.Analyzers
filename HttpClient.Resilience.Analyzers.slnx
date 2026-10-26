@@ -4,6 +4,7 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/HttpClient.Resilience.Analyzers.Package/HttpClient.Resilience.Analyzers.Package.csproj" />
+    <Project Path="src/HttpClient.Resilience.Analyzers.Scan/HttpClient.Resilience.Analyzers.Scan.csproj" />
     <Project Path="src/HttpClient.Resilience.Analyzers/HttpClient.Resilience.Analyzers.csproj" />
   </Folder>
   <Folder Name="/tests/">

@@ -39,7 +39,7 @@ public sealed class FixAllInDocumentTests
 
             public interface IHttpClientFactory
             {
-                HttpClient CreateClient(string name = "");
+                HttpClient CreateClient(string name);
             }
             """;
 
@@ -50,7 +50,7 @@ public sealed class FixAllInDocumentTests
                     .ApplyFixAllInDocumentAsync(source);
 
         Assert.DoesNotContain("new HttpClient()", fixedSource);
-        Assert.Contains("HttpClientFactory.CreateClient();", fixedSource, System.StringComparison.Ordinal);
+        Assert.Contains("HttpClientFactory.CreateClient(string.Empty);", fixedSource, System.StringComparison.Ordinal);
     }
 
     [Fact]

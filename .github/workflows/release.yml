@@ -57,14 +57,20 @@ jobs:
         run: dotnet test HttpClient.Resilience.Analyzers.slnx --configuration Release --no-build --logger trx --results-directory artifacts/test-results
 
       - name: Pack
-        run: dotnet pack src/HttpClient.Resilience.Analyzers.Package/HttpClient.Resilience.Analyzers.Package.csproj --configuration Release --no-build --output artifacts/packages
+        run: |
+          dotnet pack src/HttpClient.Resilience.Analyzers.Package/HttpClient.Resilience.Analyzers.Package.csproj --configuration Release --no-build --output artifacts/packages
+          dotnet pack src/HttpClient.Resilience.Analyzers.Scan/HttpClient.Resilience.Analyzers.Scan.csproj --configuration Release --no-build --output artifacts/packages
 
-      - name: Validate package
+      - name: Validate packages
         shell: pwsh
         run: |
-          $package = Get-ChildItem artifacts/packages/*.nupkg | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          ./scripts/Validate-Package.ps1 -PackagePath $package.FullName -ExpectedRepositoryCommit '${{ github.sha }}'
-          ./scripts/Validate-PackageConsumption.ps1 -PackagePath $package.FullName
+          $version = ([xml](Get-Content src/HttpClient.Resilience.Analyzers.Package/HttpClient.Resilience.Analyzers.Package.csproj)).Project.PropertyGroup.Version
+          $analyzerPackage = Join-Path $PWD "artifacts/packages/HttpClient.Resilience.Analyzers.$version.nupkg"
+          $scannerPackage = Join-Path $PWD "artifacts/packages/HttpClient.Resilience.Analyzers.Scan.$version.nupkg"
+          ./scripts/Validate-Package.ps1 -PackagePath $analyzerPackage -ExpectedRepositoryCommit '${{ github.sha }}'
+          ./scripts/Validate-PackageConsumption.ps1 -PackagePath $analyzerPackage
+          ./scripts/Validate-ScannerPackage.ps1 -PackagePath $scannerPackage -ExpectedRepositoryCommit '${{ github.sha }}'
+          ./scripts/Validate-ScannerConsumption.ps1 -PackagePath $scannerPackage
 
       - name: Upload packages
         uses: actions/upload-artifact@v7

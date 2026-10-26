@@ -69,6 +69,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - Scanner: scanning.md
   - Rules:
       - Catalog: rules/README.md
       - HCR001: rules/HCR001.md

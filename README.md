@@ -70,6 +70,23 @@ For a whole solution, add the package once in `Directory.Build.props`:
 </Project>
 ```
 
+## Scan before you install
+
+Try the rules on an existing solution, or review suspected false positives, without adding a package to it:
+
+```bash
+dnx HttpClient.Resilience.Analyzers.Scan -- MyApp.slnx --html hcr-review.html
+```
+
+The [HCR Scan](docs/scanning.md) tool builds with the analyzers injected, prints the rules and source lines, and can write SARIF for GitHub code scanning plus a self-contained HTML report for triage. It supports rule and path filters, baselines for brownfield adoption, and `--fail-on` for CI.
+
+On the .NET 8 or 9 SDK, install the tool first:
+
+```bash
+dotnet tool install -g HttpClient.Resilience.Analyzers.Scan
+hcr-scan MyApp.slnx
+```
+
 ## See it work
 
 Product-flow diagrams derived from the real [showcase sample](samples/HttpClient.Resilience.Showcase) diagnostics (not stock IDE screenshots):
@@ -236,6 +253,7 @@ Check the rule's documented detection scope, reduce its severity if needed, and 
 
 - [Documentation site](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/)
 - [Getting started](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/getting-started/)
+- [HCR Scan guide](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/scanning/)
 - [All analyzer rules](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/)
 - [Configuration](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/configuration/)
 - [Adoption](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/adoption/)

@@ -8,6 +8,7 @@ The package catches outbound HTTP reliability bugs at build time, including sock
 
 - [Home](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/): Product overview and install
 - [Getting started](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/getting-started/): 30-second path and solution-wide Directory.Build.props install
+- [HCR Scan](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/scanning/): Scan any solution without changing project files; SARIF, HTML, Markdown, filters, baselines, and CI
 - [Rule catalog](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/rules/): All HCR001–HCR088 diagnostics
 - [Configuration](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/configuration/): .editorconfig severity and adoption profiles
 - [Adoption](https://georgepwall1991.github.io/HttpClient.Resilience.Analyzers/adoption/): Brownfield rollout
